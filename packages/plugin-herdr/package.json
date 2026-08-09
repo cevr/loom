@@ -1,0 +1,22 @@
+{
+  "name": "@cvr/loom-plugin-herdr",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/",
+    "probe:live": "bun probes/live.ts"
+  },
+  "dependencies": {
+    "@cvr/loom-domain": "workspace:*",
+    "@cvr/loom-runtime": "workspace:*",
+    "@effect/platform-bun": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}

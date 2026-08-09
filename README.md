@@ -19,5 +19,11 @@ bun run gate
 bun run dev
 ```
 
+Run the live Herdr Plugin probe from a Herdr pane:
+
+```sh
+bun run probe:herdr-live
+```
+
 Read [CONTEXT.md](./CONTEXT.md) for project language.
 Read [docs/architecture.md](./docs/architecture.md) for the system design.

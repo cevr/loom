@@ -157,6 +157,12 @@ Plugin order is explicit.
 Plugin lifecycle belongs to an Effect Scope.
 A plugin failure does not corrupt kernel state.
 
+The Herdr Plugin consumes the latest actor-state projection for one Session.
+It maps Agent, Job, and Workflow Run activity into Herdr pane state.
+It uses a sliding latest-value buffer.
+It releases its Herdr agent when the Plugin Scope closes.
+See [Herdr Plugin](./herdr-plugin.md).
+
 ## Package direction
 
 ```text
@@ -174,6 +180,8 @@ A plugin failure does not corrupt kernel state.
               @cvr/loom-daemon
 
 @cvr/loom-pi-adapter -> @cvr/loom-protocol
+
+@cvr/loom-plugin-herdr -> @cvr/loom-runtime
 ```
 
 Imports flow from definitions to implementations.

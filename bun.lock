@@ -48,8 +48,30 @@
         "effect": "catalog:",
       },
     },
+    "packages/plugin-herdr": {
+      "name": "@cvr/loom-plugin-herdr",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cvr/loom-domain": "workspace:*",
+        "@cvr/loom-runtime": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
     "packages/protocol": {
       "name": "@cvr/loom-protocol",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cvr/loom-domain": "workspace:*",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/runtime": {
+      "name": "@cvr/loom-runtime",
       "version": "0.0.0",
       "dependencies": {
         "@cvr/loom-domain": "workspace:*",
@@ -71,7 +93,11 @@
 
     "@cvr/loom-platform-bun": ["@cvr/loom-platform-bun@workspace:packages/platform-bun"],
 
+    "@cvr/loom-plugin-herdr": ["@cvr/loom-plugin-herdr@workspace:packages/plugin-herdr"],
+
     "@cvr/loom-protocol": ["@cvr/loom-protocol@workspace:packages/protocol"],
+
+    "@cvr/loom-runtime": ["@cvr/loom-runtime@workspace:packages/runtime"],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-beta.106", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.106" }, "peerDependencies": { "effect": "^4.0.0-beta.106" } }, "sha512-zgHH6QKI7vYqneq+IIkEq4hd+tFAdBWGuiaoENSkGEOwnNAzxkTAnuzdENW5g6z6ZPN40uUwAyOqaF4O5MqmBA=="],
 

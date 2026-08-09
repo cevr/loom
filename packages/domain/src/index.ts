@@ -25,3 +25,41 @@ export const AgentOwner = Schema.Struct({
   agentId: AgentId,
 });
 export type AgentOwner = typeof AgentOwner.Type;
+
+export const ActorSubject = Schema.TaggedUnion({
+  Agent: {
+    sessionId: SessionId,
+    agentId: AgentId,
+  },
+  Job: {
+    sessionId: SessionId,
+    jobId: JobId,
+  },
+  WorkflowRun: {
+    sessionId: SessionId,
+    workflowRunId: WorkflowRunId,
+  },
+});
+export type ActorSubject = typeof ActorSubject.Type;
+
+export const ActorActivity = Schema.TaggedUnion({
+  Idle: {},
+  Working: {
+    message: Schema.optionalKey(Schema.String),
+  },
+  Blocked: {
+    message: Schema.String,
+  },
+  Failed: {
+    message: Schema.String,
+  },
+  Stopped: {},
+});
+export type ActorActivity = typeof ActorActivity.Type;
+
+export const ActorStateProjection = Schema.Struct({
+  subject: ActorSubject,
+  activity: ActorActivity,
+  revision: Schema.Natural,
+});
+export type ActorStateProjection = typeof ActorStateProjection.Type;

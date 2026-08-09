@@ -15,6 +15,7 @@
   "type": "module",
   "scripts": {
     "dev": "turbo run dev --filter=@cvr/loom-daemon",
+    "probe:herdr-live": "bun packages/plugin-herdr/probes/live.ts",
     "prototype:job-pipeline": "bun apps/daemon/prototypes/job-pipeline/main.ts",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint",
