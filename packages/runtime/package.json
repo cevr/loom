@@ -11,7 +11,8 @@
     "test": "bun test tests/"
   },
   "dependencies": {
-    "@cvr/loom-domain": "workspace:*"
+    "@cvr/loom-domain": "workspace:*",
+    "@cvr/loom-protocol": "workspace:*"
   },
   "peerDependencies": {
     "effect": "catalog:"

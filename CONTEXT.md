@@ -8,6 +8,18 @@ Loom coordinates coding agents, their execution environments, and their durable 
 A user-visible conversation that owns agents, jobs, and workflow runs.
 _Avoid_: Thread, chat
 
+**Workspace**:
+A directory tree that owns one Loom daemon, one local connection endpoint, and one orchestration store.
+_Avoid_: Project, repository
+
+**Daemon**:
+The long-lived Loom process that owns one workspace runtime.
+_Avoid_: Server, backend
+
+**Connection**:
+A schema-checked link from a client adapter to the daemon for one workspace.
+_Avoid_: Channel, transport
+
 **Session Tree**:
 A root session and all agent sessions that descend from it.
 _Avoid_: Conversation tree

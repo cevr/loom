@@ -1,7 +1,7 @@
-import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
+import { AgentId, CellId, SessionId, WorkspaceRoot } from "@cvr/loom-domain";
 import { describe, expect, it } from "effect-bun-test";
 import { Effect, Exit, Schema } from "effect";
-import { EvaluateCell, EvaluateCellRequest, LoomRpcs } from "../src/index.js";
+import { EvaluateCell, EvaluateCellRequest, HandshakeRequest, LoomRpcs } from "../src/index.js";
 
 describe("Loom RPC protocol", () => {
   it.effect("decodes an evaluation request", () =>
@@ -30,9 +30,22 @@ describe("Loom RPC protocol", () => {
     }),
   );
 
+  it.effect("decodes the connection handshake", () =>
+    Effect.gen(function* () {
+      const request = yield* Schema.decodeUnknownEffect(HandshakeRequest)({
+        workspaceRoot: "/workspace",
+        minimumProtocolVersion: 1,
+        maximumProtocolVersion: 1,
+      });
+
+      expect(request.workspaceRoot).toBe(WorkspaceRoot.make("/workspace"));
+    }),
+  );
+
   it.effect("registers the code kernel procedures", () =>
     Effect.sync(() => {
       expect(Array.from(LoomRpcs.requests.keys())).toEqual([
+        "Connection.Handshake",
         "CodeKernel.EvaluateCell",
         "CodeKernel.Reset",
       ]);

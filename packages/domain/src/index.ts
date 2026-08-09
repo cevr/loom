@@ -5,6 +5,9 @@ const identifier = (name: string) => Schema.NonEmptyString.pipe(Schema.brand(nam
 export const SessionId = identifier("@cvr/loom/SessionId");
 export type SessionId = typeof SessionId.Type;
 
+export const WorkspaceRoot = identifier("@cvr/loom/WorkspaceRoot");
+export type WorkspaceRoot = typeof WorkspaceRoot.Type;
+
 export const AgentId = identifier("@cvr/loom/AgentId");
 export type AgentId = typeof AgentId.Type;
 

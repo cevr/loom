@@ -5,6 +5,13 @@ export {
   layerActorStateHub,
   makeActorStateHub,
 } from "./internal/actor-state-hub.js";
+export {
+  ConnectionHandshake,
+  type ConnectionHandshakeConfig,
+  type ConnectionHandshakeShape,
+  layerConnectionHandshake,
+  makeConnectionHandshake,
+} from "./internal/connection-handshake.js";
 export { JobProcessStoreError } from "./internal/job-process-store-error.js";
 export { JobProcessStore, type JobProcessStoreShape } from "./internal/job-process-store.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";
