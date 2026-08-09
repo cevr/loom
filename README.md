@@ -1,21 +1,23 @@
-# pi
+# Loom
 
-Custom extensions and core utilities for the `pi` coding agent.
+Loom is an OTP-inspired kernel for coding agents.
 
-## What’s here
+Loom uses Bun for process execution and persistent TypeScript code cells.
+Loom uses Effect for actors, durable workflows, resource ownership, and typed protocols.
 
-- custom agent extensions
-- shared core utilities
-- local build/test scripts for the extension bundle
+## Status
+
+Loom is in its first architecture and scaffold phase.
+
+Loom currently targets Bun `1.4.0-canary.1`.
 
 ## Development
 
-```bash
+```sh
 bun install
-bun run build
-bun test
+bun run gate
+bun run dev
 ```
 
-## Notes
-
-This repo contains custom extension behavior. Runtime/API changes that need upstream surface changes belong in the separate `pi-mono` fork.
+Read [CONTEXT.md](./CONTEXT.md) for project language.
+Read [docs/architecture.md](./docs/architecture.md) for the system design.

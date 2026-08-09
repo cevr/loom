@@ -1,7 +1,6 @@
-node_modules
-dist
-auth.json
-prompts/
-.env
-*.log
-bun.lock
+node_modules/
+dist/
+bin/
+.turbo/
+*.tsbuildinfo
+.DS_Store

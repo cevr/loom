@@ -1,0 +1,19 @@
+{
+  "name": "@cvr/loom-daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "build": "bun build src/main.ts --outdir dist --target bun",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/"
+  },
+  "dependencies": {
+    "@cvr/loom-domain": "workspace:*",
+    "@effect/platform-bun": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}

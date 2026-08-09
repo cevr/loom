@@ -1,0 +1,20 @@
+{
+  "name": "@cvr/loom-platform-bun",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/"
+  },
+  "dependencies": {
+    "@cvr/loom-domain": "workspace:*",
+    "@cvr/loom-protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}
