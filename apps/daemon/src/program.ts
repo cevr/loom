@@ -1,12 +1,14 @@
 import {
   layerBunLoomServer,
   layerCellJournal,
-  layerCodeKernel,
+  layerCodeKernelFactory,
   layerJobRecovery,
   prepareDaemonSocket,
 } from "@cvr/loom-platform-bun";
-import { JobReconciler, layerConnectionHandshake } from "@cvr/loom-runtime";
-import { Clock, Effect, FileSystem, Layer, Path } from "effect";
+import { SqliteClient } from "@effect/sql-sqlite-bun";
+import { JobReconciler, layerAgentActor, layerConnectionHandshake } from "@cvr/loom-runtime";
+import { Clock, Crypto, Effect, FileSystem, Layer, Path } from "effect";
+import { SingleRunner } from "effect/unstable/cluster";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { loadDaemonConfig } from "./daemon-config.js";
 import { layerLoomRpcHandlers } from "./rpc-handlers.js";
@@ -28,15 +30,24 @@ const reconcileJobs = Effect.fn("LoomDaemon.reconcileJobs")(function* (filename:
 export const program: Effect.Effect<
   void,
   unknown,
-  FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto
 > = Effect.gen(function* () {
   const config = yield* loadDaemonConfig;
   yield* prepareDaemonSocket(config.socketPath);
   yield* reconcileJobs(config.databasePath);
   const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
+  const cluster = SingleRunner.layer({ runnerStorage: "memory" }).pipe(
+    Layer.provide(SqliteClient.layer({ filename: config.databasePath })),
+  );
+  const agents = layerAgentActor.pipe(
+    Layer.provide([
+      cluster,
+      layerCellJournal({ filename: config.databasePath }),
+      layerCodeKernelFactory({ entryPath: codeKernelEntry }),
+    ]),
+  );
   const handlers = layerLoomRpcHandlers.pipe(
-    Layer.provide(layerCellJournal({ filename: config.databasePath })),
-    Layer.provide(layerCodeKernel({ entryPath: codeKernelEntry })),
+    Layer.provide(agents),
     Layer.provide(
       layerConnectionHandshake({
         workspaceRoot: config.workspaceRoot,

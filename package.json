@@ -51,6 +51,7 @@
     "@effect/platform-bun": "4.0.0-beta.106",
     "@effect/platform-node-shared": "4.0.0-beta.106",
     "@effect/sql-sqlite-bun": "4.0.0-beta.106",
-    "@earendil-works/pi-coding-agent": "0.84.1"
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "effect-encore": "0.16.0"
   }
 }

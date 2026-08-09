@@ -2,37 +2,18 @@ import {
   CellInterruptedError,
   CodeKernelProcessRequest,
   CodeKernelProcessResponse,
-  type CellEvaluation,
-  type CellEvaluationError,
 } from "@cvr/loom-protocol";
 import {
-  Context,
-  Duration,
-  Effect,
-  Exit,
-  Layer,
-  Queue,
-  Schema,
-  Scope,
-  Semaphore,
-  Stream,
-} from "effect";
+  CodeKernel,
+  CodeKernelFactory,
+  type CodeKernelShape,
+  type EvaluateCellInput,
+} from "@cvr/loom-runtime";
+import { Duration, Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import { parseBunJsonLine } from "./bun-jsonl.js";
 import { CodeKernelProcessError } from "./code-kernel-process-error.js";
-import type { EvaluateCellInput } from "./code-kernel.js";
-
-export interface CodeKernelShape {
-  readonly evaluate: (
-    input: EvaluateCellInput,
-  ) => Effect.Effect<CellEvaluation, CellEvaluationError>;
-  readonly reset: Effect.Effect<void>;
-}
-
-export class CodeKernel extends Context.Service<CodeKernel, CodeKernelShape>()(
-  "@cvr/loom-platform-bun/CodeKernel",
-) {}
 
 export interface CodeKernelProcessConfig {
   readonly entryPath: string;
@@ -274,6 +255,7 @@ export const makeCodeKernel = (
     return CodeKernel.of({
       evaluate: (input) => Semaphore.withPermit(semaphore, evaluate(input)),
       reset: Semaphore.withPermit(semaphore, reset()),
+      close: Semaphore.withPermit(semaphore, replaceChild(state)),
     });
   });
 
@@ -281,3 +263,18 @@ export const layerCodeKernel = (
   config: CodeKernelProcessConfig,
 ): Layer.Layer<CodeKernel, never, ChildProcessSpawner.ChildProcessSpawner> =>
   Layer.effect(CodeKernel, makeCodeKernel(config));
+
+export const layerCodeKernelFactory = (
+  config: CodeKernelProcessConfig,
+): Layer.Layer<CodeKernelFactory, never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Layer.effect(
+    CodeKernelFactory,
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      return CodeKernelFactory.of({
+        spawn: makeCodeKernel(config).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        ),
+      });
+    }),
+  );

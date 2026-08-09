@@ -5,6 +5,7 @@ export {
   layerActorStateHub,
   makeActorStateHub,
 } from "./internal/actor-state-hub.js";
+export { AgentActor, agentEntityId, layerAgentActor } from "./internal/agent-actor.js";
 export {
   ConnectionHandshake,
   type ConnectionHandshakeConfig,
@@ -14,6 +15,12 @@ export {
 } from "./internal/connection-handshake.js";
 export { CellJournalStoreError } from "./internal/cell-journal-store-error.js";
 export { CellJournal, type CellJournalShape } from "./internal/cell-journal.js";
+export { CodeKernelFactory, type CodeKernelFactoryShape } from "./internal/code-kernel-factory.js";
+export {
+  CodeKernel,
+  type CodeKernelShape,
+  type EvaluateCellInput,
+} from "./internal/code-kernel.js";
 export { JobProcessStoreError } from "./internal/job-process-store-error.js";
 export { JobProcessStore, type JobProcessStoreShape } from "./internal/job-process-store.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";

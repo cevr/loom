@@ -77,8 +77,12 @@ Closing a session stops its attached work.
 ### Agent
 
 An Agent owns one Code Kernel.
+The Agent entity ID encodes its Session ID and Agent ID.
+One entity activation owns one scoped Code Kernel factory result.
+The entity mailbox serializes Cell and Code Kernel control operations.
 The Code Kernel starts when the first cell needs it.
-The Code Kernel remains active until the agent ends or policy removes it.
+The Code Kernel remains active until the Agent ends or Effect Cluster passivates it.
+See [Agent actor ownership](./adr/0006-key-agent-actors-by-session-and-agent.md).
 
 ### Code Kernel
 
@@ -90,6 +94,7 @@ The process boundary provides recovery.
 The VM context does not provide a security boundary.
 The daemon and Code Kernel use a typed JSONL process protocol.
 The daemon replaces the process after a timeout, exit, or protocol failure.
+Closing an Agent entity Scope closes its Code Kernel process.
 See [Code Kernel recovery](./code-kernel-recovery.md).
 
 Loom stores the cell journal.
@@ -229,6 +234,8 @@ Create each package only when its first working boundary exists.
 - A daemon restart must reconnect to a safe background job.
 - A bad Code Kernel must not stop the daemon.
 - A Code Kernel restart must keep its cell journal without automatic replay.
+- Two Agents must not share Code Kernel bindings.
+- Two Cells for one Agent must share Code Kernel bindings.
 - A Workflow Run must resume after a full daemon restart.
 - A completed Step must not run again during workflow replay.
 - Two callers with one workflow key must share one Workflow Run.

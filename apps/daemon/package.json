@@ -14,7 +14,8 @@
     "@cvr/loom-platform-bun": "workspace:*",
     "@cvr/loom-protocol": "workspace:*",
     "@cvr/loom-runtime": "workspace:*",
-    "@effect/platform-bun": "catalog:"
+    "@effect/platform-bun": "catalog:",
+    "@effect/sql-sqlite-bun": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:"

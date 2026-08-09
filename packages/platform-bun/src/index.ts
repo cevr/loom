@@ -6,10 +6,10 @@ export {
   makeInProcessCodeKernel,
 } from "./internal/code-kernel.js";
 export { runCodeKernelWorker } from "./internal/code-kernel-worker.js";
+export { CodeKernel, type CodeKernelShape } from "@cvr/loom-runtime";
 export {
-  CodeKernel,
   type CodeKernelProcessConfig,
-  type CodeKernelShape,
+  layerCodeKernelFactory,
   layerCodeKernel,
   makeCodeKernel,
 } from "./internal/code-kernel-process.js";
