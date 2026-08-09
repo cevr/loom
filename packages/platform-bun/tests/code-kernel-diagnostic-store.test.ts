@@ -206,6 +206,31 @@ it.scopedLive("runs without a diagnostic file when active kernels fill the globa
   }).pipe(Effect.provide(BunServices.layer)),
 );
 
+it.scopedLive("keeps directories that belong to an active diagnostic lease", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-active-owner-" });
+    const otherOwner = { ...owner, agentId: AgentId.make("agent-2") };
+    yield* Effect.gen(function* () {
+      const factory = yield* CodeKernelFactory;
+      const first = yield* factory.spawn(owner);
+      const second = yield* factory.spawn(otherOwner);
+      yield* first.evaluate({ cellId: CellId.make("cell-active-owner"), source: "42" });
+      const ownerDirectory = `${directory}/session-1/agent-1`;
+      const files = yield* fs.readDirectory(ownerDirectory);
+      const file = yield* Effect.fromOption(Option.fromUndefinedOr(files[0]));
+      yield* fs.remove(`${ownerDirectory}/${file}`);
+      yield* second.evaluate({ cellId: CellId.make("cell-sibling-owner"), source: "42" });
+      expect(yield* fs.exists(ownerDirectory)).toBe(true);
+      expect(yield* fs.exists(`${directory}/session-1`)).toBe(true);
+    }).pipe(
+      Effect.provide(
+        layerCodeKernelFactory({ entryPath: workerEntry, diagnosticsDirectory: directory }),
+      ),
+    );
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
 it.scopedLive("skips a broken owner entry during allocation cleanup", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

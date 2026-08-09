@@ -124,15 +124,30 @@ const readFiles = Effect.fn("CodeKernelDiagnosticStore.readFiles")(function* (
 const removeFiles = (state: StoreState, files: ReadonlyArray<StoredFile>) =>
   Effect.forEach(files, (file) => state.fs.remove(file.path, { force: true }), { discard: true });
 
+const hasActiveFile = (state: StoreState, directory: string) => {
+  for (const file of state.active) {
+    if (isWithin(state.path, directory, file)) return true;
+  }
+  return false;
+};
+
 const removeEmptyDirectories = Effect.fn("CodeKernelDiagnosticStore.removeEmptyDirectories")(
   function* (state: StoreState, owners: ReadonlyMap<string, string>) {
     for (const [owner, session] of owners) {
       const ownerEntries = yield* Effect.option(state.fs.readDirectory(owner));
-      if (Option.isSome(ownerEntries) && ownerEntries.value.length === 0) {
+      if (
+        !hasActiveFile(state, owner) &&
+        Option.isSome(ownerEntries) &&
+        ownerEntries.value.length === 0
+      ) {
         yield* state.fs.remove(owner, { recursive: true }).pipe(Effect.ignore);
       }
       const sessionEntries = yield* Effect.option(state.fs.readDirectory(session));
-      if (Option.isSome(sessionEntries) && sessionEntries.value.length === 0) {
+      if (
+        !hasActiveFile(state, session) &&
+        Option.isSome(sessionEntries) &&
+        sessionEntries.value.length === 0
+      ) {
         yield* state.fs.remove(session, { recursive: true }).pipe(Effect.ignore);
       }
     }
