@@ -63,3 +63,32 @@ export const ActorStateProjection = Schema.Struct({
   revision: Schema.Natural,
 });
 export type ActorStateProjection = typeof ActorStateProjection.Type;
+
+const positiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
+
+export const ProcessIdentity = Schema.Struct({
+  pid: positiveInteger,
+  processGroupId: positiveInteger,
+  processStartId: Schema.NonEmptyString,
+});
+export type ProcessIdentity = typeof ProcessIdentity.Type;
+
+export const JobProcessStatus = Schema.Literals([
+  "Running",
+  "Stopping",
+  "Recovered",
+  "ExitedWhileOffline",
+  "IdentityMismatch",
+]);
+export type JobProcessStatus = typeof JobProcessStatus.Type;
+
+export const JobProcessRecord = Schema.Struct({
+  jobId: JobId,
+  sessionId: SessionId,
+  identity: ProcessIdentity,
+  stdoutPath: Schema.NonEmptyString,
+  stderrPath: Schema.NonEmptyString,
+  status: JobProcessStatus,
+  recoveryDetail: Schema.NullOr(Schema.String),
+});
+export type JobProcessRecord = typeof JobProcessRecord.Type;
