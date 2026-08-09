@@ -6,8 +6,20 @@ Run Pi with the Loom extension from the repository root.
 bun run dev:pi
 ```
 
-Run `/loom` in Pi to confirm that the extension loaded.
+Pi starts the Workspace daemon when no daemon answers.
+
+Run `/loom` in Pi to confirm the daemon connection.
 
 Run `/reload` after you change Loom extension source files.
 
 The development command loads the source file directly. It does not copy the extension into the global Pi directory.
+
+Use Herdr to start Pi in a managed pane.
+
+```sh
+herdr pane split --current --direction right --cwd "$PWD" --no-focus
+herdr pane run <pane-id> "bun run dev:pi"
+herdr pane read <pane-id> --source recent-unwrapped --lines 100
+```
+
+Use `herdr pane run <pane-id> "/reload"` after a source change.

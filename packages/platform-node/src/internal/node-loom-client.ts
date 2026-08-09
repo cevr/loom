@@ -1,17 +1,17 @@
 import { layerLoomRpcClient, LoomClient, type LoomRpcClientConfig } from "@cvr/loom-client";
 import { maximumFrameSize } from "@cvr/loom-protocol";
-import { BunSocket } from "@effect/platform-bun";
+import { NodeSocket } from "@effect/platform-node-shared";
 import { Layer } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import type { Socket } from "effect/unstable/socket";
 
-export type BunLoomClientConfig = LoomRpcClientConfig;
+export type NodeLoomClientConfig = LoomRpcClientConfig;
 
-export const layerBunLoomClient = (
-  config: BunLoomClientConfig,
+export const layerNodeLoomClient = (
+  config: NodeLoomClientConfig,
 ): Layer.Layer<LoomClient, Socket.SocketError> => {
   const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
-    Layer.provide(BunSocket.layerNet({ path: config.socketPath })),
+    Layer.provide(NodeSocket.layerNet({ path: config.socketPath })),
     Layer.provide(RpcSerialization.layerNdjsonWith({ maxBufferSize: maximumFrameSize })),
   );
   return layerLoomRpcClient(config).pipe(Layer.provide(protocol));

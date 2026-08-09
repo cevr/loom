@@ -189,7 +189,9 @@ See [Herdr Plugin](./herdr-plugin.md).
                     |
               @cvr/loom-daemon
 
-@cvr/loom-pi-extension -> @cvr/loom-client -> @cvr/loom-protocol
+@cvr/loom-pi-extension -> @cvr/loom-platform-node -> @cvr/loom-client
+
+@cvr/loom-platform-node -> @cvr/loom-protocol
 
 @cvr/loom-plugin-herdr -> @cvr/loom-runtime
 ```
@@ -199,8 +201,9 @@ The domain package has no platform dependency.
 The protocol package owns boundary schemas.
 The runtime package owns entities and workflows.
 The Bun package owns unmatched Bun and VM APIs.
+The Node package owns the Pi socket and process adapters.
 The daemon composes layers.
-Client adapters depend on the protocol only.
+Client adapters depend on the shared client contract.
 
 Create each package only when its first working boundary exists.
 

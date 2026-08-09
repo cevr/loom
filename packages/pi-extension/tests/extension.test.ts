@@ -5,6 +5,9 @@ import loomExtension from "../src/index.js";
 it("registers the Loom development command", () => {
   let command: Omit<RegisteredCommand, "name" | "sourceInfo"> | undefined;
   const pi = {
+    on: (event: "session_start") => {
+      expect(event).toBe("session_start");
+    },
     registerCommand: (name: string, options: Omit<RegisteredCommand, "name" | "sourceInfo">) => {
       expect(name).toBe("loom");
       command = options;
@@ -13,5 +16,5 @@ it("registers the Loom development command", () => {
 
   loomExtension(pi);
 
-  expect(command?.description).toBe("Show the Loom extension state");
+  expect(command?.description).toBe("Show the Loom daemon state");
 });

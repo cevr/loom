@@ -41,6 +41,7 @@
       "@cvr/loom-domain": ["./packages/domain/src/index.ts"],
       "@cvr/loom-protocol": ["./packages/protocol/src/index.ts"],
       "@cvr/loom-platform-bun": ["./packages/platform-bun/src/index.ts"],
+      "@cvr/loom-platform-node": ["./packages/platform-node/src/index.ts"],
       "@cvr/loom-runtime": ["./packages/runtime/src/index.ts"],
       "@cvr/loom-plugin-herdr": ["./packages/plugin-herdr/src/index.ts"]
     }

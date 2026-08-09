@@ -1,5 +1,5 @@
 {
-  "name": "@cvr/loom-pi-extension",
+  "name": "@cvr/loom-platform-node",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,10 +13,10 @@
   "dependencies": {
     "@cvr/loom-client": "workspace:*",
     "@cvr/loom-domain": "workspace:*",
-    "@cvr/loom-platform-node": "workspace:*"
+    "@cvr/loom-protocol": "workspace:*",
+    "@effect/platform-node-shared": "catalog:"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "catalog:",
     "effect": "catalog:"
   }
 }

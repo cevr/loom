@@ -4,3 +4,4 @@ bin/
 .turbo/
 *.tsbuildinfo
 .DS_Store
+.loom/

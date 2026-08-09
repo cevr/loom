@@ -9,7 +9,9 @@ export { type BunLoomClientConfig, layerBunLoomClient } from "./internal/bun-loo
 export { type BunLoomServerConfig, layerBunLoomServer } from "./internal/bun-loom-server.js";
 export { currentWorkingDirectory } from "./internal/bun-working-directory.js";
 export { DaemonAlreadyRunningError } from "./internal/daemon-already-running-error.js";
+export { DaemonStartError } from "./internal/daemon-start-error.js";
 export { prepareDaemonSocket } from "./internal/prepare-daemon-socket.js";
+export { startBunDaemon, type StartBunDaemonConfig } from "./internal/start-bun-daemon.js";
 export {
   layerBunProcessInspector,
   makeBunProcessInspector,

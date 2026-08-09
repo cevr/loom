@@ -54,6 +54,11 @@
     "packages/pi-extension": {
       "name": "@cvr/loom-pi-extension",
       "version": "0.0.0",
+      "dependencies": {
+        "@cvr/loom-client": "workspace:*",
+        "@cvr/loom-domain": "workspace:*",
+        "@cvr/loom-platform-node": "workspace:*",
+      },
       "peerDependencies": {
         "@earendil-works/pi-coding-agent": "catalog:",
         "effect": "catalog:",
@@ -69,6 +74,19 @@
         "@cvr/loom-runtime": "workspace:*",
         "@effect/platform-bun": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/platform-node": {
+      "name": "@cvr/loom-platform-node",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cvr/loom-client": "workspace:*",
+        "@cvr/loom-domain": "workspace:*",
+        "@cvr/loom-protocol": "workspace:*",
+        "@effect/platform-node-shared": "catalog:",
       },
       "peerDependencies": {
         "effect": "catalog:",
@@ -111,6 +129,7 @@
   "catalog": {
     "@earendil-works/pi-coding-agent": "0.84.1",
     "@effect/platform-bun": "4.0.0-beta.106",
+    "@effect/platform-node-shared": "4.0.0-beta.106",
     "@effect/sql-sqlite-bun": "4.0.0-beta.106",
     "effect": "4.0.0-beta.106",
   },
@@ -176,6 +195,8 @@
     "@cvr/loom-pi-extension": ["@cvr/loom-pi-extension@workspace:packages/pi-extension"],
 
     "@cvr/loom-platform-bun": ["@cvr/loom-platform-bun@workspace:packages/platform-bun"],
+
+    "@cvr/loom-platform-node": ["@cvr/loom-platform-node@workspace:packages/platform-node"],
 
     "@cvr/loom-plugin-herdr": ["@cvr/loom-plugin-herdr@workspace:packages/plugin-herdr"],
 

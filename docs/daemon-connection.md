@@ -8,6 +8,8 @@ Set `LOOM_WORKSPACE_ROOT` to replace the process working directory.
 Set `LOOM_DB_PATH` to replace the default SQLite path.
 
 The Pi Client Adapter owns daemon start when no daemon answers.
+Pi uses the Node platform adapter.
+The Node platform adapter starts the daemon with Bun.
 The Workspace owns the running daemon.
 A Pi exit does not stop the daemon.
 An explicit administration action owns daemon stop.
