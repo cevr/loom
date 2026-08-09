@@ -1,0 +1,17 @@
+{
+  "name": "@cvr/loom-pi-extension",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "effect": "catalog:"
+  }
+}

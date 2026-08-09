@@ -2,6 +2,14 @@
 
 Loom is an OTP-inspired kernel for coding agents.
 
+Start Pi with the Loom development extension.
+
+```sh
+bun run dev:pi
+```
+
+See [Pi development](docs/pi-development.md).
+
 Loom uses Bun for process execution and persistent TypeScript code cells.
 Loom uses Effect for actors, durable workflows, resource ownership, and typed protocols.
 
