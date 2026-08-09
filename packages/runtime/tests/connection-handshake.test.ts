@@ -50,8 +50,8 @@ it.effect("rejects a client with no common protocol version", () =>
     const error = yield* handshake
       .handshake({
         workspaceRoot,
-        minimumProtocolVersion: 2,
-        maximumProtocolVersion: 3,
+        minimumProtocolVersion: 3,
+        maximumProtocolVersion: 4,
       })
       .pipe(Effect.flip);
 

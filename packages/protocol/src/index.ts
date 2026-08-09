@@ -3,6 +3,7 @@ export { CellCompilationError } from "./cell-compilation-error.js";
 export { CellEvaluationError } from "./cell-evaluation-error.js";
 export { CellExecutionError } from "./cell-execution-error.js";
 export { CellInterruptedError } from "./cell-interrupted-error.js";
+export { CodeKernelDiagnostic } from "./code-kernel-diagnostic.js";
 export {
   CodeKernelProcessRequest,
   CodeKernelProcessResponse,
@@ -17,6 +18,8 @@ export { LoomRpcs } from "./loom-rpcs.js";
 export {
   currentProtocolVersion,
   maximumCellSourceLength,
+  maximumCellDisplayLength,
+  maximumCellBindings,
   maximumFrameSize,
   maximumProtocolVersion,
   minimumProtocolVersion,

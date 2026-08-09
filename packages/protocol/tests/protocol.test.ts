@@ -2,6 +2,8 @@ import { AgentId, CellId, SessionId, WorkspaceRoot } from "@cvr/loom-domain";
 import { describe, expect, it } from "effect-bun-test";
 import { Effect, Exit, Schema } from "effect";
 import {
+  CellInterruptedError,
+  CodeKernelDiagnostic,
   CodeKernelProcessRequest,
   CodeKernelProcessResponse,
   EvaluateCell,
@@ -75,6 +77,48 @@ describe("Code Kernel process protocol", () => {
 
       expect(request).toHaveProperty("_tag", "Evaluate");
       expect(response).toHaveProperty("_tag", "Ready");
+    }),
+  );
+});
+
+describe("Code Kernel diagnostics", () => {
+  it.effect("round-trips an interruption without diagnostic data", () =>
+    Effect.gen(function* () {
+      const codec = Schema.fromJsonString(CellInterruptedError);
+      const encoded = yield* Schema.encodeEffect(codec)(
+        new CellInterruptedError({
+          cellId: CellId.make("cell-1"),
+          reason: "ProcessExited",
+          message: "Code Kernel process did not start.",
+          diagnostic: undefined,
+        }),
+      );
+      const decoded = yield* Schema.decodeEffect(codec)(encoded);
+
+      expect(decoded.diagnostic).toBeUndefined();
+    }),
+  );
+
+  it.effect("round-trips Code Kernel diagnostic data", () =>
+    Effect.gen(function* () {
+      const codec = Schema.fromJsonString(CellInterruptedError);
+      const diagnostic = CodeKernelDiagnostic.make({
+        requestId: 1,
+        exitCode: 23,
+        stderrTail: "kernel failed\n",
+        stderrPath: "/tmp/kernel.stderr.log",
+      });
+      const encoded = yield* Schema.encodeEffect(codec)(
+        new CellInterruptedError({
+          cellId: CellId.make("cell-1"),
+          reason: "ProcessExited",
+          message: "Code Kernel process exited.",
+          diagnostic,
+        }),
+      );
+      const decoded = yield* Schema.decodeEffect(codec)(encoded);
+
+      expect(decoded.diagnostic).toEqual(diagnostic);
     }),
   );
 });
