@@ -5,7 +5,7 @@ export class CellInterruptedError extends Schema.TaggedError<CellInterruptedErro
   "CellInterruptedError",
   {
     cellId: CellId,
-    reason: Schema.Literals(["ProcessExited", "ProtocolFailure", "TimedOut"]),
+    reason: Schema.Literals(["JournalFailure", "ProcessExited", "ProtocolFailure", "TimedOut"]),
     message: Schema.String,
   },
 ) {}

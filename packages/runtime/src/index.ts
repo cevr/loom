@@ -12,6 +12,8 @@ export {
   layerConnectionHandshake,
   makeConnectionHandshake,
 } from "./internal/connection-handshake.js";
+export { CellJournalStoreError } from "./internal/cell-journal-store-error.js";
+export { CellJournal, type CellJournalShape } from "./internal/cell-journal.js";
 export { JobProcessStoreError } from "./internal/job-process-store-error.js";
 export { JobProcessStore, type JobProcessStoreShape } from "./internal/job-process-store.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";

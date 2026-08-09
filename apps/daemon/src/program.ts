@@ -1,5 +1,6 @@
 import {
   layerBunLoomServer,
+  layerCellJournal,
   layerCodeKernel,
   layerJobRecovery,
   prepareDaemonSocket,
@@ -34,6 +35,7 @@ export const program: Effect.Effect<
   yield* reconcileJobs(config.databasePath);
   const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
   const handlers = layerLoomRpcHandlers.pipe(
+    Layer.provide(layerCellJournal({ filename: config.databasePath })),
     Layer.provide(layerCodeKernel({ entryPath: codeKernelEntry })),
     Layer.provide(
       layerConnectionHandshake({

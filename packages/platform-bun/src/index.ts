@@ -29,3 +29,5 @@ export {
   makeSqliteJobProcessStore,
 } from "./internal/sqlite-job-process-store.js";
 export { type JobRecoveryConfig, layerJobRecovery } from "./internal/job-recovery-layer.js";
+export { type CellJournalConfig, layerCellJournal } from "./internal/cell-journal-layer.js";
+export { layerSqliteCellJournal, makeSqliteCellJournal } from "./internal/sqlite-cell-journal.js";
