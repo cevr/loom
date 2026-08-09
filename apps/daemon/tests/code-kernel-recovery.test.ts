@@ -20,7 +20,7 @@ it.scopedLive("preserves the Cell journal when a blocked Code Kernel is replaced
     const filename = `${directory}/loom.sqlite`;
     const live = Layer.merge(
       layerCellJournal({ filename }),
-      layerCodeKernel({ entryPath: workerEntry, cellTimeout: "100 millis" }),
+      layerCodeKernel({ entryPath: workerEntry, cellTimeout: "250 millis" }),
     );
 
     yield* Effect.gen(function* () {

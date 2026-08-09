@@ -70,12 +70,11 @@ describe("Code Kernel process protocol", () => {
         source: "21 * 2",
       });
       const response = yield* Schema.decodeUnknownEffect(CodeKernelProcessResponse)({
-        _tag: "ResetSucceeded",
-        requestId: 2,
+        _tag: "Ready",
       });
 
       expect(request).toHaveProperty("_tag", "Evaluate");
-      expect(response).toHaveProperty("_tag", "ResetSucceeded");
+      expect(response).toHaveProperty("_tag", "Ready");
     }),
   );
 });

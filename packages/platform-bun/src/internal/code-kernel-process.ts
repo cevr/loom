@@ -37,6 +37,7 @@ export class CodeKernel extends Context.Service<CodeKernel, CodeKernelShape>()(
 export interface CodeKernelProcessConfig {
   readonly entryPath: string;
   readonly cellTimeout?: Duration.Input;
+  readonly startupTimeout?: Duration.Input;
 }
 
 interface KernelChild {
@@ -95,6 +96,29 @@ const spawnChild = Effect.fn("CodeKernelProcess.spawn")(function* (
   );
   const child = { scope, handle, responses };
   yield* Effect.forkIn(listenForResponses(child), scope);
+  const ready = yield* Queue.take(child.responses).pipe(
+    Effect.flatMap((result) => result),
+    Effect.timeoutOrElse({
+      duration: config.startupTimeout ?? "10 seconds",
+      orElse: () =>
+        Effect.fail(
+          processError("TimedOut", "Code Kernel process did not become ready.", undefined),
+        ),
+    }),
+    Effect.exit,
+  );
+  if (Exit.isFailure(ready)) {
+    yield* Scope.close(scope, ready);
+    return yield* Effect.failCause(ready.cause);
+  }
+  if (!CodeKernelProcessResponse.guards.Ready(ready.value)) {
+    yield* Scope.close(scope, Exit.void);
+    return yield* processError(
+      "ProtocolFailure",
+      "Code Kernel process did not send a ready frame.",
+      ready.value,
+    );
+  }
   return child;
 });
 
@@ -125,6 +149,13 @@ const sendRequest = Effect.fn("CodeKernelProcess.send")(function* (
         ),
     }),
   );
+  if (CodeKernelProcessResponse.guards.Ready(response)) {
+    return yield* processError(
+      "ProtocolFailure",
+      "Code Kernel sent an unexpected ready frame.",
+      response,
+    );
+  }
   if (response.requestId !== request.requestId) {
     return yield* processError(
       "ProtocolFailure",

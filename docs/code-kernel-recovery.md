@@ -8,6 +8,9 @@ The daemon and process exchange typed JSONL frames.
 Each frame has a request ID.
 The worker handles one request at a time.
 The daemon rejects a response with a different request ID.
+The worker sends a typed ready frame after startup.
+The daemon uses a separate startup limit.
+The Cell limit starts after the ready frame.
 
 A Cell has a 30-second execution limit by default.
 Long work must become a Job.

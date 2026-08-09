@@ -32,6 +32,11 @@ const respond = (
 export const runCodeKernelWorker = Effect.gen(function* () {
   const stdio = yield* Stdio.Stdio;
   const kernel = yield* makeInProcessCodeKernel;
+  const ready = yield* encodeResponse(CodeKernelProcessResponse.cases.Ready.make({}));
+  yield* Stream.succeed(`${ready}\n`).pipe(
+    Stream.encodeText,
+    Stream.run(stdio.stdout({ endOnDone: false })),
+  );
   const requests = stdio.stdin.pipe(
     Stream.decodeText(),
     Stream.splitLines,

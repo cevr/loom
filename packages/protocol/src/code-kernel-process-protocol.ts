@@ -16,6 +16,7 @@ export const CodeKernelProcessRequest = Schema.TaggedUnion({
 export type CodeKernelProcessRequest = typeof CodeKernelProcessRequest.Type;
 
 export const CodeKernelProcessResponse = Schema.TaggedUnion({
+  Ready: {},
   EvaluationSucceeded: {
     requestId: Schema.Natural,
     evaluation: CellEvaluation,
