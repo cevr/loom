@@ -82,6 +82,7 @@ One entity activation owns one scoped Code Kernel factory result.
 The entity mailbox serializes Cell and Code Kernel control operations.
 The Code Kernel starts when the first cell needs it.
 The Code Kernel remains active until the Agent ends or Effect Cluster passivates it.
+Effect Cluster passivates an idle Agent after one minute by default.
 See [Agent actor ownership](./adr/0006-key-agent-actors-by-session-and-agent.md).
 
 ### Code Kernel
@@ -96,6 +97,7 @@ The daemon and Code Kernel use a typed JSONL process protocol.
 The daemon replaces the process after a timeout, exit, or protocol failure.
 Closing an Agent entity Scope closes its Code Kernel process.
 See [Code Kernel recovery](./code-kernel-recovery.md).
+See [Code Kernel limits](./adr/0007-bound-code-kernel-failures-and-diagnostics.md).
 
 Loom stores the cell journal.
 Loom does not replay cells automatically after a daemon restart.

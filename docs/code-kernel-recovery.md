@@ -11,6 +11,7 @@ The daemon rejects a response with a different request ID.
 The worker sends a typed ready frame after startup.
 The daemon uses a separate startup limit.
 The Cell limit starts after the ready frame.
+The ready frame has a 10-second limit by default.
 
 A Cell has a 30-second execution limit by default.
 Long work must become a Job.
@@ -22,6 +23,24 @@ A timeout replaces the process.
 A process exit replaces the process.
 A protocol failure replaces the process.
 The next Cell starts a new process.
+
+The daemon opens a crash breaker after three replacements in 30 seconds.
+The breaker stays open for 30 seconds.
+A timeout counts as a replacement failure.
+
+The daemon keeps the last 65,536 stderr characters in memory.
+It stores the full stderr stream in an Agent diagnostics directory.
+It keeps the last 20 stderr files for each Agent.
+The process failure contains available exit and stderr details.
+
+The daemon limits a Cell display to 65,536 characters.
+It limits a Cell result to 1,024 binding names.
+
+The daemon sends `SIGTERM` during replacement.
+Effect sends the force-kill signal after one second.
+
+Request IDs start at one for each worker process.
+An interrupted Cell closes its worker before the next Cell starts.
 
 The daemon stays alive when a Code Kernel fails.
 The daemon does not replay old Cells into the replacement process.
@@ -35,3 +54,4 @@ Mutable bindings do not survive process replacement.
 
 The process boundary is a recovery boundary.
 It is not a security boundary.
+See [Code Kernel limits](./adr/0007-bound-code-kernel-failures-and-diagnostics.md).
