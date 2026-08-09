@@ -109,6 +109,11 @@ Detached jobs survive session closure.
 Background jobs write complete output to files from process start.
 This allows safe recovery after a daemon restart.
 
+The Job launcher must store the PID, process group ID, and process start identity before it reports a Job as live.
+After a restart, Loom adopts only an exact identity match.
+It does not signal a process after an identity mismatch.
+See [Job process recovery](./job-recovery.md).
+
 ### Workflow Run
 
 A Workflow Run does not use mutable Code Kernel state.
@@ -179,7 +184,7 @@ See [Herdr Plugin](./herdr-plugin.md).
                     |
               @cvr/loom-daemon
 
-@cvr/loom-pi-adapter -> @cvr/loom-protocol
+@cvr/loom-pi-extension -> @cvr/loom-protocol
 
 @cvr/loom-plugin-herdr -> @cvr/loom-runtime
 ```

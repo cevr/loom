@@ -15,7 +15,10 @@
   "type": "module",
   "scripts": {
     "dev": "turbo run dev --filter=@cvr/loom-daemon",
+    "dev:pi": "pi --extension packages/pi-extension/src/index.ts",
     "probe:herdr-live": "bun packages/plugin-herdr/probes/live.ts",
+    "probe:process-register": "bun packages/platform-bun/probes/register-live-process.ts",
+    "probe:process-reconcile": "bun packages/platform-bun/probes/reconcile-live-process.ts",
     "prototype:job-pipeline": "bun apps/daemon/prototypes/job-pipeline/main.ts",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint",
@@ -45,6 +48,7 @@
   "catalog": {
     "effect": "4.0.0-beta.106",
     "@effect/platform-bun": "4.0.0-beta.106",
-    "@effect/sql-sqlite-bun": "4.0.0-beta.106"
+    "@effect/sql-sqlite-bun": "4.0.0-beta.106",
+    "@earendil-works/pi-coding-agent": "0.84.1"
   }
 }

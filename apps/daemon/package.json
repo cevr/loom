@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@cvr/loom-domain": "workspace:*",
+    "@cvr/loom-platform-bun": "workspace:*",
+    "@cvr/loom-runtime": "workspace:*",
     "@effect/platform-bun": "catalog:"
   },
   "peerDependencies": {
