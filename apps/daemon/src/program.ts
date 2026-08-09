@@ -11,6 +11,7 @@ import { loadDaemonConfig } from "./daemon-config.js";
 import { layerLoomRpcHandlers } from "./rpc-handlers.js";
 
 export const startupMessage = Effect.succeed("Loom daemon is ready");
+const codeKernelEntry = new URL("../../code-kernel/src/main.ts", import.meta.url).pathname;
 
 const reconcileJobs = Effect.fn("LoomDaemon.reconcileJobs")(function* (filename: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -33,7 +34,7 @@ export const program: Effect.Effect<
   yield* reconcileJobs(config.databasePath);
   const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
   const handlers = layerLoomRpcHandlers.pipe(
-    Layer.provide(layerCodeKernel),
+    Layer.provide(layerCodeKernel({ entryPath: codeKernelEntry })),
     Layer.provide(
       layerConnectionHandshake({
         workspaceRoot: config.workspaceRoot,

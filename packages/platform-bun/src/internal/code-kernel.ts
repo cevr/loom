@@ -14,16 +14,17 @@ export interface EvaluateCellInput {
   readonly source: string;
 }
 
-export interface CodeKernelShape {
+export interface InProcessCodeKernelShape {
   readonly evaluate: (
     input: EvaluateCellInput,
   ) => Effect.Effect<CellEvaluation, CellEvaluationError>;
   readonly reset: Effect.Effect<void>;
 }
 
-export class CodeKernel extends Context.Service<CodeKernel, CodeKernelShape>()(
-  "@cvr/loom-platform-bun/CodeKernel",
-) {}
+export class InProcessCodeKernel extends Context.Service<
+  InProcessCodeKernel,
+  InProcessCodeKernelShape
+>()("@cvr/loom-platform-bun/InProcessCodeKernel") {}
 
 const makeContext = (): NodeVm.Context => NodeVm.createContext({ Bun });
 
@@ -88,34 +89,39 @@ const evaluateSource = (
     return yield* awaitEvaluation(input.cellId, raw);
   });
 
-export const makeCodeKernel: Effect.Effect<CodeKernelShape> = Effect.gen(function* () {
-  const transpiler = makeTranspiler();
-  const semaphore = yield* Semaphore.make(1);
-  let context = makeContext();
+export const makeInProcessCodeKernel: Effect.Effect<InProcessCodeKernelShape> = Effect.gen(
+  function* () {
+    const transpiler = makeTranspiler();
+    const semaphore = yield* Semaphore.make(1);
+    let context = makeContext();
 
-  const evaluateInContext = (
-    input: EvaluateCellInput,
-  ): Effect.Effect<CellEvaluation, CellEvaluationError> =>
-    Effect.gen(function* () {
-      const evaluation = yield* evaluateSource(transpiler, context, input);
-      const value = valueFromEvaluation(evaluation);
+    const evaluateInContext = (
+      input: EvaluateCellInput,
+    ): Effect.Effect<CellEvaluation, CellEvaluationError> =>
+      Effect.gen(function* () {
+        const evaluation = yield* evaluateSource(transpiler, context, input);
+        const value = valueFromEvaluation(evaluation);
 
-      return CellEvaluation.make({
-        cellId: input.cellId,
-        display: Bun.inspect(value),
-        bindings: Reflect.ownKeys(context).filter(Predicate.isString).toSorted(),
+        return CellEvaluation.make({
+          cellId: input.cellId,
+          display: Bun.inspect(value),
+          bindings: Reflect.ownKeys(context).filter(Predicate.isString).toSorted(),
+        });
       });
-    });
 
-  return {
-    evaluate: (input) => Semaphore.withPermit(semaphore, evaluateInContext(input)),
-    reset: Semaphore.withPermit(
-      semaphore,
-      Effect.sync(() => {
-        context = makeContext();
-      }),
-    ),
-  };
-});
+    return {
+      evaluate: (input) => Semaphore.withPermit(semaphore, evaluateInContext(input)),
+      reset: Semaphore.withPermit(
+        semaphore,
+        Effect.sync(() => {
+          context = makeContext();
+        }),
+      ),
+    };
+  },
+);
 
-export const layerCodeKernel: Layer.Layer<CodeKernel> = Layer.effect(CodeKernel, makeCodeKernel);
+export const layerInProcessCodeKernel: Layer.Layer<InProcessCodeKernel> = Layer.effect(
+  InProcessCodeKernel,
+  makeInProcessCodeKernel,
+);

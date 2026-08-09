@@ -19,6 +19,17 @@
         "typescript": "7.0.2",
       },
     },
+    "apps/code-kernel": {
+      "name": "@cvr/loom-code-kernel",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cvr/loom-platform-bun": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
     "apps/daemon": {
       "name": "@cvr/loom-daemon",
       "version": "0.0.0",
@@ -187,6 +198,8 @@
     "@babel/runtime": ["@babel/runtime@7.29.7", "", {}, "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="],
 
     "@cvr/loom-client": ["@cvr/loom-client@workspace:packages/client"],
+
+    "@cvr/loom-code-kernel": ["@cvr/loom-code-kernel@workspace:apps/code-kernel"],
 
     "@cvr/loom-daemon": ["@cvr/loom-daemon@workspace:apps/daemon"],
 

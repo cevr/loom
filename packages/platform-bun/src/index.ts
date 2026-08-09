@@ -1,10 +1,18 @@
 export {
-  CodeKernel,
-  type CodeKernelShape,
+  InProcessCodeKernel,
+  type InProcessCodeKernelShape,
   type EvaluateCellInput,
+  layerInProcessCodeKernel,
+  makeInProcessCodeKernel,
+} from "./internal/code-kernel.js";
+export { runCodeKernelWorker } from "./internal/code-kernel-worker.js";
+export {
+  CodeKernel,
+  type CodeKernelProcessConfig,
+  type CodeKernelShape,
   layerCodeKernel,
   makeCodeKernel,
-} from "./internal/code-kernel.js";
+} from "./internal/code-kernel-process.js";
 export { type BunLoomClientConfig, layerBunLoomClient } from "./internal/bun-loom-client.js";
 export { type BunLoomServerConfig, layerBunLoomServer } from "./internal/bun-loom-server.js";
 export { currentWorkingDirectory } from "./internal/bun-working-directory.js";

@@ -1,12 +1,12 @@
 import { CellId } from "@cvr/loom-domain";
 import { describe, expect, it } from "effect-bun-test";
 import { Effect } from "effect";
-import { makeCodeKernel } from "../src/index.js";
+import { makeInProcessCodeKernel } from "../src/index.js";
 
 describe("persistent Bun Code Kernel", () => {
   it.effect("keeps declarations between cells", () =>
     Effect.gen(function* () {
-      const kernel = yield* makeCodeKernel;
+      const kernel = yield* makeInProcessCodeKernel;
       yield* kernel.evaluate({
         cellId: CellId.make("cell-1"),
         source: "const answer: number = 40",
@@ -23,7 +23,7 @@ describe("persistent Bun Code Kernel", () => {
 
   it.effect("supports top-level await", () =>
     Effect.gen(function* () {
-      const kernel = yield* makeCodeKernel;
+      const kernel = yield* makeInProcessCodeKernel;
       const result = yield* kernel.evaluate({
         cellId: CellId.make("cell-1"),
         source: "await Promise.resolve(42)",
@@ -35,7 +35,7 @@ describe("persistent Bun Code Kernel", () => {
 
   it.effect("supports declaration changes", () =>
     Effect.gen(function* () {
-      const kernel = yield* makeCodeKernel;
+      const kernel = yield* makeInProcessCodeKernel;
       yield* kernel.evaluate({
         cellId: CellId.make("cell-1"),
         source: "const value: number = 1",
@@ -53,7 +53,7 @@ describe("persistent Bun Code Kernel", () => {
 describe("persistent Bun Code Kernel recovery", () => {
   it.effect("continues after a failed cell", () =>
     Effect.gen(function* () {
-      const kernel = yield* makeCodeKernel;
+      const kernel = yield* makeInProcessCodeKernel;
       const failure = yield* kernel
         .evaluate({
           cellId: CellId.make("cell-1"),
@@ -72,7 +72,7 @@ describe("persistent Bun Code Kernel recovery", () => {
 
   it.effect("clears declarations on reset", () =>
     Effect.gen(function* () {
-      const kernel = yield* makeCodeKernel;
+      const kernel = yield* makeInProcessCodeKernel;
       yield* kernel.evaluate({
         cellId: CellId.make("cell-1"),
         source: "const retained = 42",

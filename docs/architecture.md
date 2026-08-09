@@ -88,6 +88,9 @@ It evaluates transformed TypeScript in one persistent VM context.
 It supports top-level `await`.
 The process boundary provides recovery.
 The VM context does not provide a security boundary.
+The daemon and Code Kernel use a typed JSONL process protocol.
+The daemon replaces the process after a timeout, exit, or protocol failure.
+See [Code Kernel recovery](./code-kernel-recovery.md).
 
 Loom stores the cell journal.
 Loom does not replay cells automatically after a daemon restart.

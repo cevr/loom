@@ -1,7 +1,14 @@
 import { AgentId, CellId, SessionId, WorkspaceRoot } from "@cvr/loom-domain";
 import { describe, expect, it } from "effect-bun-test";
 import { Effect, Exit, Schema } from "effect";
-import { EvaluateCell, EvaluateCellRequest, HandshakeRequest, LoomRpcs } from "../src/index.js";
+import {
+  CodeKernelProcessRequest,
+  CodeKernelProcessResponse,
+  EvaluateCell,
+  EvaluateCellRequest,
+  HandshakeRequest,
+  LoomRpcs,
+} from "../src/index.js";
 
 describe("Loom RPC protocol", () => {
   it.effect("decodes an evaluation request", () =>
@@ -49,6 +56,26 @@ describe("Loom RPC protocol", () => {
         "CodeKernel.EvaluateCell",
         "CodeKernel.Reset",
       ]);
+    }),
+  );
+});
+
+describe("Code Kernel process protocol", () => {
+  it.effect("decodes the Code Kernel process frames", () =>
+    Effect.gen(function* () {
+      const request = yield* Schema.decodeUnknownEffect(CodeKernelProcessRequest)({
+        _tag: "Evaluate",
+        requestId: 1,
+        cellId: "cell-1",
+        source: "21 * 2",
+      });
+      const response = yield* Schema.decodeUnknownEffect(CodeKernelProcessResponse)({
+        _tag: "ResetSucceeded",
+        requestId: 2,
+      });
+
+      expect(request).toHaveProperty("_tag", "Evaluate");
+      expect(response).toHaveProperty("_tag", "ResetSucceeded");
     }),
   );
 });

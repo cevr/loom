@@ -8,7 +8,7 @@ import { Effect, Exit, FileSystem, Layer, Scope } from "effect";
 import {
   layerBunLoomClient,
   layerBunLoomServer,
-  makeCodeKernel,
+  makeInProcessCodeKernel,
   prepareDaemonSocket,
 } from "../src/index.js";
 
@@ -25,7 +25,7 @@ const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRo
         workspaceRoot: expectedRoot,
         daemonStartedAtMillis,
       });
-      const kernel = yield* makeCodeKernel;
+      const kernel = yield* makeInProcessCodeKernel;
       return LoomRpcs.of({
         "Connection.Handshake": connection.handshake,
         "CodeKernel.EvaluateCell": (request) =>
