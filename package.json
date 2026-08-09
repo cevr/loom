@@ -17,6 +17,7 @@
     "dev": "turbo run dev --filter=@cvr/loom-daemon",
     "dev:pi": "pi --extension packages/pi-extension/src/index.ts",
     "probe:herdr-live": "bun packages/plugin-herdr/probes/live.ts",
+    "probe:cell-evaluate": "bun packages/platform-bun/probes/evaluate-live-cell.ts",
     "probe:process-register": "bun packages/platform-bun/probes/register-live-process.ts",
     "probe:process-reconcile": "bun packages/platform-bun/probes/reconcile-live-process.ts",
     "prototype:job-pipeline": "bun apps/daemon/prototypes/job-pipeline/main.ts",
