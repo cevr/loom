@@ -29,8 +29,13 @@ The breaker stays open for 30 seconds.
 A timeout counts as a replacement failure.
 
 The daemon keeps the last 65,536 stderr characters in memory.
-It stores the full stderr stream in an Agent diagnostics directory.
-It keeps the last 20 stderr files for each Agent.
+It stores at most 1 MiB of stderr for each worker.
+A truncated file gives priority to the final stderr tail.
+It keeps a marker and the available start bytes.
+It keeps at most 20 stderr files for each Agent.
+It keeps at most 256 stderr files in total.
+Global cleanup can remove a recent Agent file before the per-Agent limit.
+The orchestrator can set these limits.
 The process failure contains available exit and stderr details.
 
 The daemon limits a Cell display to 65,536 characters.

@@ -8,6 +8,7 @@ export {
 export { runCodeKernelWorker } from "./internal/code-kernel-worker.js";
 export { CodeKernel, type CodeKernelShape } from "@cvr/loom-runtime";
 export {
+  type CodeKernelFactoryConfig,
   type CodeKernelProcessConfig,
   layerCodeKernelFactory,
   layerCodeKernel,

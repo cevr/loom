@@ -11,8 +11,14 @@ The daemon sends `SIGTERM` when it closes a worker.
 Effect sends the force-kill signal after one second.
 
 The daemon retains the last 65,536 stderr characters in memory.
-The daemon stores the full stderr stream in the Agent diagnostics directory.
-The daemon retains the last 20 stderr files for each Agent.
+The daemon stores at most 1 MiB of stderr for each worker.
+The file gives priority to the end of a truncated stream.
+It keeps the available start bytes.
+The file includes a truncation marker.
+The daemon retains at most 20 stderr files for each Agent.
+The daemon retains at most 256 stderr files in total.
+The orchestrator can set these limits.
+The daemon removes old oversized files during startup cleanup.
 Typed process failures can include the request ID, exit code, stderr tail, and file path.
 
 The daemon limits a Cell display to 65,536 characters.

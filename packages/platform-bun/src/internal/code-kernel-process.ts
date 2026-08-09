@@ -1,4 +1,3 @@
-import type { AgentOwner } from "@cvr/loom-domain";
 import {
   CellInterruptedError,
   CodeKernelProcessRequest,
@@ -10,15 +9,20 @@ import {
   type CodeKernelShape,
   type EvaluateCellInput,
 } from "@cvr/loom-runtime";
-import { Duration, Effect, Exit, FileSystem, Layer, Scope, Semaphore } from "effect";
+import { Duration, Effect, Exit, FileSystem, Layer, Path, Scope, Semaphore } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   sendKernelRequest,
   spawnKernelChild,
   type CodeKernelProcessTransportConfig,
   type KernelChild,
+  type ReserveKernelDiagnostic,
 } from "./code-kernel-process-transport.js";
 import { failWithDiagnostic } from "./code-kernel-diagnostics.js";
+import {
+  makeCodeKernelDiagnosticStore,
+  type CodeKernelDiagnosticStoreConfig,
+} from "./code-kernel-diagnostic-store.js";
 import type { CodeKernelProcessError } from "./code-kernel-process-error.js";
 import {
   assertStartAllowed,
@@ -39,6 +43,7 @@ interface KernelSupervisorState extends CodeKernelSupervisorPolicyState {
   readonly parentScope: Scope.Scope;
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly fs: FileSystem.FileSystem;
+  readonly reserveDiagnostic: ReserveKernelDiagnostic | undefined;
 }
 
 const getChild = Effect.fn("CodeKernelProcess.getChild")(function* (
@@ -47,7 +52,13 @@ const getChild = Effect.fn("CodeKernelProcess.getChild")(function* (
 ) {
   if (state.child !== undefined) return state.child;
   yield* assertStartAllowed(state);
-  const child = yield* spawnKernelChild(config, state.parentScope, state.spawner, state.fs);
+  const child = yield* spawnKernelChild(
+    config,
+    state.parentScope,
+    state.spawner,
+    state.fs,
+    state.reserveDiagnostic,
+  );
   state.child = child;
   return child;
 });
@@ -157,8 +168,9 @@ const makeReset = (
   );
 };
 
-export const makeCodeKernel = (
+const makeCodeKernelWithDiagnostic = (
   config: CodeKernelProcessConfig,
+  reserveDiagnostic?: ReserveKernelDiagnostic,
 ): Effect.Effect<
   CodeKernelShape,
   never,
@@ -178,6 +190,7 @@ export const makeCodeKernel = (
       parentScope,
       spawner,
       fs,
+      reserveDiagnostic,
     };
     const evaluate = makeEvaluate(config, state, cellTimeout);
     const reset = makeReset(config, state, cellTimeout);
@@ -192,6 +205,9 @@ export const makeCodeKernel = (
     });
   });
 
+export const makeCodeKernel = (config: CodeKernelProcessConfig) =>
+  makeCodeKernelWithDiagnostic(config);
+
 export const layerCodeKernel = (
   config: CodeKernelProcessConfig,
 ): Layer.Layer<
@@ -200,37 +216,31 @@ export const layerCodeKernel = (
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
 > => Layer.effect(CodeKernel, makeCodeKernel(config));
 
-const ownerDiagnosticsDirectory = (
-  directory: string | undefined,
-  owner: AgentOwner,
-): string | undefined => {
-  if (directory === undefined) return undefined;
-  const session = encodeURIComponent(owner.sessionId).replaceAll(".", "%2E");
-  const agent = encodeURIComponent(owner.agentId).replaceAll(".", "%2E");
-  return `${directory}/${session}/${agent}`;
-};
+export interface CodeKernelFactoryConfig
+  extends CodeKernelProcessConfig, CodeKernelDiagnosticStoreConfig {}
 
 export const layerCodeKernelFactory = (
-  config: CodeKernelProcessConfig,
+  config: CodeKernelFactoryConfig,
 ): Layer.Layer<
   CodeKernelFactory,
   never,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > =>
   Layer.effect(
     CodeKernelFactory,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const fs = yield* FileSystem.FileSystem;
+      const store = yield* makeCodeKernelDiagnosticStore(config);
       return CodeKernelFactory.of({
-        spawn: (owner) =>
-          makeCodeKernel({
-            ...config,
-            diagnosticsDirectory: ownerDiagnosticsDirectory(config.diagnosticsDirectory, owner),
-          }).pipe(
+        spawn: (owner) => {
+          let reserveDiagnostic: ReserveKernelDiagnostic | undefined;
+          if (store !== undefined) reserveDiagnostic = (pid) => store.reserve(owner, pid);
+          return makeCodeKernelWithDiagnostic(config, reserveDiagnostic).pipe(
             Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
             Effect.provideService(FileSystem.FileSystem, fs),
-          ),
+          );
+        },
       });
     }),
   );

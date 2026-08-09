@@ -1,12 +1,17 @@
 import { BunServices } from "@effect/platform-bun";
-import { CellId } from "@cvr/loom-domain";
+import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
+import { CodeKernelFactory } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, Fiber, FileSystem } from "effect";
-import { makeCodeKernel } from "../src/index.js";
+import { layerCodeKernelFactory, makeCodeKernel } from "../src/index.js";
 
 const workerEntry = new URL("../../../apps/code-kernel/src/main.ts", import.meta.url).pathname;
 const stderrExitEntry = new URL("./fixtures/stderr-exit.ts", import.meta.url).pathname;
 const resetExitEntry = new URL("./fixtures/reset-exit.ts", import.meta.url).pathname;
+const owner = {
+  sessionId: SessionId.make("session-1"),
+  agentId: AgentId.make("agent-1"),
+};
 
 it.scopedLive("evaluates persistent TypeScript and imports in a separate Bun process", () =>
   Effect.gen(function* () {
@@ -140,21 +145,25 @@ it.scopedLive("returns bounded stderr and a retained diagnostic file when startu
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-diagnostic-" });
-    const kernel = yield* makeCodeKernel({
-      entryPath: stderrExitEntry,
-      diagnosticsDirectory: directory,
-    });
-    const failure = yield* kernel
-      .evaluate({ cellId: CellId.make("cell-startup-failure"), source: "42" })
-      .pipe(Effect.flip);
-    expect(failure).toHaveProperty("reason", "ProcessExited");
-    expect(failure).toHaveProperty("diagnostic.exitCode", 23);
-    expect(failure).toHaveProperty("diagnostic.stderrTail", "loom kernel boot failure\n");
-    const files = yield* fs.readDirectory(directory);
-    const contents = yield* Effect.forEach(files, (file) =>
-      fs.readFileString(`${directory}/${file}`),
+    yield* Effect.gen(function* () {
+      const factory = yield* CodeKernelFactory;
+      const kernel = yield* factory.spawn(owner);
+      const failure = yield* kernel
+        .evaluate({ cellId: CellId.make("cell-startup-failure"), source: "42" })
+        .pipe(Effect.flip);
+      expect(failure).toHaveProperty("reason", "ProcessExited");
+      expect(failure).toHaveProperty("diagnostic.exitCode", 23);
+      expect(failure).toHaveProperty("diagnostic.stderrTail", "loom kernel boot failure\n");
+      const files = yield* fs.readDirectory(`${directory}/session-1/agent-1`);
+      const contents = yield* Effect.forEach(files, (file) =>
+        fs.readFileString(`${directory}/session-1/agent-1/${file}`),
+      );
+      expect(contents).toEqual(["loom kernel boot failure\n"]);
+    }).pipe(
+      Effect.provide(
+        layerCodeKernelFactory({ entryPath: stderrExitEntry, diagnosticsDirectory: directory }),
+      ),
     );
-    expect(contents).toEqual(["loom kernel boot failure\n"]);
   }).pipe(Effect.provide(BunServices.layer)),
 );
 
@@ -178,19 +187,26 @@ it.scopedLive("retains only the configured number of stderr files", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-retention-" });
-    const kernel = yield* makeCodeKernel({
-      entryPath: stderrExitEntry,
-      diagnosticsDirectory: directory,
-      diagnosticFileLimit: 2,
-      crashLoopLimit: 10,
-    });
-    yield* Effect.forEach([1, 2, 3], (id) =>
-      kernel
-        .evaluate({ cellId: CellId.make(`cell-retention-${id}`), source: "42" })
-        .pipe(Effect.flip),
+    yield* Effect.gen(function* () {
+      const factory = yield* CodeKernelFactory;
+      const kernel = yield* factory.spawn(owner);
+      yield* Effect.forEach([1, 2, 3], (id) =>
+        kernel
+          .evaluate({ cellId: CellId.make(`cell-retention-${id}`), source: "42" })
+          .pipe(Effect.flip),
+      );
+    }).pipe(
+      Effect.provide(
+        layerCodeKernelFactory({
+          entryPath: stderrExitEntry,
+          diagnosticsDirectory: directory,
+          maxFilesPerOwner: 2,
+          crashLoopLimit: 10,
+        }),
+      ),
     );
 
-    const files = yield* fs.readDirectory(directory);
+    const files = yield* fs.readDirectory(`${directory}/session-1/agent-1`);
     expect(files).toHaveLength(2);
   }).pipe(Effect.provide(BunServices.layer)),
 );
