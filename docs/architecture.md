@@ -147,6 +147,11 @@ It is not the orchestration source of truth.
 The first client transport is a local Unix socket.
 The protocol uses Effect RPC and Effect Schema.
 The wire format uses bounded NDJSON framing.
+The maximum incomplete frame size is 1 MiB.
+
+The client performs a version and Workspace handshake before another operation.
+The client reconnects within a bounded operation timeout after a daemon restart.
+See [Daemon connection](./daemon-connection.md).
 
 The public protocol does not expose Effect Cluster addresses.
 Cluster transport remains an internal runtime detail.
@@ -184,7 +189,7 @@ See [Herdr Plugin](./herdr-plugin.md).
                     |
               @cvr/loom-daemon
 
-@cvr/loom-pi-extension -> @cvr/loom-protocol
+@cvr/loom-pi-extension -> @cvr/loom-client -> @cvr/loom-protocol
 
 @cvr/loom-plugin-herdr -> @cvr/loom-runtime
 ```

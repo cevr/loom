@@ -1,5 +1,5 @@
 {
-  "name": "@cvr/loom-platform-bun",
+  "name": "@cvr/loom-client",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,12 +11,8 @@
     "test": "bun test tests/"
   },
   "dependencies": {
-    "@cvr/loom-client": "workspace:*",
     "@cvr/loom-domain": "workspace:*",
-    "@cvr/loom-protocol": "workspace:*",
-    "@cvr/loom-runtime": "workspace:*",
-    "@effect/platform-bun": "catalog:",
-    "@effect/sql-sqlite-bun": "catalog:"
+    "@cvr/loom-protocol": "workspace:*"
   },
   "peerDependencies": {
     "effect": "catalog:"

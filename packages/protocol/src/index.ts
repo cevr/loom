@@ -11,6 +11,7 @@ export { IncompatibleProtocolError } from "./incompatible-protocol-error.js";
 export { LoomRpcs } from "./loom-rpcs.js";
 export {
   currentProtocolVersion,
+  maximumCellSourceLength,
   maximumFrameSize,
   maximumProtocolVersion,
   minimumProtocolVersion,

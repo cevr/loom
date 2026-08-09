@@ -1,13 +1,16 @@
-import { layerJobRecovery } from "@cvr/loom-platform-bun";
-import { JobReconciler } from "@cvr/loom-runtime";
-import { Config, Effect, FileSystem, Path } from "effect";
+import {
+  layerBunLoomServer,
+  layerCodeKernel,
+  layerJobRecovery,
+  prepareDaemonSocket,
+} from "@cvr/loom-platform-bun";
+import { JobReconciler, layerConnectionHandshake } from "@cvr/loom-runtime";
+import { Clock, Effect, FileSystem, Layer, Path } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import { loadDaemonConfig } from "./daemon-config.js";
+import { layerLoomRpcHandlers } from "./rpc-handlers.js";
 
 export const startupMessage = Effect.succeed("Loom daemon is ready");
-
-const databasePath = Config.nonEmptyString("LOOM_DB_PATH").pipe(
-  Config.withDefault(".loom/loom.sqlite"),
-);
 
 const reconcileJobs = Effect.fn("LoomDaemon.reconcileJobs")(function* (filename: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -25,6 +28,22 @@ export const program: Effect.Effect<
   unknown,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > = Effect.gen(function* () {
-  yield* reconcileJobs(yield* databasePath);
-  yield* Effect.logInfo(yield* startupMessage);
+  const config = yield* loadDaemonConfig;
+  yield* prepareDaemonSocket(config.socketPath);
+  yield* reconcileJobs(config.databasePath);
+  const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
+  const handlers = layerLoomRpcHandlers.pipe(
+    Layer.provide(layerCodeKernel),
+    Layer.provide(
+      layerConnectionHandshake({
+        workspaceRoot: config.workspaceRoot,
+        daemonStartedAtMillis,
+      }),
+    ),
+  );
+  const server = layerBunLoomServer({ socketPath: config.socketPath }).pipe(
+    Layer.provide(handlers),
+    Layer.tap(() => startupMessage.pipe(Effect.flatMap(Effect.logInfo))),
+  );
+  return yield* Layer.launch(server);
 });

@@ -7,3 +7,4 @@ export const currentProtocolVersion = 1;
 export const minimumProtocolVersion = 1;
 export const maximumProtocolVersion = currentProtocolVersion;
 export const maximumFrameSize = 1024 * 1024;
+export const maximumCellSourceLength = maximumFrameSize - 4096;

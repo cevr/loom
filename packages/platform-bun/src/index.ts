@@ -5,6 +5,11 @@ export {
   layerCodeKernel,
   makeCodeKernel,
 } from "./internal/code-kernel.js";
+export { type BunLoomClientConfig, layerBunLoomClient } from "./internal/bun-loom-client.js";
+export { type BunLoomServerConfig, layerBunLoomServer } from "./internal/bun-loom-server.js";
+export { currentWorkingDirectory } from "./internal/bun-working-directory.js";
+export { DaemonAlreadyRunningError } from "./internal/daemon-already-running-error.js";
+export { prepareDaemonSocket } from "./internal/prepare-daemon-socket.js";
 export {
   layerBunProcessInspector,
   makeBunProcessInspector,

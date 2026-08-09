@@ -37,6 +37,7 @@
       }
     ],
     "paths": {
+      "@cvr/loom-client": ["./packages/client/src/index.ts"],
       "@cvr/loom-domain": ["./packages/domain/src/index.ts"],
       "@cvr/loom-protocol": ["./packages/protocol/src/index.ts"],
       "@cvr/loom-platform-bun": ["./packages/platform-bun/src/index.ts"],
