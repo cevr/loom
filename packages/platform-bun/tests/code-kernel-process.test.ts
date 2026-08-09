@@ -1,10 +1,12 @@
 import { BunServices } from "@effect/platform-bun";
 import { CellId } from "@cvr/loom-domain";
 import { expect, it } from "effect-bun-test";
-import { Effect } from "effect";
+import { Effect, Fiber, FileSystem } from "effect";
 import { makeCodeKernel } from "../src/index.js";
 
 const workerEntry = new URL("../../../apps/code-kernel/src/main.ts", import.meta.url).pathname;
+const stderrExitEntry = new URL("./fixtures/stderr-exit.ts", import.meta.url).pathname;
+const resetExitEntry = new URL("./fixtures/reset-exit.ts", import.meta.url).pathname;
 
 it.scopedLive("evaluates persistent TypeScript and imports in a separate Bun process", () =>
   Effect.gen(function* () {
@@ -75,6 +77,26 @@ it.scopedLive("replaces a blocked Code Kernel without replaying mutable state", 
   }).pipe(Effect.provide(BunServices.layer)),
 );
 
+it.scopedLive("replaces an interrupted Code Kernel before the next Cell", () =>
+  Effect.gen(function* () {
+    const kernel = yield* makeCodeKernel({ entryPath: workerEntry });
+    const running = yield* Effect.forkChild(
+      kernel.evaluate({
+        cellId: CellId.make("cell-interrupted"),
+        source: "await new Promise(() => {})",
+      }),
+    );
+    yield* Effect.sleep("50 millis");
+    yield* Fiber.interrupt(running);
+    const next = yield* kernel.evaluate({
+      cellId: CellId.make("cell-after-interrupt"),
+      source: "6 * 7",
+    });
+
+    expect(next.display).toBe("42");
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
 it.scopedLive("keeps the daemon process alive after the Code Kernel exits", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({ entryPath: workerEntry });
@@ -111,5 +133,138 @@ it.scopedLive("clears persistent state when the Code Kernel resets", () =>
       .pipe(Effect.flip);
 
     expect(missingState).toHaveProperty("_tag", "CellExecutionError");
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("returns bounded stderr and a retained diagnostic file when startup fails", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-diagnostic-" });
+    const kernel = yield* makeCodeKernel({
+      entryPath: stderrExitEntry,
+      diagnosticsDirectory: directory,
+    });
+    const failure = yield* kernel
+      .evaluate({ cellId: CellId.make("cell-startup-failure"), source: "42" })
+      .pipe(Effect.flip);
+    expect(failure).toHaveProperty("reason", "ProcessExited");
+    expect(failure).toHaveProperty("diagnostic.exitCode", 23);
+    expect(failure).toHaveProperty("diagnostic.stderrTail", "loom kernel boot failure\n");
+    const files = yield* fs.readDirectory(directory);
+    const contents = yield* Effect.forEach(files, (file) =>
+      fs.readFileString(`${directory}/${file}`),
+    );
+    expect(contents).toEqual(["loom kernel boot failure\n"]);
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("returns a typed failure when the Code Kernel executable cannot start", () =>
+  Effect.gen(function* () {
+    const kernel = yield* makeCodeKernel({
+      entryPath: workerEntry,
+      executable: "/loom/missing/bun",
+    });
+    const failure = yield* kernel
+      .evaluate({ cellId: CellId.make("cell-spawn-failure"), source: "42" })
+      .pipe(Effect.flip);
+
+    expect(failure).toHaveProperty("_tag", "CellInterruptedError");
+    expect(failure).toHaveProperty("reason", "ProcessExited");
+    expect(failure).toHaveProperty("diagnostic", undefined);
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("retains only the configured number of stderr files", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-retention-" });
+    const kernel = yield* makeCodeKernel({
+      entryPath: stderrExitEntry,
+      diagnosticsDirectory: directory,
+      diagnosticFileLimit: 2,
+      crashLoopLimit: 10,
+    });
+    yield* Effect.forEach([1, 2, 3], (id) =>
+      kernel
+        .evaluate({ cellId: CellId.make(`cell-retention-${id}`), source: "42" })
+        .pipe(Effect.flip),
+    );
+
+    const files = yield* fs.readDirectory(directory);
+    expect(files).toHaveLength(2);
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("blocks a repeated Code Kernel crash loop until its cooldown ends", () =>
+  Effect.gen(function* () {
+    const kernel = yield* makeCodeKernel({
+      entryPath: workerEntry,
+      crashLoopLimit: 2,
+      crashLoopCooldown: "100 millis",
+    });
+    const crash = (cellId: string) =>
+      kernel
+        .evaluate({
+          cellId: CellId.make(cellId),
+          source: 'const processModule = await import("node:process"); processModule.exit(17)',
+        })
+        .pipe(Effect.flip);
+
+    yield* crash("cell-crash-1");
+    yield* crash("cell-crash-2");
+    const blocked = yield* crash("cell-crash-blocked");
+    yield* Effect.sleep("120 millis");
+    const recovered = yield* kernel.evaluate({
+      cellId: CellId.make("cell-after-cooldown"),
+      source: "6 * 7",
+    });
+
+    expect(blocked).toHaveProperty("reason", "CrashLoop");
+    expect(recovered.display).toBe("42");
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("forgets process failures outside the crash-loop window", () =>
+  Effect.gen(function* () {
+    const kernel = yield* makeCodeKernel({
+      entryPath: workerEntry,
+      crashLoopLimit: 2,
+      crashLoopWindow: "20 millis",
+      crashLoopCooldown: "1 second",
+    });
+    const crash = (cellId: string) =>
+      kernel
+        .evaluate({
+          cellId: CellId.make(cellId),
+          source: 'const processModule = await import("node:process"); processModule.exit(17)',
+        })
+        .pipe(Effect.flip);
+
+    yield* crash("cell-window-1");
+    yield* Effect.sleep("30 millis");
+    yield* crash("cell-window-2");
+    const recovered = yield* kernel.evaluate({
+      cellId: CellId.make("cell-window-recovered"),
+      source: "6 * 7",
+    });
+
+    expect(recovered.display).toBe("42");
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("replaces a Code Kernel that exits before reset", () =>
+  Effect.gen(function* () {
+    const kernel = yield* makeCodeKernel({ entryPath: resetExitEntry });
+    yield* kernel.evaluate({
+      cellId: CellId.make("cell-exit-before-reset"),
+      source: "42",
+    });
+    yield* kernel.reset;
+    const recovered = yield* kernel.evaluate({
+      cellId: CellId.make("cell-after-reset"),
+      source: "42",
+    });
+
+    expect(recovered.display).toBe("42");
   }).pipe(Effect.provide(BunServices.layer)),
 );

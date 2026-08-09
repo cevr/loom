@@ -79,7 +79,7 @@ it.scopedLive("does not evaluate a Cell when the journal write fails", () =>
       reset: Effect.void,
       close: Effect.void,
     });
-    const factory = CodeKernelFactory.of({ spawn: Effect.succeed(kernel) });
+    const factory = CodeKernelFactory.of({ spawn: () => Effect.succeed(kernel) });
     const journal = CellJournal.of({
       append: () =>
         Effect.fail(new CellJournalStoreError({ operation: "append", cause: "disk full" })),

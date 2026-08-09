@@ -5,6 +5,8 @@ import {
   CellEvaluation,
   type CellEvaluationError,
   CellExecutionError,
+  maximumCellBindings,
+  maximumCellDisplayLength,
 } from "@cvr/loom-protocol";
 import { Context, Effect, Inspectable, Layer, Predicate, Semaphore } from "effect";
 import * as NodeVm from "node:vm";
@@ -37,6 +39,11 @@ const valueFromEvaluation = (result: unknown): unknown => {
     return result.value;
   }
   return undefined;
+};
+
+const truncateDisplay = (display: string): string => {
+  if (display.length <= maximumCellDisplayLength) return display;
+  return `${display.slice(0, maximumCellDisplayLength)}\n[output truncated]`;
 };
 
 const awaitEvaluation = (
@@ -104,8 +111,11 @@ export const makeInProcessCodeKernel: Effect.Effect<InProcessCodeKernelShape> = 
 
         return CellEvaluation.make({
           cellId: input.cellId,
-          display: Bun.inspect(value),
-          bindings: Reflect.ownKeys(context).filter(Predicate.isString).toSorted(),
+          display: truncateDisplay(Bun.inspect(value)),
+          bindings: Reflect.ownKeys(context)
+            .filter(Predicate.isString)
+            .toSorted()
+            .slice(0, maximumCellBindings),
         });
       });
 

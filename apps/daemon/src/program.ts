@@ -43,7 +43,10 @@ export const program: Effect.Effect<
     Layer.provide([
       cluster,
       layerCellJournal({ filename: config.databasePath }),
-      layerCodeKernelFactory({ entryPath: codeKernelEntry }),
+      layerCodeKernelFactory({
+        entryPath: codeKernelEntry,
+        diagnosticsDirectory: `${config.workspaceRoot}/.loom/diagnostics/code-kernels`,
+      }),
     ]),
   );
   const handlers = layerLoomRpcHandlers.pipe(

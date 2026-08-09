@@ -1,4 +1,5 @@
 import { CellId } from "@cvr/loom-domain";
+import { maximumCellDisplayLength } from "@cvr/loom-protocol";
 import { describe, expect, it } from "effect-bun-test";
 import { Effect } from "effect";
 import { makeInProcessCodeKernel } from "../src/index.js";
@@ -49,6 +50,19 @@ describe("persistent Bun Code Kernel", () => {
     }),
   );
 });
+
+it.effect("limits the Cell display before it crosses the process boundary", () =>
+  Effect.gen(function* () {
+    const kernel = yield* makeInProcessCodeKernel;
+    const result = yield* kernel.evaluate({
+      cellId: CellId.make("cell-large-display"),
+      source: `"x".repeat(${maximumCellDisplayLength * 2})`,
+    });
+
+    expect(result.display.length).toBeLessThan(maximumCellDisplayLength + 32);
+    expect(result.display).toEndWith("[output truncated]");
+  }),
+);
 
 describe("persistent Bun Code Kernel recovery", () => {
   it.effect("continues after a failed cell", () =>

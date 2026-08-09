@@ -37,7 +37,9 @@ export const layerAgentActor = Actor.toLayer(
   AgentActor,
   Effect.gen(function* () {
     const factory = yield* CodeKernelFactory;
-    const kernel = yield* factory.spawn;
+    const address = yield* Actor.CurrentAddress;
+    const [sessionId, agentId] = yield* agentOwnerCodec.decode(address.entityId).pipe(Effect.orDie);
+    const kernel = yield* factory.spawn({ sessionId, agentId });
     const journal = yield* CellJournal;
 
     return AgentActor.of({
@@ -50,6 +52,15 @@ export const layerAgentActor = Actor.toLayer(
             source: operation.source,
           })
           .pipe(
+            Effect.tapError((error) =>
+              Effect.logError("Cell journal write failed.", error).pipe(
+                Effect.annotateLogs({
+                  sessionId: operation.sessionId,
+                  agentId: operation.agentId,
+                  cellId: operation.cellId,
+                }),
+              ),
+            ),
             Effect.mapError(
               () =>
                 new CellInterruptedError({
