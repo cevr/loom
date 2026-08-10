@@ -1,5 +1,5 @@
 import { BunCrypto, BunServices } from "@effect/platform-bun";
-import { ArtifactId } from "@cvr/loom-domain";
+import { ArtifactId, WorkflowRunId } from "@cvr/loom-domain";
 import {
   WorkflowArtifactReference,
   WorkflowArtifactStore,
@@ -69,6 +69,33 @@ export const runtimeLayer = (
 export const scopedLive = it.scopedLive.layer(BunServices.layer);
 
 const Count = Schema.Struct({ count: Schema.Finite });
+const Retirement = Schema.Struct({
+  retireAfter: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
+});
+
+export const retirementDeadline = (workflowRunId: WorkflowRunId) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const find = SqlSchema.findOne({
+      Request: WorkflowRunId,
+      Result: Retirement,
+      execute: (id) => sql`
+        SELECT retire_after AS retireAfter
+        FROM workflow_run_acceptance
+        WHERE workflow_run_id = ${id}
+      `,
+    });
+    return yield* find(workflowRunId).pipe(Effect.catchTag("SchemaError", Effect.die));
+  });
+
+export const expireRetirement = (workflowRunId: WorkflowRunId) =>
+  SqlClient.SqlClient.use(
+    (sql) => sql`
+    UPDATE workflow_run_acceptance
+    SET retire_after = 0
+    WHERE workflow_run_id = ${workflowRunId}
+  `,
+  ).pipe(Effect.asVoid);
 
 export const storageCounts = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

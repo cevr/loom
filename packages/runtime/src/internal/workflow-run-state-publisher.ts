@@ -18,15 +18,15 @@ import {
   Stream,
 } from "effect";
 import { WorkflowEngine } from "effect/unstable/workflow";
-import type { PeekResult } from "effect-encore";
+import { isTerminal, type PeekResult } from "effect-encore";
 import { ActorStateHub, type ActorStateHubShape } from "./actor-state-hub.js";
 import { LoomDynamicWorkflow } from "./loom-dynamic-workflow.js";
 import { WorkflowRunRetention } from "./workflow-run-retention.js";
+import type { WorkflowRunRetentionError } from "./workflow-run-retention-error.js";
 
 export interface WorkflowRunStatePublisherShape {
   readonly watch: (address: WorkflowRunAddress) => Effect.Effect<void>;
   readonly retire: (address: WorkflowRunAddress) => Effect.Effect<void>;
-  readonly recover: (address: WorkflowRunAddress) => Effect.Effect<void>;
 }
 
 export class WorkflowRunStatePublisher extends Context.Service<
@@ -64,6 +64,16 @@ type PublishActivity = (
   activity: ActorActivity,
 ) => Effect.Effect<void>;
 
+const logRetentionFailure = (address: WorkflowRunAddress) =>
+  Effect.catch((error: WorkflowRunRetentionError) =>
+    Effect.logError("Workflow Run retention failed.", error).pipe(
+      Effect.annotateLogs({
+        sessionId: address.sessionId,
+        workflowRunId: address.workflowRunId,
+      }),
+    ),
+  );
+
 const makePublishActivity = (
   hub: ActorStateHubShape,
   revisions: Ref.Ref<ReadonlyMap<string, number>>,
@@ -100,63 +110,35 @@ const makeCompleteActivity = (
     address: WorkflowRunAddress,
     activity: ActorActivity,
   ) {
+    if (!ActorActivity.guards.Failed(activity) && !ActorActivity.guards.Stopped(activity)) return;
+    yield* retention
+      .retireAfterLease(address, options.stateLease)
+      .pipe(logRetentionFailure(address));
     if (ActorActivity.guards.Failed(activity)) {
-      yield* Effect.sleep(options.stateLease);
       yield* publish(address, ActorActivity.cases.Stopped.make({}));
-    } else if (ActorActivity.guards.Stopped(activity)) {
-      yield* Effect.sleep(options.stateLease);
-    } else {
-      return;
     }
-    yield* retention.retire(address).pipe(
-      Effect.catch((error) =>
-        Effect.logError("Workflow Run retention failed.", error).pipe(
-          Effect.annotateLogs({
-            sessionId: address.sessionId,
-            workflowRunId: address.workflowRunId,
-          }),
-        ),
-      ),
-    );
   });
 
 const makeStartupOperations = (
+  options: WorkflowRunStatePublisherOptions,
   engine: WorkflowEngine.WorkflowEngine["Service"],
   retention: WorkflowRunRetention["Service"],
-  watch: WorkflowRunStatePublisherShape["watch"],
 ) => {
   const inspect = (address: WorkflowRunAddress) =>
     LoomDynamicWorkflow.peekAt(address.workflowRunId).pipe(
-      Effect.map(toWorkflowRunState),
       Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
     );
   const retire = Effect.fn("WorkflowRunStatePublisher.retire")(function* (
     address: WorkflowRunAddress,
   ) {
     const state = yield* inspect(address);
-    if (WorkflowRunState.guards.Success(state) || WorkflowRunState.guards.Interrupted(state)) {
-      yield* retention.retire(address).pipe(
-        Effect.catch((error) =>
-          Effect.logError("Workflow Run retirement failed.", error).pipe(
-            Effect.annotateLogs({
-              sessionId: address.sessionId,
-              workflowRunId: address.workflowRunId,
-            }),
-          ),
-        ),
-      );
+    if (isTerminal(state)) {
+      yield* retention
+        .retireExpired(address, options.stateLease)
+        .pipe(logRetentionFailure(address));
     }
   });
-  const recover = Effect.fn("WorkflowRunStatePublisher.recover")(function* (
-    address: WorkflowRunAddress,
-  ) {
-    const state = yield* inspect(address);
-    if (WorkflowRunState.guards.Success(state) || WorkflowRunState.guards.Interrupted(state)) {
-      return;
-    }
-    yield* watch(address);
-  });
-  return { recover, retire };
+  return { retire };
 };
 
 const makeWorkflowRunStatePublisher = (options: WorkflowRunStatePublisherOptions) =>
@@ -186,7 +168,7 @@ const makeWorkflowRunStatePublisher = (options: WorkflowRunStatePublisherOptions
     });
 
     return WorkflowRunStatePublisher.of({
-      ...makeStartupOperations(engine, retention, watch),
+      ...makeStartupOperations(options, engine, retention),
       watch,
     });
   });

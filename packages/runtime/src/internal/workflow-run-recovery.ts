@@ -29,7 +29,7 @@ export const makeWorkflowRunRecovery = Effect.gen(function* () {
   const publisher = yield* WorkflowRunStatePublisher;
   return WorkflowRunRecovery.of({
     retire: forEachAccepted(acceptance, publisher.retire),
-    recover: forEachAccepted(acceptance, publisher.recover),
+    recover: forEachAccepted(acceptance, publisher.watch),
   });
 });
 
