@@ -1,88 +1,37 @@
 import { BunCrypto, BunServices } from "@effect/platform-bun";
 import {
   ArtifactId,
-  SessionId,
-  WorkflowBudget,
-  WorkflowCapability,
-  WorkflowDefinition,
-  WorkflowKey,
-  WorkflowName,
   WorkflowRunId,
-  WorkflowRunRequest,
   WorkflowSignalAddress,
   WorkflowSignalName,
-  WorkflowVersion,
 } from "@cvr/loom-domain";
 import {
   LoomDynamicWorkflow,
   WorkflowArtifactReference,
   WorkflowArtifactStore,
+  ActorStateHub,
+  type ActorStateHubShape,
   WorkflowCapabilityExecutor,
   WorkflowRuntime,
+  layerActorStateHub,
   WorkflowStepExecution,
 } from "@cvr/loom-runtime";
 import { WorkflowRunState } from "@cvr/loom-protocol";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Option, Ref, Schedule, Stream } from "effect";
+import { Effect, FileSystem, Layer, Ref, Schedule, Stream } from "effect";
 import { ClusterWorkflowEngine, SingleRunner } from "effect/unstable/cluster";
 import {
   layerLoomDynamicWorkflow,
   layerLoomSqlite,
   layerLoomWorkflowRuntime,
+  layerLoomWorkflowRuntimeWith,
 } from "../src/index.js";
-
-const request = WorkflowRunRequest.make({
-  sessionId: SessionId.make("session-1"),
-  key: WorkflowKey.make("shared"),
-  definition: WorkflowDefinition.make({
-    name: WorkflowName.make("echo"),
-    version: WorkflowVersion.make("1"),
-    interpreterVersion: 1,
-    source: `
-      return await step.run({
-        stepId: "echo",
-        capability: "echo",
-        input,
-      })
-    `,
-    capabilities: [WorkflowCapability.make("echo")],
-    signals: [],
-  }),
-  input: { value: 42 },
-  budget: WorkflowBudget.make({
-    maxSteps: 2,
-    maxAgentRuns: 1,
-    maxParallelism: 1,
-    maxInlineStepResultBytes: 1_024,
-    maxTokens: Option.some(1_000),
-    maxDurationMillis: Option.none(),
-  }),
-});
-
-const durationRequest = WorkflowRunRequest.make({
-  ...request,
-  key: WorkflowKey.make("duration"),
-  definition: WorkflowDefinition.make({
-    ...request.definition,
-    source: "return await new Promise(() => {})",
-  }),
-  budget: WorkflowBudget.make({
-    ...request.budget,
-    maxDurationMillis: Option.some(25),
-  }),
-});
-
-const signalRequest = WorkflowRunRequest.make({
-  ...request,
-  key: WorkflowKey.make("signal"),
-  definition: WorkflowDefinition.make({
-    ...request.definition,
-    source: `return await signal.wait("approval")`,
-    capabilities: [],
-    signals: [WorkflowSignalName.make("approval")],
-  }),
-});
-
+import {
+  durationRequest,
+  failureRequest,
+  request,
+  signalRequest,
+} from "./workflow-runtime-fixtures.js";
 const workflowSupport = (filename: string, executions: Ref.Ref<number>) => {
   const foundation = Layer.merge(layerLoomSqlite({ filename }), BunCrypto.layer);
   const capabilities = Layer.succeed(
@@ -128,8 +77,15 @@ const workflowLayer = (filename: string, executions: Ref.Ref<number>) => {
   return Layer.merge(workflow, engine);
 };
 
-const runtimeLayer = (filename: string, executions: Ref.Ref<number>) =>
-  layerLoomWorkflowRuntime.pipe(Layer.provide(workflowSupport(filename, executions)));
+const runtimeLayer = (
+  filename: string,
+  executions: Ref.Ref<number>,
+  runtime = layerLoomWorkflowRuntime,
+) => {
+  const actors = layerActorStateHub;
+  const provided = runtime.pipe(Layer.provide([workflowSupport(filename, executions), actors]));
+  return Layer.merge(provided, actors);
+};
 
 const execute = (filename: string, executions: Ref.Ref<number>, acceptedRequest = request) =>
   Effect.scoped(
@@ -139,6 +95,13 @@ const execute = (filename: string, executions: Ref.Ref<number>, acceptedRequest 
   );
 
 const scopedLive = it.scopedLive.layer(BunServices.layer);
+const waitForActorCount = (actors: ActorStateHubShape, count: number) =>
+  actors.snapshot.pipe(
+    Effect.repeat({
+      while: (snapshot) => snapshot.size !== count,
+      schedule: Schedule.spaced("10 millis"),
+    }),
+  );
 
 scopedLive("shares one Workflow Run between matching callers", () =>
   Effect.gen(function* () {
@@ -199,15 +162,18 @@ scopedLive("persists a Workflow signal across cluster restarts", () =>
       ),
     );
     const address = WorkflowSignalAddress.make({
+      sessionId: signalRequest.sessionId,
       workflowRunId: executionId,
       name: WorkflowSignalName.make("approval"),
     });
 
     yield* Effect.scoped(
-      WorkflowRuntime.pipe(
-        Effect.flatMap((runtime) => runtime.signal({ address, value: { approved: true } })),
-        Effect.provide(runtimeLayer(filename, executions)),
-      ),
+      Effect.gen(function* () {
+        const runtime = yield* WorkflowRuntime;
+        const actors = yield* ActorStateHub;
+        expect((yield* waitForActorCount(actors, 1)).size).toBe(1);
+        yield* runtime.signal({ address, value: { approved: true } });
+      }).pipe(Effect.provide(runtimeLayer(filename, executions))),
     );
     const result = yield* Effect.scoped(
       WorkflowRuntime.pipe(
@@ -233,6 +199,7 @@ scopedLive("rejects undeclared public Workflow signals", () =>
       const undeclared = yield* runtime
         .signal({
           address: WorkflowSignalAddress.make({
+            sessionId: signalRequest.sessionId,
             workflowRunId,
             name: WorkflowSignalName.make("cancel"),
           }),
@@ -242,6 +209,7 @@ scopedLive("rejects undeclared public Workflow signals", () =>
       const unknownRun = yield* runtime
         .signal({
           address: WorkflowSignalAddress.make({
+            sessionId: signalRequest.sessionId,
             workflowRunId: WorkflowRunId.make("unknown-run"),
             name: WorkflowSignalName.make("approval"),
           }),
@@ -252,10 +220,38 @@ scopedLive("rejects undeclared public Workflow signals", () =>
       expect(undeclared).toHaveProperty("_tag", "WorkflowSignalNotDeclaredError");
       expect(undeclared).toHaveProperty("address.workflowRunId", workflowRunId);
       expect(undeclared).toHaveProperty("address.name", WorkflowSignalName.make("cancel"));
-      expect(unknownRun).toHaveProperty("_tag", "WorkflowSignalNotDeclaredError");
+      expect(unknownRun).toHaveProperty("_tag", "WorkflowRunNotFoundError");
       expect(unknownRun).toHaveProperty("address.workflowRunId", WorkflowRunId.make("unknown-run"));
-      expect(unknownRun).toHaveProperty("address.name", WorkflowSignalName.make("approval"));
+      expect(unknownRun).toHaveProperty("address.sessionId", signalRequest.sessionId);
     }).pipe(Effect.provide(layer), Effect.scoped);
+  }),
+);
+
+scopedLive("clears a failed Workflow Run after its state lease", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-failure-" });
+    const executions = yield* Ref.make(0);
+    const runtime = layerLoomWorkflowRuntimeWith({ failureLease: "25 millis" });
+
+    yield* Effect.gen(function* () {
+      const workflows = yield* WorkflowRuntime;
+      const actors = yield* ActorStateHub;
+      const workflowRunId = yield* workflows.send(failureRequest);
+      const address = { sessionId: failureRequest.sessionId, workflowRunId };
+      const state = yield* workflows.inspect(address).pipe(
+        Effect.repeat({
+          while: (current) => !WorkflowRunState.guards.Failure(current),
+          schedule: Schedule.spaced("10 millis"),
+        }),
+      );
+
+      expect(WorkflowRunState.guards.Failure(state)).toBe(true);
+      expect((yield* waitForActorCount(actors, 0)).size).toBe(0);
+    }).pipe(
+      Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, executions, runtime)),
+      Effect.scoped,
+    );
   }),
 );
 
@@ -268,6 +264,7 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
 
     yield* Effect.gen(function* () {
       const runtime = yield* WorkflowRuntime;
+      const actors = yield* ActorStateHub;
       const executionId = yield* runtime.send(request);
       const address = { sessionId: request.sessionId, workflowRunId: executionId };
       const states = yield* runtime.watch(request).pipe(Stream.runCollect);
@@ -284,6 +281,8 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
       expect(yield* runtime.execute(request)).toEqual(request.input);
       const inflightId = yield* runtime.send(signalRequest);
       const inflight = { sessionId: signalRequest.sessionId, workflowRunId: inflightId };
+      const working = yield* waitForActorCount(actors, 1);
+      expect(working.size).toBe(1);
       yield* runtime.interrupt(inflight);
       const interrupted = yield* runtime.inspect(inflight).pipe(
         Effect.repeat({
@@ -292,6 +291,8 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
         }),
       );
       expect(WorkflowRunState.guards.Interrupted(interrupted)).toBe(true);
+      const stopped = yield* waitForActorCount(actors, 0);
+      expect(stopped.size).toBe(0);
     }).pipe(Effect.provide(layer), Effect.scoped);
 
     expect(yield* Ref.get(executions)).toBe(1);

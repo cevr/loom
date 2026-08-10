@@ -93,6 +93,10 @@ export {
   makeWorkflowRuntime,
 } from "./internal/workflow-runtime.js";
 export {
+  layerWorkflowRunStatePublisher,
+  type WorkflowRunStatePublisherOptions,
+} from "./internal/workflow-run-state-publisher.js";
+export {
   encodeWorkflowIdentity,
   workflowIdentityFromRequest,
 } from "./internal/workflow-identity.js";

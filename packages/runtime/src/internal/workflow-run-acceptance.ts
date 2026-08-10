@@ -26,6 +26,7 @@ export interface WorkflowRunAcceptanceShape {
   readonly authorize: (
     address: WorkflowRunAddress,
   ) => Effect.Effect<void, WorkflowRunNotFoundError | WorkflowRunAcceptanceError>;
+  readonly list: WorkflowRunAcceptanceStore["Service"]["list"];
 }
 
 export class WorkflowRunAcceptance extends Context.Service<
@@ -51,9 +52,7 @@ const normalizeRequest = (request: WorkflowRunRequest): WorkflowRunRequest =>
 const makeAuthorizeWorkflowRun = (store: WorkflowRunAcceptanceStore["Service"]) =>
   Effect.fn("WorkflowRunAcceptance.authorize")(function* (address: WorkflowRunAddress) {
     const identity = yield* store.lookup(address.workflowRunId);
-    if (Option.exists(identity, (accepted) => accepted.sessionId === address.sessionId)) {
-      return;
-    }
+    if (Option.exists(identity, (accepted) => accepted.sessionId === address.sessionId)) return;
     return yield* new WorkflowRunNotFoundError({ address });
   });
 
@@ -101,7 +100,11 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
     return AcceptedWorkflowRun.make({ workflowRunId, identity, request, digest });
   });
 
-  return WorkflowRunAcceptance.of({ accept, authorize: makeAuthorizeWorkflowRun(store) });
+  return WorkflowRunAcceptance.of({
+    accept,
+    authorize: makeAuthorizeWorkflowRun(store),
+    list: store.list,
+  });
 });
 
 export const layerWorkflowRunAcceptance: Layer.Layer<

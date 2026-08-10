@@ -56,6 +56,7 @@ export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
 export type WorkflowSignalName = typeof WorkflowSignalName.Type;
 
 export const WorkflowSignalAddress = Schema.Struct({
+  sessionId: SessionId,
   workflowRunId: WorkflowRunId,
   name: WorkflowSignalName,
 });

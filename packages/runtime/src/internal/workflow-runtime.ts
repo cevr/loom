@@ -12,12 +12,13 @@ import {
   type WorkflowRunNotFoundError,
   WorkflowRunNotSuspendedError,
 } from "@cvr/loom-protocol";
-import { Context, Effect, Inspectable, Layer, Match, Schema, Stream, type Duration } from "effect";
+import { Context, Effect, Layer, Schema, Stream, type Duration } from "effect";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import type { PeekResult } from "effect-encore";
 import { LoomDynamicWorkflow, loomWorkflowSignal } from "./loom-dynamic-workflow.js";
 import { WorkflowRunAcceptance } from "./workflow-run-acceptance.js";
 import { WorkflowSignalDeclarations } from "./workflow-signal-declarations.js";
+import { toWorkflowRunState, WorkflowRunStatePublisher } from "./workflow-run-state-publisher.js";
 
 export type WorkflowRuntimeAcceptanceError = StartWorkflowError;
 export type WorkflowRuntimeError = ExecuteWorkflowError;
@@ -79,11 +80,14 @@ const makeAcceptWorkflow = (acceptance: WorkflowRunAcceptance["Service"]): Accep
 
 const makeSignalWorkflow =
   (
+    acceptance: WorkflowRunAcceptance["Service"],
     declarations: WorkflowSignalDeclarations["Service"],
     engine: WorkflowEngine.WorkflowEngine["Service"],
+    publisher: WorkflowRunStatePublisher["Service"],
   ): WorkflowRuntimeShape["signal"] =>
   ({ address, value }) =>
-    declarations.contains(address.workflowRunId, address.name).pipe(
+    acceptance.authorize(address).pipe(
+      Effect.andThen(declarations.contains(address.workflowRunId, address.name)),
       Effect.flatMap((declared) => {
         if (declared) {
           const signal = loomWorkflowSignal(address.name);
@@ -91,24 +95,19 @@ const makeSignalWorkflow =
         }
         return new WorkflowSignalNotDeclaredError({ address });
       }),
+      Effect.tap(() => publisher.watch(address)),
       Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
     );
-
-const toWorkflowRunState = (state: WorkflowRuntimeState): WorkflowRunState =>
-  Match.value(state).pipe(
-    Match.tag("Defect", ({ cause }) =>
-      WorkflowRunState.cases.Defect.make({ message: Inspectable.toStringUnknown(cause) }),
-    ),
-    Match.orElse((result) => result),
-  );
 
 const makeControlWorkflow = (
   acceptance: WorkflowRunAcceptance["Service"],
   engine: WorkflowEngine.WorkflowEngine["Service"],
+  publisher: WorkflowRunStatePublisher["Service"],
 ) => {
   const provideEngine = Effect.provideService(WorkflowEngine.WorkflowEngine, engine);
   const inspect = Effect.fn("WorkflowRuntime.inspect")(function* (address: WorkflowRunAddress) {
     yield* acceptance.authorize(address);
+    yield* publisher.watch(address);
     return yield* LoomDynamicWorkflow.peekAt(address.workflowRunId).pipe(
       Effect.map(toWorkflowRunState),
       provideEngine,
@@ -117,9 +116,11 @@ const makeControlWorkflow = (
   return {
     inspect,
     interrupt: (address: WorkflowRunAddress) =>
-      acceptance
-        .authorize(address)
-        .pipe(Effect.andThen(LoomDynamicWorkflow.interrupt(address.workflowRunId)), provideEngine),
+      acceptance.authorize(address).pipe(
+        Effect.andThen(LoomDynamicWorkflow.interrupt(address.workflowRunId)),
+        Effect.tap(() => publisher.watch(address)),
+        provideEngine,
+      ),
     resume: (address: WorkflowRunAddress) =>
       acceptance.authorize(address).pipe(
         Effect.andThen(LoomDynamicWorkflow.peekAt(address.workflowRunId)),
@@ -129,6 +130,7 @@ const makeControlWorkflow = (
           (state) => new WorkflowRunNotSuspendedError({ address, state }),
         ),
         Effect.andThen(LoomDynamicWorkflow.resume(address.workflowRunId)),
+        Effect.tap(() => publisher.watch(address)),
         provideEngine,
       ),
   };
@@ -138,33 +140,56 @@ const makeDeclareWorkflow =
   (declarations: WorkflowSignalDeclarations["Service"]) => (accepted: AcceptedWorkflow) =>
     declarations.declare(accepted.workflowRunId, accepted.request.definition.signals);
 
+const makeExecuteWorkflow =
+  (
+    accept: AcceptWorkflow,
+    declare: ReturnType<typeof makeDeclareWorkflow>,
+    client: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+    publisher: WorkflowRunStatePublisher["Service"],
+  ): WorkflowRuntimeShape["execute"] =>
+  (request) =>
+    accept(request).pipe(
+      Effect.tap(declare),
+      Effect.tap(({ request: accepted }) => LoomDynamicWorkflow.send(accepted)),
+      Effect.tap(({ request: accepted, workflowRunId }) =>
+        publisher.watch({ sessionId: accepted.sessionId, workflowRunId }),
+      ),
+      Effect.flatMap(({ request: accepted }) => LoomDynamicWorkflow.execute(accepted)),
+      Effect.provideService(LoomDynamicWorkflow.Context, client),
+    );
+
+const makeSendWorkflow =
+  (
+    accept: AcceptWorkflow,
+    declare: ReturnType<typeof makeDeclareWorkflow>,
+    client: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+    publisher: WorkflowRunStatePublisher["Service"],
+  ): WorkflowRuntimeShape["send"] =>
+  (request) =>
+    accept(request).pipe(
+      Effect.tap(declare),
+      Effect.tap(({ request: accepted }) => LoomDynamicWorkflow.send(accepted)),
+      Effect.tap(({ request: accepted, workflowRunId }) =>
+        publisher.watch({ sessionId: accepted.sessionId, workflowRunId }),
+      ),
+      Effect.map(({ workflowRunId }) => workflowRunId),
+      Effect.provideService(LoomDynamicWorkflow.Context, client),
+    );
+
 const makeRuntime = (
   accept: AcceptWorkflow,
   acceptance: WorkflowRunAcceptance["Service"],
   client: Effect.Success<typeof LoomDynamicWorkflow.Context>,
   engine: WorkflowEngine.WorkflowEngine["Service"],
   declarations: WorkflowSignalDeclarations["Service"],
+  publisher: WorkflowRunStatePublisher["Service"],
 ): WorkflowRuntimeShape => {
-  const provideClient = Effect.provideService(LoomDynamicWorkflow.Context, client);
   const provideEngine = Effect.provideService(WorkflowEngine.WorkflowEngine, engine);
   const declare = makeDeclareWorkflow(declarations);
-  const control = makeControlWorkflow(acceptance, engine);
   return {
-    execute: (request) =>
-      accept(request).pipe(
-        Effect.tap(declare),
-        Effect.flatMap(({ request: accepted }) => LoomDynamicWorkflow.execute(accepted)),
-        provideClient,
-      ),
-    send: (request) =>
-      accept(request).pipe(
-        Effect.tap(declare),
-        Effect.flatMap(({ request: accepted, workflowRunId }) =>
-          LoomDynamicWorkflow.send(accepted).pipe(Effect.as(workflowRunId)),
-        ),
-        provideClient,
-      ),
-    signal: makeSignalWorkflow(declarations, engine),
+    execute: makeExecuteWorkflow(accept, declare, client, publisher),
+    send: makeSendWorkflow(accept, declare, client, publisher),
+    signal: makeSignalWorkflow(acceptance, declarations, engine, publisher),
     peek: (request) =>
       accept(request).pipe(
         Effect.flatMap(({ request: accepted }) => LoomDynamicWorkflow.peek(accepted)),
@@ -185,7 +210,7 @@ const makeRuntime = (
         Effect.flatMap(({ request: accepted }) => LoomDynamicWorkflow.waitFor(accepted)),
         provideEngine,
       ),
-    ...control,
+    ...makeControlWorkflow(acceptance, engine, publisher),
   };
 };
 
@@ -194,8 +219,20 @@ export const makeWorkflowRuntime = Effect.gen(function* () {
   const client = yield* LoomDynamicWorkflow.Context;
   const engine = yield* WorkflowEngine.WorkflowEngine;
   const declarations = yield* WorkflowSignalDeclarations;
+  const publisher = yield* WorkflowRunStatePublisher;
+  yield* Effect.forEach(yield* acceptance.list, publisher.watch, {
+    concurrency: "unbounded",
+    discard: true,
+  });
   return WorkflowRuntime.of(
-    makeRuntime(makeAcceptWorkflow(acceptance), acceptance, client, engine, declarations),
+    makeRuntime(
+      makeAcceptWorkflow(acceptance),
+      acceptance,
+      client,
+      engine,
+      declarations,
+      publisher,
+    ),
   );
 });
 

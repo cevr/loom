@@ -12,7 +12,12 @@ import {
   layerSqliteCellJournal,
   prepareDaemonSocket,
 } from "@cvr/loom-platform-bun";
-import { JobReconciler, layerAgentActor, layerConnectionHandshake } from "@cvr/loom-runtime";
+import {
+  JobReconciler,
+  layerActorStateHub,
+  layerAgentActor,
+  layerConnectionHandshake,
+} from "@cvr/loom-runtime";
 import { Clock, Effect, FileSystem, Layer, Path } from "effect";
 import { SingleRunner } from "effect/unstable/cluster";
 import { loadDaemonConfig } from "./daemon-config.js";
@@ -60,7 +65,9 @@ export const program = Effect.gen(function* () {
         layerBunProcessInspector,
       ]),
     );
-    const workflows = layerLoomWorkflowRuntime.pipe(Layer.provide([cluster, capabilities]));
+    const workflows = layerLoomWorkflowRuntime.pipe(
+      Layer.provide([cluster, capabilities, layerActorStateHub]),
+    );
     const handlers = layerLoomRpcHandlers.pipe(
       Layer.provide([agents, childAgents, workflows]),
       Layer.provide(

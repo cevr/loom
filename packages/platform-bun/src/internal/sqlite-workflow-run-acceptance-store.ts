@@ -1,4 +1,9 @@
-import { WorkflowIdentity, WorkflowRequestDigest, WorkflowRunId } from "@cvr/loom-domain";
+import {
+  WorkflowIdentity,
+  WorkflowRequestDigest,
+  WorkflowRunAddress,
+  WorkflowRunId,
+} from "@cvr/loom-domain";
 import {
   WorkflowRunAcceptanceError,
   WorkflowRunAcceptanceStore,
@@ -48,6 +53,17 @@ const makeLookup = (sql: SqlClient.SqlClient) =>
     `,
   });
 
+const makeList = (sql: SqlClient.SqlClient) =>
+  SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: WorkflowRunAddress,
+    execute: () => sql`
+      SELECT session_id AS sessionId, workflow_run_id AS workflowRunId
+      FROM workflow_run_acceptance
+      ORDER BY workflow_run_id
+    `,
+  });
+
 const storeError = (operation: WorkflowRunAcceptanceError["operation"], cause: unknown) =>
   new WorkflowRunAcceptanceError({ operation, message: Inspectable.toStringUnknown(cause) });
 
@@ -59,6 +75,7 @@ export const makeSqliteWorkflowRunAcceptanceStore: Effect.Effect<
   const sql = yield* SqlClient.SqlClient;
   const claim = makeClaim(sql);
   const lookup = makeLookup(sql);
+  const list = makeList(sql);
   return WorkflowRunAcceptanceStore.of({
     claim: (identity, digest, workflowRunId) =>
       claim({ ...identity, digest, workflowRunId }).pipe(
@@ -76,6 +93,10 @@ export const makeSqliteWorkflowRunAcceptanceStore: Effect.Effect<
         Effect.tapError((cause) => Effect.logError("Workflow acceptance lookup failed.", cause)),
         Effect.mapError((cause) => storeError("lookup", cause)),
       ),
+    list: list().pipe(
+      Effect.tapError((cause) => Effect.logError("Workflow acceptance list failed.", cause)),
+      Effect.mapError((cause) => storeError("list", cause)),
+    ),
   });
 });
 

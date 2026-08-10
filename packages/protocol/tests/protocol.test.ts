@@ -164,6 +164,7 @@ describe("Workflow protocol", () => {
   it.effect("round-trips a public Workflow signal address", () =>
     Effect.gen(function* () {
       const address = WorkflowSignalAddress.make({
+        sessionId: SessionId.make("session-1"),
         workflowRunId: WorkflowRunId.make("workflow-run-1"),
         name: WorkflowSignalName.make("approval"),
       });

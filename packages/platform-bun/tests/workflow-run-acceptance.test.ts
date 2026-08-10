@@ -221,6 +221,7 @@ scopedLive("resolves only the accepted Session after storage restarts", () =>
       Effect.gen(function* () {
         const acceptance = yield* WorkflowRunAcceptance;
         yield* acceptance.authorize(address);
+        expect(yield* acceptance.list).toEqual([address]);
         const denied = yield* acceptance
           .authorize({ ...address, sessionId: SessionId.make("session-2") })
           .pipe(Effect.flip);

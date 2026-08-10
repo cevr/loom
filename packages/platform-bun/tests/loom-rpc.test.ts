@@ -120,6 +120,7 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
       yield* client.resumeWorkflow(workflowAddress);
       yield* client.signalWorkflow({
         address: WorkflowSignalAddress.make({
+          sessionId: owner.sessionId,
           workflowRunId: workflowHandle.workflowRunId,
           name: WorkflowSignalName.make("approval"),
         }),

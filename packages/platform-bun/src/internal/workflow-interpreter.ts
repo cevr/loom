@@ -235,6 +235,7 @@ const makeRunHostCall = <R>(
         if (declaredSignals.has(name)) return host.awaitSignal(name);
         return new WorkflowSignalNotDeclaredError({
           address: WorkflowSignalAddress.make({
+            sessionId: request.sessionId,
             workflowRunId: host.workflowRunId,
             name,
           }),

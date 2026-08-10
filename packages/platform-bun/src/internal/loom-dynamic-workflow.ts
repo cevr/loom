@@ -6,9 +6,11 @@ import {
   WorkflowBudgetExceededError,
   WorkflowCapabilityExecutor,
   layerWorkflowRunAcceptance,
+  layerWorkflowRunStatePublisher,
   layerWorkflowRuntime,
   WorkflowRunError,
   WorkflowStepExecution,
+  type WorkflowRunStatePublisherOptions,
 } from "@cvr/loom-runtime";
 import { WorkflowActivityKey, WorkflowRunId } from "@cvr/loom-domain";
 import { Effect, Layer, Schema } from "effect";
@@ -76,13 +78,18 @@ export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (requ
   }),
 );
 
-export const layerLoomWorkflowRuntime = (() => {
+export const layerLoomWorkflowRuntimeWith = (options: WorkflowRunStatePublisherOptions) => {
   const engine = ClusterWorkflowEngine.layer;
   const acceptance = layerWorkflowRunAcceptance.pipe(
     Layer.provide(layerSqliteWorkflowRunAcceptanceStore),
   );
   const workflow = layerLoomDynamicWorkflow.pipe(Layer.provideMerge(engine));
+  const publisher = layerWorkflowRunStatePublisher(options).pipe(Layer.provide(engine));
   return layerWorkflowRuntime.pipe(
-    Layer.provide([workflow, acceptance, layerSqliteWorkflowSignalDeclarations]),
+    Layer.provide([workflow, acceptance, layerSqliteWorkflowSignalDeclarations, publisher]),
   );
-})();
+};
+
+export const layerLoomWorkflowRuntime = layerLoomWorkflowRuntimeWith({
+  failureLease: "5 minutes",
+});

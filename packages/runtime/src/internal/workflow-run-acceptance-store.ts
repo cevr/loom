@@ -1,4 +1,9 @@
-import type { WorkflowIdentity, WorkflowRequestDigest, WorkflowRunId } from "@cvr/loom-domain";
+import type {
+  WorkflowIdentity,
+  WorkflowRequestDigest,
+  WorkflowRunAddress,
+  WorkflowRunId,
+} from "@cvr/loom-domain";
 import { Context, type Effect, type Option } from "effect";
 import type { WorkflowRunAcceptanceError } from "@cvr/loom-protocol";
 
@@ -11,6 +16,7 @@ export interface WorkflowRunAcceptanceStoreShape {
   readonly lookup: (
     workflowRunId: WorkflowRunId,
   ) => Effect.Effect<Option.Option<WorkflowIdentity>, WorkflowRunAcceptanceError>;
+  readonly list: Effect.Effect<ReadonlyArray<WorkflowRunAddress>, WorkflowRunAcceptanceError>;
 }
 
 export class WorkflowRunAcceptanceStore extends Context.Service<
