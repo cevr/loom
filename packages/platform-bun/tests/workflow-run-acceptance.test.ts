@@ -1,0 +1,201 @@
+import { BunServices } from "@effect/platform-bun";
+import { SqliteClient } from "@effect/sql-sqlite-bun";
+import {
+  SessionId,
+  WorkflowBudget,
+  WorkflowCapability,
+  WorkflowDefinition,
+  WorkflowKey,
+  WorkflowName,
+  WorkflowRunRequest,
+  WorkflowSignalName,
+  WorkflowVersion,
+} from "@cvr/loom-domain";
+import { WorkflowIdentityConflictError } from "@cvr/loom-protocol";
+import { WorkflowRunAcceptance, layerWorkflowRunAcceptance } from "@cvr/loom-runtime";
+import { expect, it } from "effect-bun-test";
+import { Effect, FileSystem, Layer, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { layerSqliteWorkflowRunAcceptanceStore } from "../src/index.js";
+
+const definition = WorkflowDefinition.make({
+  name: WorkflowName.make("release"),
+  version: WorkflowVersion.make("1"),
+  interpreterVersion: 1,
+  source: "return await step.run('publish', input)",
+  capabilities: [WorkflowCapability.make("job"), WorkflowCapability.make("artifact")],
+  signals: [WorkflowSignalName.make("approval")],
+});
+
+const budget = WorkflowBudget.make({
+  maxSteps: 10,
+  maxAgentRuns: 2,
+  maxParallelism: 3,
+  maxInlineStepResultBytes: 4096,
+  maxTokens: 10_000,
+  maxDurationMillis: 60_000,
+});
+
+const request = WorkflowRunRequest.make({
+  sessionId: SessionId.make("session-1"),
+  key: WorkflowKey.make("deploy"),
+  definition,
+  input: { target: "production", metadata: { region: "north", replicas: 2 } },
+  budget,
+});
+
+const conflictingRequests = [
+  WorkflowRunRequest.make({
+    ...request,
+    definition: WorkflowDefinition.make({ ...definition, source: "return 'changed'" }),
+  }),
+  WorkflowRunRequest.make({ ...request, input: { target: "staging" } }),
+  WorkflowRunRequest.make({
+    ...request,
+    definition: WorkflowDefinition.make({
+      ...definition,
+      capabilities: [...definition.capabilities, WorkflowCapability.make("agent")],
+    }),
+  }),
+  WorkflowRunRequest.make({
+    ...request,
+    definition: WorkflowDefinition.make({
+      ...definition,
+      signals: [...definition.signals, WorkflowSignalName.make("cancel")],
+    }),
+  }),
+  WorkflowRunRequest.make({
+    ...request,
+    budget: WorkflowBudget.make({ ...budget, maxSteps: 11 }),
+  }),
+  WorkflowRunRequest.make({
+    ...request,
+    definition: WorkflowDefinition.make({ ...definition, interpreterVersion: 2 }),
+  }),
+];
+
+const acceptanceLayer = (filename: string) =>
+  layerWorkflowRunAcceptance.pipe(
+    Layer.provide(
+      layerSqliteWorkflowRunAcceptanceStore.pipe(Layer.provide(SqliteClient.layer({ filename }))),
+    ),
+  );
+
+const withAcceptance = <A, E>(
+  filename: string,
+  effect: Effect.Effect<A, E, WorkflowRunAcceptance>,
+) => Effect.scoped(effect.pipe(Effect.provide(acceptanceLayer(filename))));
+
+const countAcceptanceRows = (filename: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const count = SqlSchema.findOne({
+      Request: Schema.Void,
+      Result: Schema.Struct({ count: Schema.Natural }),
+      execute: () => sql`SELECT COUNT(*) AS count FROM workflow_run_acceptance`,
+    });
+    return (yield* count()).count;
+  }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped);
+
+it.scopedLive("creates one acceptance row for concurrent matching requests", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-acceptance-" });
+    const filename = `${directory}/loom.sqlite`;
+
+    const accepted = yield* withAcceptance(
+      filename,
+      Effect.gen(function* () {
+        const acceptance = yield* WorkflowRunAcceptance;
+        return yield* Effect.all(
+          Array.from({ length: 16 }, () => acceptance.accept(request)),
+          { concurrency: "unbounded" },
+        );
+      }),
+    );
+
+    expect(new Set(accepted.map(({ digest }) => digest)).size).toBe(1);
+    expect(yield* countAcceptanceRows(filename)).toBe(1);
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("normalizes names and JSON object keys before it attaches", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-normalize-" });
+    const filename = `${directory}/loom.sqlite`;
+    const reordered = WorkflowRunRequest.make({
+      ...request,
+      definition: WorkflowDefinition.make({
+        ...definition,
+        capabilities: [
+          WorkflowCapability.make("artifact"),
+          WorkflowCapability.make("job"),
+          WorkflowCapability.make("artifact"),
+        ],
+        signals: [WorkflowSignalName.make("approval"), WorkflowSignalName.make("approval")],
+      }),
+      input: { metadata: { replicas: 2, region: "north" }, target: "production" },
+    });
+
+    const { first, attached } = yield* withAcceptance(
+      filename,
+      Effect.gen(function* () {
+        const acceptance = yield* WorkflowRunAcceptance;
+        const initial = yield* acceptance.accept(request);
+        const retry = yield* acceptance.accept(reordered);
+        return { first: initial, attached: retry };
+      }),
+    );
+
+    expect(attached).toEqual(first);
+    expect(first.request.definition.capabilities).toEqual([
+      WorkflowCapability.make("artifact"),
+      WorkflowCapability.make("job"),
+    ]);
+    expect(first.request.definition.signals).toEqual([WorkflowSignalName.make("approval")]);
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.scopedLive("keeps the accepted request immutable across daemon storage restarts", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-restart-" });
+    const filename = `${directory}/loom.sqlite`;
+
+    const accepted = yield* withAcceptance(
+      filename,
+      Effect.gen(function* () {
+        const acceptance = yield* WorkflowRunAcceptance;
+        return yield* acceptance.accept(request);
+      }),
+    );
+
+    const attached = yield* withAcceptance(
+      filename,
+      Effect.gen(function* () {
+        const acceptance = yield* WorkflowRunAcceptance;
+        return yield* acceptance.accept(request);
+      }),
+    );
+    expect(attached).toEqual(accepted);
+
+    yield* withAcceptance(
+      filename,
+      Effect.gen(function* () {
+        const acceptance = yield* WorkflowRunAcceptance;
+        yield* Effect.forEach(conflictingRequests, (changed) =>
+          Effect.gen(function* () {
+            const conflict = yield* acceptance.accept(changed).pipe(Effect.flip);
+            expect(conflict).toBeInstanceOf(WorkflowIdentityConflictError);
+            if (conflict instanceof WorkflowIdentityConflictError) {
+              expect(conflict.acceptedDigest).toBe(accepted.digest);
+              expect(conflict.receivedDigest).not.toBe(accepted.digest);
+            }
+          }),
+        );
+        expect(yield* acceptance.accept(request)).toEqual(accepted);
+      }),
+    );
+  }).pipe(Effect.provide(BunServices.layer)),
+);

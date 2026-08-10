@@ -32,3 +32,7 @@ export {
 export { type JobRecoveryConfig, layerJobRecovery } from "./internal/job-recovery-layer.js";
 export { type CellJournalConfig, layerCellJournal } from "./internal/cell-journal-layer.js";
 export { layerSqliteCellJournal, makeSqliteCellJournal } from "./internal/sqlite-cell-journal.js";
+export {
+  layerSqliteWorkflowRunAcceptanceStore,
+  makeSqliteWorkflowRunAcceptanceStore,
+} from "./internal/sqlite-workflow-run-acceptance-store.js";

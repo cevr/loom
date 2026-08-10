@@ -43,7 +43,9 @@ export type WorkflowCapability = typeof WorkflowCapability.Type;
 export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
 export type WorkflowSignalName = typeof WorkflowSignalName.Type;
 
-export const WorkflowRequestDigest = identifier("@cvr/loom/WorkflowRequestDigest");
+export const WorkflowRequestDigest = Schema.String.check(
+  Schema.isPattern(/^sha256:[0-9a-f]{64}$/u),
+).pipe(Schema.brand("@cvr/loom/WorkflowRequestDigest"));
 export type WorkflowRequestDigest = typeof WorkflowRequestDigest.Type;
 
 export const WorkflowIdentity = Schema.Struct({
@@ -108,6 +110,13 @@ export const WorkflowRunRequest = Schema.Struct({
   budget: WorkflowBudget,
 });
 export type WorkflowRunRequest = typeof WorkflowRunRequest.Type;
+
+export const AcceptedWorkflowRun = Schema.Struct({
+  identity: WorkflowIdentity,
+  request: WorkflowRunRequest,
+  digest: WorkflowRequestDigest,
+});
+export type AcceptedWorkflowRun = typeof AcceptedWorkflowRun.Type;
 
 export const ActorSubject = Schema.TaggedUnion({
   Agent: {

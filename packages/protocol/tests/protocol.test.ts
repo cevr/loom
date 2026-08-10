@@ -136,6 +136,8 @@ describe("Code Kernel diagnostics", () => {
 describe("Workflow protocol", () => {
   it.effect("round-trips a Workflow identity conflict", () =>
     Effect.gen(function* () {
+      const acceptedDigest = WorkflowRequestDigest.make(`sha256:${"a".repeat(64)}`);
+      const receivedDigest = WorkflowRequestDigest.make(`sha256:${"b".repeat(64)}`);
       const codec = Schema.fromJsonString(WorkflowIdentityConflictError);
       const encoded = yield* Schema.encodeEffect(codec)(
         new WorkflowIdentityConflictError({
@@ -145,14 +147,14 @@ describe("Workflow protocol", () => {
             version: WorkflowVersion.make("1"),
             key: WorkflowKey.make("daily-review"),
           },
-          acceptedDigest: WorkflowRequestDigest.make("sha256:accepted"),
-          receivedDigest: WorkflowRequestDigest.make("sha256:received"),
+          acceptedDigest,
+          receivedDigest,
         }),
       );
       const decoded = yield* Schema.decodeEffect(codec)(encoded);
 
-      expect(decoded.acceptedDigest).toBe(WorkflowRequestDigest.make("sha256:accepted"));
-      expect(decoded.receivedDigest).toBe(WorkflowRequestDigest.make("sha256:received"));
+      expect(decoded.acceptedDigest).toBe(acceptedDigest);
+      expect(decoded.receivedDigest).toBe(receivedDigest);
     }),
   );
 });
