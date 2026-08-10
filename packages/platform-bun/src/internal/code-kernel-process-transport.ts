@@ -213,6 +213,7 @@ export const spawnKernelChild = Effect.fn("CodeKernelProcess.spawn")(function* (
     yield* Effect.forkIn(listenForResponses(child), scope);
     yield* waitForReady(config, child);
     yield* Effect.uninterruptible(registerKernelProcess(registration, handle.pid));
+    yield* Scope.addFinalizer(scope, releaseKernelProcess(registration));
     return child;
   }).pipe(Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
 });

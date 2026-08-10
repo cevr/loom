@@ -53,7 +53,7 @@ The Cell can have file, network, or process effects that Loom cannot roll back.
 ## Code Kernel process recovery
 
 The daemon stores the Code Kernel Process Identity before it sends the first Cell request to that process.
-The daemon removes this record after confirmed process exit.
+The daemon removes this record when the owning process scope closes.
 
 Daemon startup inspects each stored Process Identity.
 It terminates a process only when every identity field matches.

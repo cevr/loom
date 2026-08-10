@@ -20,7 +20,6 @@ import {
   type CodeKernelProcessTransportConfig,
   type KernelChild,
   type ReserveKernelDiagnostic,
-  releaseKernelChild,
 } from "./code-kernel-process-transport.js";
 import {
   type KernelProcessLifecycle,
@@ -79,7 +78,6 @@ const replaceChild = Effect.fn("CodeKernelProcess.replace")(function* (
   if (Option.isNone(state.child)) return;
   const child = state.child.value;
   yield* Scope.close(child.scope, Exit.void);
-  yield* releaseKernelChild(child);
   state.child = Option.none();
   state.nextRequestId = 0;
 });
