@@ -2,7 +2,7 @@
 import { BunServices } from "@effect/platform-bun";
 import { SessionId } from "@cvr/loom-domain";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import { HerdrClient, layerHerdrClient, type HerdrPluginConfig } from "../src/index.js";
 
 const RequestEnvelope = Schema.Struct({
@@ -55,8 +55,8 @@ scoped("sends ordered reports through the Herdr Unix socket", () =>
 
     yield* Effect.gen(function* () {
       const client = yield* HerdrClient;
-      yield* client.report("working", "running a job");
-      yield* client.report("idle", undefined);
+      yield* client.report("working", Option.some("running a job"));
+      yield* client.report("idle", Option.none());
       yield* client.release;
     }).pipe(Effect.provide(layerHerdrClient(config)));
 

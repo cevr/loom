@@ -1,3 +1,4 @@
+/* oxlint-disable effect/noNullish -- BunSocket.runRaw and Deferred<void> require the JavaScript void value. */
 import { BunSocket } from "@effect/platform-bun";
 import { Deferred, Effect, Fiber, FileSystem, Path } from "effect";
 import type { PlatformError } from "effect/PlatformError";

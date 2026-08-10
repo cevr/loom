@@ -9,7 +9,7 @@ import {
   type CodeKernelShape,
   type EvaluateCellInput,
 } from "@cvr/loom-runtime";
-import { Duration, Effect, Exit, FileSystem, Layer, Path, Scope, Semaphore } from "effect";
+import { Duration, Effect, Exit, FileSystem, Layer, Option, Path, Scope, Semaphore } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   sendKernelRequest,
@@ -38,19 +38,19 @@ export interface CodeKernelProcessConfig
 }
 
 interface KernelSupervisorState extends CodeKernelSupervisorPolicyState {
-  child: KernelChild | undefined;
+  child: Option.Option<KernelChild>;
   nextRequestId: number;
   readonly parentScope: Scope.Scope;
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly fs: FileSystem.FileSystem;
-  readonly reserveDiagnostic: ReserveKernelDiagnostic | undefined;
+  readonly reserveDiagnostic: Option.Option<ReserveKernelDiagnostic>;
 }
 
 const getChild = Effect.fn("CodeKernelProcess.getChild")(function* (
   config: CodeKernelProcessConfig,
   state: KernelSupervisorState,
 ) {
-  if (state.child !== undefined) return state.child;
+  if (Option.isSome(state.child)) return state.child.value;
   yield* assertStartAllowed(state);
   const child = yield* spawnKernelChild(
     config,
@@ -59,16 +59,16 @@ const getChild = Effect.fn("CodeKernelProcess.getChild")(function* (
     state.fs,
     state.reserveDiagnostic,
   );
-  state.child = child;
+  state.child = Option.some(child);
   return child;
 });
 
 const replaceChild = Effect.fn("CodeKernelProcess.replace")(function* (
   state: KernelSupervisorState,
 ) {
-  if (state.child === undefined) return;
-  yield* Scope.close(state.child.scope, Exit.void);
-  state.child = undefined;
+  if (Option.isNone(state.child)) return;
+  yield* Scope.close(state.child.value.scope, Exit.void);
+  state.child = Option.none();
   state.nextRequestId = 0;
 });
 
@@ -128,7 +128,10 @@ const makeEvaluate =
               cellId: input.cellId,
               reason: error.reason,
               message: error.message,
-              diagnostic: error.diagnostic,
+              ...Option.match(Option.fromNullishOr(error.diagnostic), {
+                onNone: () => ({}),
+                onSome: (diagnostic) => ({ diagnostic }),
+              }),
             }),
           ),
         ),
@@ -141,8 +144,8 @@ const makeReset = (
   cellTimeout: Duration.Input,
 ) => {
   const reset = Effect.fn("CodeKernel.reset")(function* () {
-    if (state.child === undefined) return;
-    const active = state.child;
+    if (Option.isNone(state.child)) return;
+    const active = state.child.value;
     state.nextRequestId += 1;
     const requestId = state.nextRequestId;
     const response = yield* sendKernelRequest(
@@ -170,7 +173,7 @@ const makeReset = (
 
 const makeCodeKernelWithDiagnostic = (
   config: CodeKernelProcessConfig,
-  reserveDiagnostic?: ReserveKernelDiagnostic,
+  reserveDiagnostic: Option.Option<ReserveKernelDiagnostic>,
 ): Effect.Effect<
   CodeKernelShape,
   never,
@@ -183,10 +186,10 @@ const makeCodeKernelWithDiagnostic = (
     const semaphore = yield* Semaphore.make(1);
     const cellTimeout = config.cellTimeout ?? "30 seconds";
     const state: KernelSupervisorState = {
-      child: undefined,
+      child: Option.none(),
       nextRequestId: 0,
       failureTimes: [],
-      blockedUntil: undefined,
+      blockedUntil: Option.none(),
       parentScope,
       spawner,
       fs,
@@ -206,7 +209,7 @@ const makeCodeKernelWithDiagnostic = (
   });
 
 export const makeCodeKernel = (config: CodeKernelProcessConfig) =>
-  makeCodeKernelWithDiagnostic(config);
+  makeCodeKernelWithDiagnostic(config, Option.none());
 
 export const layerCodeKernel = (
   config: CodeKernelProcessConfig,
@@ -233,14 +236,14 @@ export const layerCodeKernelFactory = (
       const fs = yield* FileSystem.FileSystem;
       const store = yield* makeCodeKernelDiagnosticStore(config);
       return CodeKernelFactory.of({
-        spawn: (owner) => {
-          let reserveDiagnostic: ReserveKernelDiagnostic | undefined;
-          if (store !== undefined) reserveDiagnostic = (pid) => store.reserve(owner, pid);
-          return makeCodeKernelWithDiagnostic(config, reserveDiagnostic).pipe(
+        spawn: (owner) =>
+          makeCodeKernelWithDiagnostic(
+            config,
+            Option.map(store, (diagnosticStore) => (pid) => diagnosticStore.reserve(owner, pid)),
+          ).pipe(
             Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
             Effect.provideService(FileSystem.FileSystem, fs),
-          );
-        },
+          ),
       });
     }),
   );

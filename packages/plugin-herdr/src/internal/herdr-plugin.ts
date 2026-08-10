@@ -1,11 +1,11 @@
 import { ActorActivity, type ActorStateProjection, type SessionId } from "@cvr/loom-domain";
 import { ActorStateHub, type ActorStateSnapshot } from "@cvr/loom-runtime";
-import { Effect, Layer, type Scope, Stream } from "effect";
+import { Effect, Equal, Layer, Option, type Scope, Stream } from "effect";
 import { HerdrClient, type HerdrPluginConfig, type HerdrState } from "./herdr-client.js";
 
 interface HerdrProjection {
   readonly state: HerdrState;
-  readonly message: string | undefined;
+  readonly message: Option.Option<string>;
 }
 
 type ActivityProjection = HerdrProjection | "Working" | "Inactive";
@@ -17,11 +17,11 @@ const projectActivity = (projection: ActorStateProjection): ActivityProjection =
   ActorActivity.match<ActivityProjection>(projection.activity, {
     Blocked: (activity) => ({
       state: "blocked",
-      message: activity.message,
+      message: Option.some(activity.message),
     }),
     Failed: (activity) => ({
       state: "blocked",
-      message: activity.message,
+      message: Option.some(activity.message),
     }),
     Working: () => "Working",
     Idle: () => "Inactive",
@@ -44,13 +44,13 @@ const toHerdrProjection = (snapshot: ActorStateSnapshot, sessionId: SessionId): 
     }
   }
   if (working) {
-    return { state: "working", message: undefined };
+    return { state: "working", message: Option.none() };
   }
-  return { state: "idle", message: undefined };
+  return { state: "idle", message: Option.none() };
 };
 
 const sameProjection = (left: HerdrProjection, right: HerdrProjection): boolean =>
-  left.state === right.state && left.message === right.message;
+  left.state === right.state && Equal.equals(left.message, right.message);
 
 const logClientFailure = (operation: string) =>
   Effect.fn(`HerdrPlugin.${operation}Failure`)(function* (cause: unknown) {

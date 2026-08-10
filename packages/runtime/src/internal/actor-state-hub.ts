@@ -1,5 +1,5 @@
 import { ActorActivity, ActorSubject, type ActorStateProjection } from "@cvr/loom-domain";
-import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 
 export type ActorStateSnapshot = ReadonlyMap<string, ActorStateProjection>;
 
@@ -26,10 +26,8 @@ export const makeActorStateHub: Effect.Effect<ActorStateHubShape> = Effect.gen(f
   const publish = Effect.fn("ActorStateHub.publish")(function* (projection: ActorStateProjection) {
     const key = subjectKey(projection.subject);
     yield* SubscriptionRef.update(state, (current) => {
-      const previous = current.get(key);
-      if (previous !== undefined && previous.revision >= projection.revision) {
-        return current;
-      }
+      const previous = Option.fromNullishOr(current.get(key));
+      if (Option.exists(previous, (value) => value.revision >= projection.revision)) return current;
 
       const next = new Map(current);
       if (ActorActivity.guards.Stopped(projection.activity)) {

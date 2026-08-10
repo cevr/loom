@@ -8,7 +8,7 @@ import {
 } from "@cvr/loom-domain";
 import { ActorStateHub, type ActorStateHubShape, makeActorStateHub } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, Queue } from "effect";
+import { Effect, Option, Queue } from "effect";
 import {
   HerdrClient,
   runHerdrPlugin,
@@ -16,11 +16,15 @@ import {
   type HerdrState,
 } from "../src/index.js";
 
-interface HerdrCall {
-  readonly _tag: "Report" | "Release";
-  readonly state?: HerdrState;
-  readonly message?: string;
-}
+type HerdrCall =
+  | {
+      readonly _tag: "Report";
+      readonly state: HerdrState;
+      readonly message: Option.Option<string>;
+    }
+  | { readonly _tag: "Release" };
+
+const releaseCall = { _tag: "Release" } satisfies HerdrCall;
 
 interface TestState {
   readonly calls: Queue.Queue<HerdrCall>;
@@ -53,7 +57,7 @@ const verifyProjections = Effect.fn("HerdrPluginTest.verifyProjections")(functio
   );
   expect(yield* Queue.take(state.calls)).toMatchObject({
     state: "blocked",
-    message: "approval required",
+    message: Option.some("approval required"),
   });
 
   yield* publish(state, state.job, ActorActivity.cases.Stopped.make({}), 2);
@@ -83,7 +87,7 @@ it.effect("publishes the session actor state and releases the pane", () =>
     };
     const client = HerdrClient.of({
       report: (state, message) => Queue.offer(calls, { _tag: "Report", state, message }),
-      release: Queue.offer(calls, { _tag: "Release" }),
+      release: Queue.offer(calls, releaseCall),
     } satisfies HerdrClientShape);
 
     yield* Effect.scoped(
@@ -103,6 +107,6 @@ it.effect("publishes the session actor state and releases the pane", () =>
       }),
     );
 
-    expect(yield* Queue.take(calls)).toEqual({ _tag: "Release" });
+    expect(yield* Queue.take(calls)).toEqual(releaseCall);
   }),
 );

@@ -180,7 +180,7 @@ scopedLive("returns a typed failure when the Code Kernel executable cannot start
 
     expect(failure).toHaveProperty("_tag", "CellInterruptedError");
     expect(failure).toHaveProperty("reason", "ProcessExited");
-    expect(failure).toHaveProperty("diagnostic", undefined);
+    expect(failure).not.toHaveProperty("diagnostic");
   }),
 );
 

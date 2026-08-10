@@ -1,6 +1,17 @@
 import { BunSocket } from "@effect/platform-bun";
 import type { SessionId } from "@cvr/loom-domain";
-import { Clock, Context, Deferred, Effect, Fiber, Layer, Ref, Schema, Semaphore } from "effect";
+import {
+  Clock,
+  Context,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  type Option,
+  Ref,
+  Schema,
+  Semaphore,
+} from "effect";
 import type { Socket } from "effect/unstable/socket/Socket";
 import { HerdrClientError } from "./herdr-client-error.js";
 
@@ -19,7 +30,7 @@ export interface HerdrPluginConfig {
 export interface HerdrClientShape {
   readonly report: (
     state: HerdrState,
-    message: string | undefined,
+    message: Option.Option<string>,
   ) => Effect.Effect<void, HerdrClientError>;
   readonly release: Effect.Effect<void, HerdrClientError>;
 }
@@ -36,7 +47,7 @@ const ReportAgentRequest = Schema.Struct({
     source: Schema.String,
     agent: Schema.String,
     state: Schema.Literals(["idle", "working", "blocked", "unknown"]),
-    message: Schema.NullOr(Schema.String),
+    message: Schema.OptionFromNullOr(Schema.String),
     seq: Schema.Natural,
     agent_session_id: Schema.String,
   }),
@@ -148,7 +159,7 @@ const makeNextSequence: Effect.Effect<NextSequence> = Effect.gen(function* () {
 });
 
 const makeReport = (config: HerdrPluginConfig, nextSequence: NextSequence) =>
-  Effect.fn("HerdrClient.report")(function* (state: HerdrState, message: string | undefined) {
+  Effect.fn("HerdrClient.report")(function* (state: HerdrState, message: Option.Option<string>) {
     const seq = yield* nextSequence();
     const request = ReportAgentRequest.make({
       id: `${config.source}:${seq}`,
@@ -158,7 +169,7 @@ const makeReport = (config: HerdrPluginConfig, nextSequence: NextSequence) =>
         source: config.source,
         agent: config.agent,
         state,
-        message: message ?? null,
+        message,
         seq,
         agent_session_id: config.sessionId,
       },

@@ -1,5 +1,5 @@
 import { CodeKernelDiagnostic } from "@cvr/loom-protocol";
-import { Effect, FileSystem, Ref, Stream } from "effect";
+import { Effect, FileSystem, Option, Ref, Stream } from "effect";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import type { KernelDiagnosticFile } from "./code-kernel-diagnostic-store.js";
 import { CodeKernelProcessError } from "./code-kernel-process-error.js";
@@ -10,7 +10,7 @@ export interface CodeKernelDiagnosticsConfig {
 
 export interface KernelDiagnosticSource {
   readonly stderrTail: Ref.Ref<string>;
-  readonly file: KernelDiagnosticFile | undefined;
+  readonly file: Option.Option<KernelDiagnosticFile>;
 }
 
 const truncationMarker = new TextEncoder().encode("\n[loom: stderr truncated]\n");
@@ -19,8 +19,9 @@ const appendDiagnosticTail = Effect.fn("CodeKernelDiagnostics.appendTail")(funct
   source: KernelDiagnosticSource,
   fs: FileSystem.FileSystem,
 ) {
-  if (source.file === undefined) return;
-  const maximum = source.file.maxFileBytes;
+  if (Option.isNone(source.file)) return;
+  const file = source.file.value;
+  const maximum = file.maxFileBytes;
   const tail = new TextEncoder().encode(yield* Ref.get(source.stderrTail));
   const tailBudget = Math.max(0, maximum - truncationMarker.length);
   const retainedTail = tail.subarray(Math.max(0, tail.length - tailBudget));
@@ -28,8 +29,8 @@ const appendDiagnosticTail = Effect.fn("CodeKernelDiagnostics.appendTail")(funct
   const trailer = new Uint8Array(marker.length + retainedTail.length);
   trailer.set(marker);
   trailer.set(retainedTail, marker.length);
-  yield* fs.truncate(source.file.path, maximum - trailer.length);
-  yield* fs.writeFile(source.file.path, trailer, { flag: "a" });
+  yield* fs.truncate(file.path, maximum - trailer.length);
+  yield* fs.writeFile(file.path, trailer, { flag: "a" });
 });
 
 export const captureKernelStderr = Effect.fn("CodeKernelDiagnostics.captureStderr")(function* (
@@ -49,7 +50,8 @@ export const captureKernelStderr = Effect.fn("CodeKernelDiagnostics.captureStder
     ),
   );
   const file = source.file;
-  if (file === undefined) return yield* Stream.runDrain(decoded);
+  if (Option.isNone(file)) return yield* Stream.runDrain(decoded);
+  const diagnostic = file.value;
   const truncated = yield* Ref.make(false);
   const fileAvailable = yield* Ref.make(true);
   const written = yield* Ref.make(0);
@@ -59,11 +61,11 @@ export const captureKernelStderr = Effect.fn("CodeKernelDiagnostics.captureStder
       Effect.gen(function* () {
         if (!(yield* Ref.get(fileAvailable))) return;
         const current = yield* Ref.get(written);
-        const remaining = Math.max(0, file.maxFileBytes - current);
+        const remaining = Math.max(0, diagnostic.maxFileBytes - current);
         if (chunk.length > remaining) yield* Ref.set(truncated, true);
         if (remaining === 0) return;
         const retained = chunk.subarray(0, remaining);
-        yield* fs.writeFile(file.path, retained, { flag: "a" }).pipe(
+        yield* fs.writeFile(diagnostic.path, retained, { flag: "a" }).pipe(
           Effect.tapError((error) =>
             Effect.logWarning("Code Kernel stderr file write failed.", error),
           ),
@@ -85,13 +87,26 @@ export const diagnosticFor = Effect.fn("CodeKernelDiagnostics.current")(function
   options?: { readonly requestId?: number; readonly exitCode?: number },
 ) {
   const stderrTail = yield* Ref.get(source.stderrTail);
-  let retainedStderr: string | undefined;
-  if (stderrTail.length > 0) retainedStderr = stderrTail;
   return CodeKernelDiagnostic.make({
-    requestId: options?.requestId,
-    exitCode: options?.exitCode,
-    stderrTail: retainedStderr,
-    stderrPath: source.file?.path,
+    ...Option.match(Option.fromNullishOr(options?.requestId), {
+      onNone: () => ({}),
+      onSome: (requestId) => ({ requestId }),
+    }),
+    ...Option.match(Option.fromNullishOr(options?.exitCode), {
+      onNone: () => ({}),
+      onSome: (exitCode) => ({ exitCode }),
+    }),
+    ...Option.match(
+      Option.liftPredicate(stderrTail, (value) => value.length > 0),
+      {
+        onNone: () => ({}),
+        onSome: (retained) => ({ stderrTail: retained }),
+      },
+    ),
+    ...Option.match(source.file, {
+      onNone: () => ({}),
+      onSome: (file) => ({ stderrPath: file.path }),
+    }),
   });
 });
 

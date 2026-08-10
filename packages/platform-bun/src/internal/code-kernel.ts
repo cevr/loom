@@ -8,7 +8,7 @@ import {
   maximumCellBindings,
   maximumCellDisplayLength,
 } from "@cvr/loom-protocol";
-import { Context, Effect, Inspectable, Layer, Predicate, Semaphore } from "effect";
+import { Context, Effect, Inspectable, Layer, Option, Predicate, Semaphore } from "effect";
 import * as NodeVm from "node:vm";
 
 export interface EvaluateCellInput {
@@ -34,11 +34,11 @@ const messageFromCause = (cause: unknown): string => Inspectable.toStringUnknown
 
 const importModule = (specifier: string) => import(specifier);
 
-const valueFromEvaluation = (result: unknown): unknown => {
+const valueFromEvaluation = (result: unknown): Option.Option<unknown> => {
   if (Predicate.hasProperty(result, "value")) {
-    return result.value;
+    return Option.some(result.value);
   }
-  return undefined;
+  return Option.none();
 };
 
 const truncateDisplay = (display: string): string => {
@@ -111,7 +111,12 @@ export const makeInProcessCodeKernel: Effect.Effect<InProcessCodeKernelShape> = 
 
         return CellEvaluation.make({
           cellId: input.cellId,
-          display: truncateDisplay(Bun.inspect(value)),
+          display: truncateDisplay(
+            Option.match(value, {
+              onNone: () => "undefined",
+              onSome: (present) => Bun.inspect(present),
+            }),
+          ),
           bindings: Reflect.ownKeys(context)
             .filter(Predicate.isString)
             .toSorted()

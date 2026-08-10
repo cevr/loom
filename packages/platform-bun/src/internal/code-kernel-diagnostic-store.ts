@@ -39,12 +39,12 @@ interface CodeKernelDiagnosticStore {
   readonly reserve: (
     owner: AgentOwner,
     pid: number,
-  ) => Effect.Effect<KernelDiagnosticFile | undefined, PlatformError, Scope.Scope>;
+  ) => Effect.Effect<Option.Option<KernelDiagnosticFile>, PlatformError, Scope.Scope>;
 }
 
 const encodeSegment = (value: string) => encodeURIComponent(value).replaceAll(".", "%2E");
-const naturalLimit = (value: number | undefined, fallback: number) =>
-  Math.max(0, Math.floor(value ?? fallback));
+const naturalLimit = (value: Option.Option<number>, fallback: number) =>
+  Math.max(0, Math.floor(Option.getOrElse(value, () => fallback)));
 
 const isWithin = (path: PathService, root: string, candidate: string) => {
   const relative = path.relative(root, candidate);
@@ -59,8 +59,8 @@ const canonicalDirectory = Effect.fn("CodeKernelDiagnosticStore.canonicalDirecto
   const candidate = state.path.join(parent, name);
   yield* state.fs.makeDirectory(candidate, { recursive: true });
   const canonical = yield* state.fs.realPath(candidate);
-  if (isWithin(state.path, parent, canonical)) return canonical;
-  return undefined;
+  if (isWithin(state.path, parent, canonical)) return Option.some(canonical);
+  return Option.none();
 });
 
 const ensureOwnerDirectory = Effect.fn("CodeKernelDiagnosticStore.ensureOwnerDirectory")(function* (
@@ -69,10 +69,10 @@ const ensureOwnerDirectory = Effect.fn("CodeKernelDiagnosticStore.ensureOwnerDir
   owner: AgentOwner,
 ) {
   const session = yield* canonicalDirectory(state, root, encodeSegment(owner.sessionId));
-  if (session === undefined) return undefined;
-  const directory = yield* canonicalDirectory(state, session, encodeSegment(owner.agentId));
-  if (directory === undefined) return undefined;
-  return { directory, session };
+  if (Option.isNone(session)) return Option.none();
+  const directory = yield* canonicalDirectory(state, session.value, encodeSegment(owner.agentId));
+  if (Option.isNone(directory)) return Option.none();
+  return Option.some({ directory: directory.value, session: session.value });
 });
 
 const readFiles = Effect.fn("CodeKernelDiagnosticStore.readFiles")(function* (
@@ -103,8 +103,8 @@ const readFiles = Effect.fn("CodeKernelDiagnosticStore.readFiles")(function* (
       const names = yield* Effect.option(state.fs.readDirectory(canonicalOwner));
       if (Option.isNone(names)) continue;
       for (const name of names.value) {
-        const match = diagnosticName.exec(name);
-        if (match === null) continue;
+        const match = Option.fromNullishOr(diagnosticName.exec(name));
+        if (Option.isNone(match)) continue;
         const filePath = state.path.join(canonicalOwner, name);
         const info = yield* Effect.option(state.fs.stat(filePath));
         if (Option.isNone(info) || info.value.type !== "File") continue;
@@ -112,7 +112,7 @@ const readFiles = Effect.fn("CodeKernelDiagnosticStore.readFiles")(function* (
           path: filePath,
           ownerDirectory: canonicalOwner,
           sessionDirectory: canonicalSession,
-          timestamp: Number(match[1]),
+          timestamp: Number(match.value[1]),
           size: info.value.size,
         });
       }
@@ -214,53 +214,61 @@ const allocate = Effect.fn("CodeKernelDiagnosticStore.allocate")(function* (
   const cleaned = yield* cleanup(state);
   const root = cleaned.root;
   const target = yield* ensureOwnerDirectory(state, root, owner);
-  if (target === undefined) return undefined;
-  const removed = yield* pruneForAllocation(state, target.directory, cleaned.files);
+  if (Option.isNone(target)) return Option.none();
+  const removed = yield* pruneForAllocation(state, target.value.directory, cleaned.files);
   const removedPaths = new Set(removed.map((file) => file.path));
   const retained = cleaned.files.filter((file) => !removedPaths.has(file.path));
   const affectedOwners = new Map(
     removed.map((file) => [file.ownerDirectory, file.sessionDirectory]),
   );
-  affectedOwners.set(target.directory, target.session);
+  affectedOwners.set(target.value.directory, target.value.session);
   yield* removeEmptyDirectories(state, affectedOwners);
-  if (retained.length >= state.maxFilesTotal) return undefined;
+  if (retained.length >= state.maxFilesTotal) return Option.none();
   if (
-    retained.filter((file) => file.ownerDirectory === target.directory).length >=
+    retained.filter((file) => file.ownerDirectory === target.value.directory).length >=
     state.maxFilesPerOwner
   ) {
-    return undefined;
+    return Option.none();
   }
   const recreated = yield* ensureOwnerDirectory(state, root, owner);
-  if (recreated === undefined) return undefined;
+  if (Option.isNone(recreated)) return Option.none();
   const now = yield* Clock.currentTimeMillis;
-  const filePath = state.path.join(recreated.directory, `${now}-${pid}.stderr.log`);
+  const filePath = state.path.join(recreated.value.directory, `${now}-${pid}.stderr.log`);
   yield* state.fs.writeFile(filePath, new Uint8Array(), { flag: "wx" });
   state.active.add(filePath);
-  return { path: filePath, maxFileBytes: state.maxFileBytes } satisfies KernelDiagnosticFile;
+  return Option.some({
+    path: filePath,
+    maxFileBytes: state.maxFileBytes,
+  } satisfies KernelDiagnosticFile);
 });
 
 export const makeCodeKernelDiagnosticStore = Effect.fn("CodeKernelDiagnosticStore.make")(function* (
   config: CodeKernelDiagnosticStoreConfig,
 ) {
-  const directory = config.diagnosticsDirectory;
-  if (directory === undefined) return undefined;
+  const directory = Option.fromNullishOr(config.diagnosticsDirectory);
+  if (Option.isNone(directory)) return Option.none();
   const state: StoreState = {
     fs: yield* FileSystem.FileSystem,
     path: yield* Path.Path,
-    directory,
+    directory: directory.value,
     active: new Set(),
-    maxFileBytes: naturalLimit(config.maxFileBytes, 1024 * 1024),
-    maxFilesPerOwner: naturalLimit(config.maxFilesPerOwner, 20),
-    maxFilesTotal: naturalLimit(config.maxFilesTotal, 256),
+    maxFileBytes: naturalLimit(Option.fromNullishOr(config.maxFileBytes), 1024 * 1024),
+    maxFilesPerOwner: naturalLimit(Option.fromNullishOr(config.maxFilesPerOwner), 20),
+    maxFilesTotal: naturalLimit(Option.fromNullishOr(config.maxFilesTotal), 256),
   };
   const semaphore = yield* Semaphore.make(1);
   const reserve = (owner: AgentOwner, pid: number) =>
     Effect.acquireRelease(Semaphore.withPermit(semaphore, allocate(state, owner, pid)), (file) =>
-      Effect.sync(() => file !== undefined && state.active.delete(file.path)),
+      Effect.sync(() =>
+        Option.match(file, {
+          onNone: () => false,
+          onSome: (diagnostic) => state.active.delete(diagnostic.path),
+        }),
+      ),
     );
   yield* Semaphore.withPermit(semaphore, cleanup(state)).pipe(
     Effect.tapError((error) => Effect.logWarning("Code Kernel diagnostic cleanup failed.", error)),
     Effect.ignore,
   );
-  return { reserve } satisfies CodeKernelDiagnosticStore;
+  return Option.some({ reserve } satisfies CodeKernelDiagnosticStore);
 });

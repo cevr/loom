@@ -1,10 +1,12 @@
 import { CodeKernelProcessRequest, CodeKernelProcessResponse } from "@cvr/loom-protocol";
 import {
+  Cause,
   Duration,
   Effect,
   Exit,
   Fiber,
   FileSystem,
+  Option,
   Queue,
   Ref,
   Schema,
@@ -41,7 +43,7 @@ export interface KernelChild {
 
 export type ReserveKernelDiagnostic = (
   pid: number,
-) => Effect.Effect<KernelDiagnosticFile | undefined, PlatformError, Scope.Scope>;
+) => Effect.Effect<Option.Option<KernelDiagnosticFile>, PlatformError, Scope.Scope>;
 
 const decodeResponse = Schema.decodeEffect(Schema.fromJsonString(CodeKernelProcessResponse));
 const encodeRequest = Schema.encodeEffect(Schema.fromJsonString(CodeKernelProcessRequest));
@@ -101,7 +103,7 @@ const reportProcessExit = Effect.fn("CodeKernelProcess.reportExit")(function* (c
         failResponses(child, {
           reason: "ProcessExited",
           message: `Code Kernel process exited with code ${exitCode}.`,
-          cause: undefined,
+          cause: Cause.empty,
           exitCode,
         }),
     }),
@@ -128,7 +130,6 @@ const makeChildHandle = (
           reason: "ProcessExited",
           message: "Code Kernel process did not start.",
           cause,
-          diagnostic: undefined,
         }),
     ),
   );
@@ -145,7 +146,7 @@ const waitForReady = Effect.fn("CodeKernelProcess.waitForReady")(function* (
           child.diagnostics,
           "TimedOut",
           "Code Kernel process did not become ready.",
-          undefined,
+          Cause.empty,
         ),
     }),
   );
@@ -163,21 +164,21 @@ export const spawnKernelChild = Effect.fn("CodeKernelProcess.spawn")(function* (
   parentScope: Scope.Scope,
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   fs: FileSystem.FileSystem,
-  reserveDiagnostic?: ReserveKernelDiagnostic,
+  reserveDiagnostic: Option.Option<ReserveKernelDiagnostic>,
 ) {
   const scope = yield* Scope.fork(parentScope);
   return yield* Effect.gen(function* () {
     const responses = yield* Queue.unbounded<CodeKernelProcessResponse, CodeKernelProcessError>();
     const stderrTail = yield* Ref.make("");
     const handle = yield* makeChildHandle(config, scope, spawner);
-    let diagnosticFile: KernelDiagnosticFile | undefined;
-    if (reserveDiagnostic !== undefined) {
-      diagnosticFile = yield* reserveDiagnostic(handle.pid).pipe(
+    let diagnosticFile = Option.none<KernelDiagnosticFile>();
+    if (Option.isSome(reserveDiagnostic)) {
+      diagnosticFile = yield* reserveDiagnostic.value(handle.pid).pipe(
         Effect.provideService(Scope.Scope, scope),
         Effect.tapError((error) =>
           Effect.logWarning("Code Kernel stderr file is unavailable.", error),
         ),
-        Effect.orElseSucceed(() => undefined),
+        Effect.orElseSucceed(() => Option.none()),
       );
     }
     const diagnostics = { stderrTail, file: diagnosticFile };
@@ -243,7 +244,7 @@ export const sendKernelRequest = Effect.fn("CodeKernelProcess.send")(function* (
           child.diagnostics,
           "TimedOut",
           timeoutMessage,
-          undefined,
+          Cause.empty,
           request.requestId,
         ),
     }),

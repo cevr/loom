@@ -162,12 +162,12 @@ scopedLive("does not follow an owner directory symlink outside the diagnostic ro
       const failure = yield* kernel
         .evaluate({ cellId: CellId.make("cell-contained"), source: "42" })
         .pipe(Effect.flip);
-      expect(failure).toHaveProperty("diagnostic.stderrPath", undefined);
+      expect(failure).not.toHaveProperty("diagnostic.stderrPath");
       const agentKernel = yield* factory.spawn(evilAgent);
       const agentFailure = yield* agentKernel
         .evaluate({ cellId: CellId.make("cell-agent-contained"), source: "42" })
         .pipe(Effect.flip);
-      expect(agentFailure).toHaveProperty("diagnostic.stderrPath", undefined);
+      expect(agentFailure).not.toHaveProperty("diagnostic.stderrPath");
     }).pipe(
       Effect.provide(
         layerCodeKernelFactory({ entryPath: stderrExitEntry, diagnosticsDirectory: directory }),
@@ -193,7 +193,7 @@ scopedLive("runs without a diagnostic file when active kernels fill the global l
           source: 'const processModule = await import("node:process"); processModule.exit(17)',
         })
         .pipe(Effect.flip);
-      expect(failure).toHaveProperty("diagnostic.stderrPath", undefined);
+      expect(failure).not.toHaveProperty("diagnostic.stderrPath");
     }).pipe(
       Effect.provide(
         layerCodeKernelFactory({
@@ -259,7 +259,7 @@ scopedLive("allows the in-memory stderr tail to be disabled", () =>
     const failure = yield* kernel
       .evaluate({ cellId: CellId.make("cell-without-tail"), source: "42" })
       .pipe(Effect.flip);
-    expect(failure).toHaveProperty("diagnostic.stderrTail", undefined);
+    expect(failure).not.toHaveProperty("diagnostic.stderrTail");
   }).pipe(
     Effect.provide(layerCodeKernelFactory({ entryPath: stderrExitEntry, stderrTailCharacters: 0 })),
   ),
