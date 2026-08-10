@@ -1,4 +1,13 @@
-import { AgentId, CellId, SessionId, WorkspaceRoot } from "@cvr/loom-domain";
+import {
+  AgentId,
+  CellId,
+  SessionId,
+  WorkflowKey,
+  WorkflowName,
+  WorkflowRequestDigest,
+  WorkflowVersion,
+  WorkspaceRoot,
+} from "@cvr/loom-domain";
 import { describe, expect, it } from "effect-bun-test";
 import { Effect, Exit, Schema } from "effect";
 import {
@@ -10,6 +19,7 @@ import {
   EvaluateCellRequest,
   HandshakeRequest,
   LoomRpcs,
+  WorkflowIdentityConflictError,
 } from "../src/index.js";
 
 describe("Loom RPC protocol", () => {
@@ -119,6 +129,30 @@ describe("Code Kernel diagnostics", () => {
       const decoded = yield* Schema.decodeEffect(codec)(encoded);
 
       expect(decoded.diagnostic).toEqual(diagnostic);
+    }),
+  );
+});
+
+describe("Workflow protocol", () => {
+  it.effect("round-trips a Workflow identity conflict", () =>
+    Effect.gen(function* () {
+      const codec = Schema.fromJsonString(WorkflowIdentityConflictError);
+      const encoded = yield* Schema.encodeEffect(codec)(
+        new WorkflowIdentityConflictError({
+          identity: {
+            sessionId: SessionId.make("session-1"),
+            name: WorkflowName.make("ReviewRepository"),
+            version: WorkflowVersion.make("1"),
+            key: WorkflowKey.make("daily-review"),
+          },
+          acceptedDigest: WorkflowRequestDigest.make("sha256:accepted"),
+          receivedDigest: WorkflowRequestDigest.make("sha256:received"),
+        }),
+      );
+      const decoded = yield* Schema.decodeEffect(codec)(encoded);
+
+      expect(decoded.acceptedDigest).toBe(WorkflowRequestDigest.make("sha256:accepted"));
+      expect(decoded.receivedDigest).toBe(WorkflowRequestDigest.make("sha256:received"));
     }),
   );
 });

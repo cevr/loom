@@ -49,15 +49,19 @@ A job whose lifetime does not belong to its session.
 _Avoid_: Background process, orphan
 
 **Workflow**:
-A reusable definition of durable work.
+A reusable and versioned definition of durable work.
 _Avoid_: Pipeline, recipe
+
+**Workflow Key**:
+A caller-selected key that identifies one Workflow Run within a Session, Workflow name, and Workflow version.
+_Avoid_: Request ID, execution key
 
 **Workflow Run**:
 One durable execution of a workflow.
 _Avoid_: Workflow instance, execution
 
 **Step**:
-A stable and named unit of work inside a workflow run.
+A stable, unique, and named external operation inside a Workflow Run.
 _Avoid_: Stage, action
 
 **Signal**:

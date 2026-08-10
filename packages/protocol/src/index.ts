@@ -26,4 +26,5 @@ export {
   ProtocolVersion,
 } from "./protocol-version.js";
 export { ResetCodeKernel } from "./reset-code-kernel.js";
+export { WorkflowIdentityConflictError } from "./workflow-identity-conflict-error.js";
 export { WorkspaceMismatchError } from "./workspace-mismatch-error.js";

@@ -28,6 +28,32 @@ export type JobId = typeof JobId.Type;
 export const WorkflowRunId = identifier("@cvr/loom/WorkflowRunId");
 export type WorkflowRunId = typeof WorkflowRunId.Type;
 
+export const WorkflowName = identifier("@cvr/loom/WorkflowName");
+export type WorkflowName = typeof WorkflowName.Type;
+
+export const WorkflowVersion = identifier("@cvr/loom/WorkflowVersion");
+export type WorkflowVersion = typeof WorkflowVersion.Type;
+
+export const WorkflowKey = identifier("@cvr/loom/WorkflowKey");
+export type WorkflowKey = typeof WorkflowKey.Type;
+
+export const WorkflowCapability = identifier("@cvr/loom/WorkflowCapability");
+export type WorkflowCapability = typeof WorkflowCapability.Type;
+
+export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
+export type WorkflowSignalName = typeof WorkflowSignalName.Type;
+
+export const WorkflowRequestDigest = identifier("@cvr/loom/WorkflowRequestDigest");
+export type WorkflowRequestDigest = typeof WorkflowRequestDigest.Type;
+
+export const WorkflowIdentity = Schema.Struct({
+  sessionId: SessionId,
+  name: WorkflowName,
+  version: WorkflowVersion,
+  key: WorkflowKey,
+});
+export type WorkflowIdentity = typeof WorkflowIdentity.Type;
+
 export const ArtifactId = identifier("@cvr/loom/ArtifactId");
 export type ArtifactId = typeof ArtifactId.Type;
 
@@ -36,6 +62,52 @@ export const AgentOwner = Schema.Struct({
   agentId: AgentId,
 });
 export type AgentOwner = typeof AgentOwner.Type;
+
+export const AgentParent = Schema.TaggedUnion({
+  Session: {
+    sessionId: SessionId,
+  },
+  Agent: {
+    sessionId: SessionId,
+    agentId: AgentId,
+  },
+  WorkflowRun: {
+    sessionId: SessionId,
+    workflowRunId: WorkflowRunId,
+  },
+});
+export type AgentParent = typeof AgentParent.Type;
+
+const positiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
+
+export const WorkflowBudget = Schema.Struct({
+  maxSteps: positiveInteger,
+  maxAgentRuns: positiveInteger,
+  maxParallelism: positiveInteger,
+  maxInlineStepResultBytes: positiveInteger,
+  maxTokens: Schema.NullOr(positiveInteger),
+  maxDurationMillis: Schema.NullOr(positiveInteger),
+});
+export type WorkflowBudget = typeof WorkflowBudget.Type;
+
+export const WorkflowDefinition = Schema.Struct({
+  name: WorkflowName,
+  version: WorkflowVersion,
+  interpreterVersion: positiveInteger,
+  source: Schema.NonEmptyString,
+  capabilities: Schema.Array(WorkflowCapability),
+  signals: Schema.Array(WorkflowSignalName),
+});
+export type WorkflowDefinition = typeof WorkflowDefinition.Type;
+
+export const WorkflowRunRequest = Schema.Struct({
+  sessionId: SessionId,
+  key: WorkflowKey,
+  definition: WorkflowDefinition,
+  input: Schema.Json,
+  budget: WorkflowBudget,
+});
+export type WorkflowRunRequest = typeof WorkflowRunRequest.Type;
 
 export const ActorSubject = Schema.TaggedUnion({
   Agent: {
@@ -74,8 +146,6 @@ export const ActorStateProjection = Schema.Struct({
   revision: Schema.Natural,
 });
 export type ActorStateProjection = typeof ActorStateProjection.Type;
-
-const positiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 
 export const ProcessIdentity = Schema.Struct({
   pid: positiveInteger,

@@ -127,12 +127,19 @@ See [Job process recovery](./job-recovery.md).
 ### Workflow Run
 
 A Workflow Run does not use mutable Code Kernel state.
-It uses stored source, input, source hash, version, and stable Step IDs.
+It uses one immutable accepted request.
+The request stores exact source, JSON input, version, capabilities, signals, budgets, and interpreter version.
+The daemon derives one digest from the complete request.
+It does not store a second source hash.
 Each external Step becomes an Effect Workflow Activity.
-Every external Step requires an explicit stable key.
+Every external Step requires an explicit and unique Step ID.
 
 Workflow source receives a declared capability set.
 It does not receive unrestricted Bun APIs.
+It does not receive wall-clock time or random values.
+Each replay pass uses a fresh VM context.
+Suspension discards the current VM context.
+See [Dynamic workflow replay](./adr/0009-use-effect-replay-for-dynamic-workflows.md).
 
 ## Storage ownership
 
@@ -142,6 +149,7 @@ One store owns each fact.
 | ------------------------------- | ----------------------------- |
 | Actor mailboxes and replies     | SQLite through Effect Cluster |
 | Workflow state and replay       | SQLite through Effect Cluster |
+| Accepted Workflow Run digest    | Loom SQLite store             |
 | Session transcript              | Client transcript store       |
 | Cell journal                    | Loom SQLite store             |
 | Job state and process identity  | Loom SQLite store             |
@@ -240,4 +248,9 @@ Create each package only when its first working boundary exists.
 - Two Cells for one Agent must share Code Kernel bindings.
 - A Workflow Run must resume after a full daemon restart.
 - A completed Step must not run again during workflow replay.
-- Two callers with one workflow key must share one Workflow Run.
+- Two callers in one Session with one Workflow name, version, and key must share one Workflow Run.
+- The same Workflow identity with a different accepted request must fail before execution.
+- A duplicate Step ID must stop a Workflow Run.
+- A daemon restart during compensation must not repeat a completed compensation.
+- A failed compensation must wait for an operator decision before it continues.
+- Workflow suspension must discard the current VM pass.
