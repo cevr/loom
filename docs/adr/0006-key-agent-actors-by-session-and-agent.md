@@ -11,11 +11,11 @@ The activation Scope closes the Code Kernel process during passivation.
 
 Loom uses the Effect Cluster idle policy for passivation.
 The first local runtime uses `SingleRunner` with in-memory runner storage.
-SQLite stores cluster messages and Cell journal entries.
+SQLite stores cluster messages and Cell Ledger entries.
 
 Cell operations do not use persisted entity messages.
 Loom does not replay arbitrary Cell effects.
-The Cell journal records source before evaluation.
+The Cell Ledger records source before evaluation.
 
 This design prevents two Agents from sharing mutable Code Kernel bindings.
 It also keeps the actor model compatible with a future multi-runner runtime.

@@ -20,14 +20,16 @@ The accepted Workflow Run request contains these facts:
 - Resolved budgets.
 
 The Effect workflow payload stores the accepted request.
-The Effect idempotency key encodes the Session ID, Workflow name, Workflow version, and Workflow Key as a JSON tuple.
-Effect hashes this value to produce the Workflow Run ID.
-Two callers share one Workflow Run only when these identity facts match.
+The daemon mints the Workflow Run ID when it accepts a new identity tuple.
+The Effect workflow payload contains that ID.
+The Effect workflow definition uses that ID as its entity ID.
+Two callers share one Workflow Run only while one accepted identity row exists.
+A new use of the identity tuple after retirement receives a new Workflow Run ID.
 
-The daemon derives one canonical SHA-256 digest from the complete accepted request.
+The daemon derives one canonical SHA-256 digest from the caller-provided request.
 The digest includes the source, input, capabilities, signals, budgets, and interpreter version.
 The daemon sorts and deduplicates capability names and signal names before it computes the digest.
-The daemon uses canonical JSON with sorted object keys before it computes the digest.
+The daemon uses `effect-encore` `canonicalJsonSha256` to sort object keys and compute the digest.
 The request does not store a second source hash.
 
 The Loom SQLite store owns the accepted digest for each workflow identity.
@@ -36,7 +38,7 @@ The accepted request, signal declarations, and Effect workflow send use one stor
 This transaction serializes a new claim against terminal retirement for the same identity.
 The same identity and digest attach to the existing Workflow Run.
 The same identity and a different digest fail with `WorkflowIdentityConflictError`.
-The workflow body cannot make this check because Effect does not deliver a duplicate payload to a completed run.
+A `Retiring` acceptance returns a typed retryable error.
 
 ## Replay contract
 
@@ -88,6 +90,7 @@ It stores the process identity before it marks the Job as Running.
 It releases the input gate and process only after durable launch setup succeeds.
 Interruption closes the gate and stops the process before it can run the command.
 Daemon startup changes every stale Starting claim to Failed before it accepts work.
+A Stopping claim without Process Identity becomes Cancelled because the launch gate prevented command start.
 Artifact identity also derives from the Activity key.
 
 Effect owns parallel fibers, durable races, and concurrency primitives.
@@ -97,11 +100,11 @@ Loom does not add a promise limiter.
 ## Compensation
 
 Effect owns compensation registration and reverse ordering.
-Effect Encore must wrap each external compensation in a separate Activity named from its Step ID.
+Effect Encore wraps each external compensation in a separate Activity named from its Step ID.
 A completed compensation does not run again after recovery.
-Effect Encore must catch a compensation Activity defect and wait on a named Durable Deferred.
+Effect Encore catches a compensation Activity defect and waits on a named Durable Deferred.
 An operator resolves that deferred to retry or stop the compensation.
-Loom does not start workflow runtime work until this Effect Encore contract exists and passes a restart test.
+Loom uses this existing Effect Encore compensation contract.
 
 ## Signals
 
@@ -125,24 +128,30 @@ The lease lets clients read a terminal result before cleanup.
 Failure and defect remain visible as failed actor state during the lease.
 Success and interruption remain available for inspection during the lease.
 
-After the lease, Loom removes the Effect Workflow messages, Durable Clock messages, signal declarations, and accepted request in one SQLite transaction.
+The acceptance row stores one fixed retirement deadline after the first terminal observation.
+After the deadline, Loom marks the acceptance as `Retiring` in one committed transaction.
+A new acceptance cannot attach to the retiring Workflow Run.
+Daemon startup resumes an interrupted retirement.
+Loom then stops active child Agents.
+Loom then removes the Effect Workflow messages, Durable Clock messages, signal declarations, child Agent rows, and accepted request in one SQLite transaction.
 The transaction makes cleanup safe to retry after a daemon restart.
 It also prevents a new accepted request from sharing an identity with old Effect Cluster state.
 Suspended and compensating runs are not terminal retention candidates.
 
 Daemon startup reads accepted runs once.
-The daemon restart ends the prior public state lease.
-It removes old successful and interrupted runs before it starts state watchers.
-It starts watchers for active, suspended, compensating, failed, and defected runs.
-A restarted failed or defected run receives a new full state lease because Loom does not store lease timestamps.
+It removes terminal runs only when their stored retirement deadline has passed.
+It starts watchers for the remaining runs.
+A daemon restart does not extend a Workflow State Lease.
 Audit records and artifacts have separate retention owners.
 
 ## Child Agents
 
 A child Agent records its Workflow Run parent as a durable fact.
 The Agent belongs to the same Session as the Workflow Run.
-Workflow terminal cleanup stops attached child Agents through idempotent compensation Activities.
+Compensation stops child Agents when the Workflow reverses their Steps.
+Terminal retirement stops any child Agent that remains active after success.
 Session closure can also find these Agents from their durable parent facts.
+Session closure interrupts active Workflow Runs before it stops their attached Jobs and child Agents.
 The Agent store stops all active child Agents for one Session with one idempotent operation.
 The daemon exposes that operation through the typed Session close RPC.
 The Pi extension calls it when Pi closes or replaces a Session.

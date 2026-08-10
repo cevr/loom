@@ -12,6 +12,10 @@ _Avoid_: Thread, chat
 A directory tree that owns one Loom daemon, one local connection endpoint, and one orchestration store.
 _Avoid_: Project, repository
 
+**Orchestration Store**:
+The Workspace SQLite database that owns durable local coordination facts.
+_Avoid_: State database, metadata database
+
 **Daemon**:
 The long-lived Loom process that owns one workspace runtime.
 _Avoid_: Server, backend
@@ -36,6 +40,18 @@ _Avoid_: REPL, sandbox, kernel
 One source submission to a code kernel.
 _Avoid_: Snippet, eval
 
+**Cell Ledger**:
+The durable record that owns one Cell request and its outcome.
+_Avoid_: Cell journal, evaluation log
+
+**Process Identity**:
+The PID, process group ID, and process start value that identify one operating-system process without trusting a reused PID.
+_Avoid_: PID, process handle
+
+**Actor State Hub**:
+The in-memory projection that publishes the latest Agent, Job, and Workflow Run state for Plugins.
+_Avoid_: Actor registry, recovery store
+
 **Job**:
 An execution that Loom tracks independently from the request that started it.
 _Avoid_: Command, process, task
@@ -47,6 +63,10 @@ _Avoid_: Timeout
 **Detached Job**:
 A job whose lifetime does not belong to its session.
 _Avoid_: Background process, orphan
+
+**Lost Job**:
+A terminal Job whose stored Process Identity cannot prove a matching live process or terminal result.
+_Avoid_: Missing job, orphan job
 
 **Workflow**:
 A reusable and versioned definition of durable work.
@@ -63,6 +83,10 @@ _Avoid_: Workflow instance, execution
 **Workflow State Lease**:
 The limited period in which Loom keeps a terminal Workflow Run available for inspection.
 _Avoid_: Cleanup delay, history window
+
+**Retiring Workflow Run**:
+A terminal Workflow Run that rejects new attachment while Loom stops owned work and removes recovery state.
+_Avoid_: Deleting workflow, cleaning workflow
 
 **Step**:
 A stable, unique, and named external operation inside a Workflow Run.

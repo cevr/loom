@@ -51,10 +51,10 @@ The daemon stays alive when a Code Kernel fails.
 The daemon does not replay old Cells into the replacement process.
 Replay can repeat file, network, and process effects.
 
-The daemon owns the Cell journal.
-The child process does not own the journal.
+The daemon owns the Cell Ledger.
+The child process does not own the ledger.
 The daemon stores Cell source before evaluation.
-The journal survives process replacement.
+The Cell Ledger survives process replacement.
 Mutable bindings do not survive process replacement.
 
 The process boundary is a recovery boundary.

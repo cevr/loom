@@ -99,9 +99,12 @@ Closing an Agent entity Scope closes its Code Kernel process.
 See [Code Kernel recovery](./code-kernel-recovery.md).
 See [Code Kernel limits](./adr/0007-bound-code-kernel-failures-and-diagnostics.md).
 
-Loom stores the cell journal.
+Loom stores the Cell Ledger.
 Loom does not replay cells automatically after a daemon restart.
 Automatic replay could repeat file, network, and process effects.
+Agent operations use live Effect entity messages.
+They do not use persisted mailbox redelivery.
+The Cell Ledger owns Cell retry and recovery facts.
 
 ### Job
 
@@ -133,6 +136,7 @@ It uses one immutable accepted request.
 The request stores exact source, JSON input, version, capabilities, signals, budgets, and interpreter version.
 The daemon derives one digest from the complete request.
 It does not store a second source hash.
+The daemon mints a Workflow Run ID when it accepts a new identity tuple.
 The accepted request, signal declarations, and workflow send commit in one storage transaction.
 Each external Step becomes an Effect Workflow Activity.
 Every external Step requires an explicit and unique Step ID.
@@ -147,31 +151,36 @@ See [Dynamic workflow replay](./adr/0009-use-effect-replay-for-dynamic-workflows
 The orchestrator sets one Workflow State Lease.
 The default lease is five minutes.
 Success, interruption, failure, and defect remain public during this lease.
-Loom then removes the accepted request, signal declarations, and Effect Cluster messages in one SQLite transaction.
+The acceptance row stores the fixed retirement deadline.
+Retirement marks the acceptance as `Retiring` before it stops child Agents.
+New acceptance cannot attach to a `Retiring` run.
+Loom then removes the accepted request, signal declarations, child Agent rows, and Effect Cluster messages.
+The durable record removal uses one SQLite transaction.
 Suspended and compensating runs remain recoverable.
-Daemon startup removes old successful and interrupted runs before it starts recovery watchers.
-The restart ends their prior public state lease.
+Daemon startup removes terminal runs only after their stored retirement deadline.
 Audit records and artifacts do not belong to startup recovery.
 
 ## Storage ownership
 
 One store owns each fact.
 
-| Fact                            | Owner                         |
-| ------------------------------- | ----------------------------- |
-| Actor mailboxes and replies     | SQLite through Effect Cluster |
-| Workflow state and replay       | SQLite through Effect Cluster |
-| Accepted Workflow Run digest    | Loom SQLite store             |
-| Session transcript              | Client transcript store       |
-| Cell journal                    | Loom SQLite store             |
-| Job state and process identity  | Loom SQLite store             |
-| Plugin state                    | Loom SQLite store             |
-| Complete job output             | Log files                     |
-| Large cell and workflow results | Artifact files                |
+| Fact                                        | Owner                         |
+| ------------------------------------------- | ----------------------------- |
+| Persisted actor mailboxes and replies       | SQLite through Effect Cluster |
+| Workflow state and replay                   | SQLite through Effect Cluster |
+| Workflow acceptance and retirement deadline | Loom SQLite store             |
+| Session transcript                          | Client transcript store       |
+| Cell Ledger                                 | Loom SQLite store             |
+| Job state and process identity              | Loom SQLite store             |
+| Plugin state                                | Loom SQLite store             |
+| Complete job output                         | Log files                     |
+| Large cell and workflow results             | Artifact files                |
 
 Do not copy job or workflow state into JSONL.
 JSONL is a transport or transcript format.
 It is not the orchestration source of truth.
+See [Orchestration storage and restart recovery](./orchestration-recovery.md).
+See [Single ownership of orchestration facts](./adr/0011-assign-one-owner-to-each-orchestration-fact.md).
 
 ## Transport
 
@@ -256,8 +265,12 @@ See [the first release boundary](./first-release.md) for the exact beta scope an
 - A job must keep writing output after its caller stops waiting.
 - A daemon restart must reconnect to a safe background job.
 - A bad Code Kernel must not stop the daemon.
-- A Code Kernel restart must keep its cell journal without automatic replay.
+- A Code Kernel restart must keep its Cell Ledger without automatic replay.
 - Two Agents must not share Code Kernel bindings.
+- A transient Cell retry must not repeat a terminal Cell.
+- A daemon restart must interrupt an in-flight Cell without replay.
+- A daemon restart must terminate an exact-match orphan Code Kernel process.
+- A Workflow Artifact must appear only after its complete file is durable.
 - Two Cells for one Agent must share Code Kernel bindings.
 - A Workflow Run must resume after a full daemon restart.
 - A completed Step must not run again during workflow replay.

@@ -42,7 +42,7 @@ The first beta does not expose server-side Cell cancellation.
 
 `loom_cell_reset` replaces the Agent's Code Kernel.
 It clears all live bindings.
-It does not delete the Cell journal.
+It does not delete the Cell Ledger.
 
 ## Workflow tools
 

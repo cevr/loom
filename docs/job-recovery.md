@@ -5,6 +5,10 @@ Loom stores every Job in the `jobs` table.
 The Job record contains its lifecycle state.
 It also contains its command, Session owner, attachment mode, output paths, result path, and process identity.
 
+The Job states are `Accepted`, `Starting`, `Running`, `Stopping`, `Succeeded`, `Failed`, `Cancelled`, and `Lost`.
+`Succeeded`, `Failed`, `Cancelled`, and `Lost` are terminal.
+An await operation returns a typed terminal outcome for `Lost`.
+
 The process identity contains the PID, process group ID, and process start value.
 The start value protects against PID reuse.
 Loom does not adopt or signal a process when an identity field differs.
@@ -31,6 +35,7 @@ It then renames the file to the durable result path.
 | ----------------------- | --------------------------------------- | ---------------------------------------------------------- |
 | `Accepted`              | No launch owns the Job.                 | Loom starts the Job.                                       |
 | `Starting`              | The launch did not commit.              | Loom records `Failed`.                                     |
+| `Stopping`              | No Process Identity was committed.      | Loom records `Cancelled`. The command did not start.       |
 | `Running`               | The full process identity matches.      | Loom monitors the process.                                 |
 | `Stopping`              | The full process identity matches.      | Loom resumes cancellation.                                 |
 | `Running`               | The PID is absent and a result exists.  | Loom records `Succeeded` or `Failed`.                      |
@@ -38,6 +43,9 @@ It then renames the file to the durable result path.
 | `Stopping`              | The PID is absent.                      | Loom records `Cancelled`.                                  |
 | `Running` or `Stopping` | The identity differs.                   | Loom records `Lost`. It does not signal the process.       |
 | `Running` or `Stopping` | Inspection fails.                       | Loom leaves the Job active. A later restart can try again. |
+
+An `Accepted` Job is durable authorization to run.
+No earlier command can have external effects because Process Identity commit and the launch gate have not completed.
 
 The daemon Scope owns one `FiberMap` of Job supervisors.
 A live process waits in this map through its Effect child-process handle.
