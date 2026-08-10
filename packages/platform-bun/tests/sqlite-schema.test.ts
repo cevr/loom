@@ -18,7 +18,7 @@ const inspectDatabase = Effect.gen(function* () {
       SELECT name
       FROM sqlite_schema
       WHERE type = 'table'
-        AND name IN ('cell_journal', 'job_processes', 'jobs', 'workflow_run_acceptance')
+        AND name IN ('cell_journal', 'jobs', 'workflow_run_acceptance')
       ORDER BY name
     `,
   });
@@ -92,7 +92,7 @@ scopedLive("creates the Loom schema and preserves existing data", () =>
     }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped);
 
     const expected = {
-      tables: ["cell_journal", "job_processes", "jobs", "workflow_run_acceptance"],
+      tables: ["cell_journal", "jobs", "workflow_run_acceptance"],
       cells: [{ source: "const answer = 42" }],
     };
 

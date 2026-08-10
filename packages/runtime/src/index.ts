@@ -21,8 +21,6 @@ export {
   type CodeKernelShape,
   type EvaluateCellInput,
 } from "./internal/code-kernel.js";
-export { JobProcessStoreError } from "./internal/job-process-store-error.js";
-export { JobProcessStore, type JobProcessStoreShape } from "./internal/job-process-store.js";
 export { JobStoreError } from "./internal/job-store-error.js";
 export { JobStore, type JobStoreShape } from "./internal/job-store.js";
 export { JobRuntimeError } from "./internal/job-runtime-error.js";
@@ -79,7 +77,6 @@ export {
   WorkflowChildAgentStore,
   type WorkflowChildAgentStoreShape,
 } from "./internal/workflow-child-agent-store.js";
-export { WorkflowJobStore, type WorkflowJobStoreShape } from "./internal/workflow-job-store.js";
 export {
   WorkflowArtifactStore,
   type WorkflowArtifactStoreShape,
@@ -115,13 +112,6 @@ export {
   workflowIdentityFromRequest,
 } from "./internal/workflow-identity.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";
-export {
-  JobReconciler,
-  JobRecoveryResult,
-  type JobReconcilerShape,
-  layerJobReconciler,
-  makeJobReconciler,
-} from "./internal/job-reconciler.js";
 export {
   ProcessInspector,
   ProcessObservation,

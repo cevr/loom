@@ -5,6 +5,7 @@ import type { ProcessControllerError } from "./process-controller-error.js";
 export type ProcessSignal = "SIGTERM" | "SIGKILL";
 
 export interface ProcessControllerShape {
+  readonly isGroupAlive: (identity: ProcessIdentity) => Effect.Effect<boolean>;
   readonly signalGroup: (
     identity: ProcessIdentity,
     signal: ProcessSignal,

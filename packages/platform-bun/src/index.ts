@@ -29,12 +29,12 @@ export {
   layerBunProcessController,
   makeBunProcessController,
 } from "./internal/bun-process-controller.js";
-export {
-  layerSqliteJobProcessStore,
-  makeSqliteJobProcessStore,
-} from "./internal/sqlite-job-process-store.js";
 export { layerSqliteJobStore, makeSqliteJobStore } from "./internal/sqlite-job-store.js";
-export { layerJobRecovery } from "./internal/job-recovery-layer.js";
+export {
+  type BunJobRuntimeConfig,
+  layerBunJobRuntime,
+  makeBunJobRuntime,
+} from "./internal/bun-job-runtime.js";
 export { layerSqliteCellJournal, makeSqliteCellJournal } from "./internal/sqlite-cell-journal.js";
 export { type LoomSqliteConfig, layerLoomSqlite } from "./internal/loom-sqlite.js";
 export {
@@ -53,10 +53,6 @@ export {
   layerSqliteWorkflowChildAgentStore,
   makeSqliteWorkflowChildAgentStore,
 } from "./internal/sqlite-workflow-child-agent-store.js";
-export {
-  layerSqliteWorkflowJobStore,
-  makeSqliteWorkflowJobStore,
-} from "./internal/sqlite-workflow-job-store.js";
 export {
   interpretWorkflow,
   type WorkflowInterpreterHost,

@@ -114,18 +114,6 @@ export const WorkflowChildAgent = Schema.Struct({
 });
 export type WorkflowChildAgent = typeof WorkflowChildAgent.Type;
 
-export const WorkflowJobStatus = Schema.Literals(["Accepted", "Starting", "Running", "Failed"]);
-export type WorkflowJobStatus = typeof WorkflowJobStatus.Type;
-
-export const WorkflowJob = Schema.Struct({
-  activityKey: WorkflowActivityKey,
-  jobId: JobId,
-  sessionId: SessionId,
-  workflowRunId: WorkflowRunId,
-  status: WorkflowJobStatus,
-});
-export type WorkflowJob = typeof WorkflowJob.Type;
-
 const positiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 
 export const WorkflowBudget = Schema.Struct({
@@ -278,23 +266,3 @@ export const JobAddress = Schema.Struct({
   jobId: JobId,
 });
 export type JobAddress = typeof JobAddress.Type;
-
-export const JobProcessStatus = Schema.Literals([
-  "Running",
-  "Recovered",
-  "Exited",
-  "ExitedWhileOffline",
-  "IdentityMismatch",
-]);
-export type JobProcessStatus = typeof JobProcessStatus.Type;
-
-export const JobProcessRecord = Schema.Struct({
-  jobId: JobId,
-  sessionId: SessionId,
-  identity: ProcessIdentity,
-  stdoutPath: Schema.NonEmptyString,
-  stderrPath: Schema.NonEmptyString,
-  status: JobProcessStatus,
-  recoveryDetail: Schema.OptionFromNullOr(Schema.String),
-});
-export type JobProcessRecord = typeof JobProcessRecord.Type;

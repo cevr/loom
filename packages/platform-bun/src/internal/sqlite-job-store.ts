@@ -100,6 +100,7 @@ const findAll = <Request extends Schema.Constraint>(
 };
 
 const makeCreate = (sql: SqlClient.SqlClient) => {
+  const encodeAttached = Schema.encodeEffect(Schema.BooleanFromBit);
   const encode = Schema.encodeEffect(
     JobSubmission.pipe(
       Schema.encodeKeys({
@@ -113,10 +114,11 @@ const makeCreate = (sql: SqlClient.SqlClient) => {
   );
   return Effect.fn("SqliteJobStore.create")(function* (job: JobSubmission) {
     const submission = yield* encode(job).pipe(Effect.orDie);
+    const attached = yield* encodeAttached(job.attached).pipe(Effect.orDie);
     const result = yield* sql`
       INSERT INTO jobs ${sql.insert({
         ...submission,
-        attached: Number(job.attached),
+        attached,
         status: "Accepted",
       })}
       ON CONFLICT(job_id) DO NOTHING

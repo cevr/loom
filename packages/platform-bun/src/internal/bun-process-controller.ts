@@ -7,6 +7,10 @@ import {
 import { Effect, Layer } from "effect";
 
 export const makeBunProcessController: ProcessControllerShape = ProcessController.of({
+  isGroupAlive: (identity) =>
+    Effect.try(() => process.kill(-identity.processGroupId, 0)).pipe(
+      Effect.match({ onFailure: () => false, onSuccess: () => true }),
+    ),
   signalGroup: (identity, signal) =>
     Effect.try({
       try: () => process.kill(-identity.processGroupId, signal),

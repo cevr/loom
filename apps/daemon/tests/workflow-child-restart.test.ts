@@ -12,16 +12,14 @@ import {
   WorkspaceRoot,
 } from "@cvr/loom-domain";
 import {
-  layerBunProcessInspector,
   layerLoomSqlite,
-  layerSqliteJobProcessStore,
+  layerSqliteJobStore,
   layerSqliteWorkflowChildAgentStore,
-  layerSqliteWorkflowJobStore,
   layerWorkflowCapabilities,
   makeBunProcessInspector,
 } from "@cvr/loom-platform-bun";
 import {
-  JobProcessStore,
+  JobStore,
   ProcessObservation,
   WorkflowAgentHandle,
   WorkflowChildAgentStore,
@@ -73,12 +71,7 @@ const ownershipRequest = (command: string) =>
 
 const ownershipCapabilities = (workspaceRoot: WorkspaceRoot) =>
   layerWorkflowCapabilities({ workspaceRoot }).pipe(
-    Layer.provide([
-      layerSqliteWorkflowChildAgentStore,
-      layerSqliteWorkflowJobStore,
-      layerSqliteJobProcessStore,
-      layerBunProcessInspector,
-    ]),
+    Layer.provide(layerSqliteWorkflowChildAgentStore),
   );
 
 const ownershipStorage = (filename: string) => {
@@ -86,7 +79,7 @@ const ownershipStorage = (filename: string) => {
   return Layer.mergeAll(
     database,
     layerSqliteWorkflowChildAgentStore.pipe(Layer.provide(database)),
-    layerSqliteJobProcessStore.pipe(Layer.provide(database)),
+    layerSqliteJobStore.pipe(Layer.provide(database)),
   );
 };
 
@@ -99,10 +92,17 @@ const requireHead = <A>(values: ReadonlyArray<A>, label: string) =>
 const readOwnership = (filename: string, sessionId: SessionId) =>
   Effect.gen(function* () {
     const agents = yield* WorkflowChildAgentStore;
-    const processes = yield* JobProcessStore;
+    const jobs = yield* JobStore;
     const agent = yield* requireHead(yield* agents.listActiveBySession(sessionId), "child Agent");
-    const process = yield* requireHead(yield* processes.listRecoverable, "Job process");
-    return { agent, process };
+    const running = yield* jobs.listByStatus(["Running", "Stopping"]).pipe(
+      Effect.repeat({
+        while: (records) => records.length === 0,
+        schedule: Schedule.spaced("10 millis"),
+      }),
+      Effect.timeout("5 seconds"),
+    );
+    const job = yield* requireHead(running, "Job process");
+    return { agent, job };
   }).pipe(Effect.provide(ownershipStorage(filename)));
 
 const readActiveAgents = (filename: string, sessionId: SessionId) =>
@@ -111,18 +111,15 @@ const readActiveAgents = (filename: string, sessionId: SessionId) =>
     Effect.provide(ownershipStorage(filename)),
   );
 
-const readRecoverableJobs = (filename: string) =>
-  JobProcessStore.pipe(
-    Effect.flatMap((processes) => processes.listRecoverable),
+const readActiveJobs = (filename: string) =>
+  JobStore.pipe(
+    Effect.flatMap((jobs) => jobs.listByStatus(["Accepted", "Starting", "Running", "Stopping"])),
     Effect.provide(ownershipStorage(filename)),
   );
 
-const waitForNoRecoverableJobs = (filename: string) =>
-  readRecoverableJobs(filename).pipe(
-    Effect.repeat({
-      while: (processes) => processes.length > 0,
-      schedule: Schedule.spaced("10 millis"),
-    }),
+const waitForNoActiveJobs = (filename: string) =>
+  readActiveJobs(filename).pipe(
+    Effect.repeat({ while: (jobs) => jobs.length > 0, schedule: Schedule.spaced("10 millis") }),
     Effect.timeout("5 seconds"),
   );
 
@@ -184,19 +181,20 @@ scopedLive("reconciles Workflow child ownership through a full daemon restart", 
     yield* withClient(config.workspaceRoot, config.socketPath, (client) => client.handshake);
     const after = yield* readOwnership(config.databasePath, request.sessionId);
     expect(after.agent).toEqual(before.agent);
-    expect(after.process.identity).toEqual(before.process.identity);
-    expect(after.process.status).toBe("Recovered");
+    expect(after.job.identity).toEqual(before.job.identity);
+    expect(after.job.status).toBe("Running");
 
     const result = yield* completeWorkflow(config, request, address);
     expect(result.agent.agentId).toBe(after.agent.agentId);
-    expect(result.job.jobId).toBe(after.process.jobId);
+    expect(result.job.jobId).toBe(after.job.jobId);
     yield* withClient(config.workspaceRoot, config.socketPath, (client) =>
       client.closeSession(request.sessionId),
     );
     expect(yield* readActiveAgents(config.databasePath, request.sessionId)).toEqual([]);
     yield* fs.writeFileString(releasePath, "release");
-    expect(yield* waitForProcessExit(after.process.identity.pid)).toHaveProperty("_tag", "Missing");
-    expect(yield* waitForNoRecoverableJobs(config.databasePath)).toEqual([]);
+    const identity = Option.getOrThrow(after.job.identity);
+    expect(yield* waitForProcessExit(identity.pid)).toHaveProperty("_tag", "Missing");
+    expect(yield* waitForNoActiveJobs(config.databasePath)).toEqual([]);
     yield* Fiber.interrupt(secondDaemon);
   }),
 );

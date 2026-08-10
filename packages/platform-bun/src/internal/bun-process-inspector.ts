@@ -11,22 +11,19 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 const processLine = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/u;
 const decodeIdentity = Schema.decodeUnknownEffect(ProcessIdentity);
 
-const parseProcessTable = Effect.fn("BunProcessInspector.parseProcessTable")(function* (
+const parseProcess = Effect.fn("BunProcessInspector.parseProcess")(function* (
   output: string,
   pid: number,
 ) {
-  for (const line of output.split("\n")) {
-    const match = processLine.exec(line);
-    if (match?.[1] !== String(pid)) continue;
-    return Option.some(
-      yield* decodeIdentity({
-        pid,
-        processGroupId: Number(match[2]),
-        processStartId: match[3],
-      }),
-    );
-  }
-  return Option.none<ProcessIdentity>();
+  const match = processLine.exec(output);
+  if (match?.[1] !== String(pid)) return Option.none<ProcessIdentity>();
+  return Option.some(
+    yield* decodeIdentity({
+      pid,
+      processGroupId: Number(match[2]),
+      processStartId: match[3],
+    }),
+  );
 });
 
 export const makeBunProcessInspector: Effect.Effect<
@@ -35,16 +32,16 @@ export const makeBunProcessInspector: Effect.Effect<
   ChildProcessSpawner.ChildProcessSpawner
 > = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const command = ChildProcess.make("ps", ["-axo", "pid=,pgid=,lstart="], {
-    env: { LC_ALL: "C" },
-    extendEnv: true,
-    detached: false,
-  });
-
   const inspect = Effect.fn("BunProcessInspector.inspect")(
     function* (pid: number) {
-      const output = yield* spawner.string(command);
-      const identity = yield* parseProcessTable(output, pid);
+      const output = yield* spawner.string(
+        ChildProcess.make("ps", ["-o", "pid=,pgid=,lstart=", "-p", String(pid)], {
+          env: { LC_ALL: "C" },
+          extendEnv: true,
+          detached: false,
+        }),
+      );
+      const identity = yield* parseProcess(output, pid);
       return Option.match(identity, {
         onNone: () => ProcessObservation.Missing({ pid }),
         onSome: (foundIdentity) => ProcessObservation.Found({ identity: foundIdentity }),

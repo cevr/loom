@@ -2,26 +2,32 @@ import { CloseSessionError, LoomRpcs, WorkflowRunHandle } from "@cvr/loom-protoc
 import {
   AgentActor,
   ConnectionHandshake,
+  JobRuntime,
   WorkflowChildAgentStore,
   WorkflowRuntime,
 } from "@cvr/loom-runtime";
-import { Effect } from "effect";
+import { Effect, Inspectable } from "effect";
 
 export const layerLoomRpcHandlers = LoomRpcs.toLayer(
   Effect.gen(function* () {
     const connection = yield* ConnectionHandshake;
     const workflows = yield* WorkflowRuntime;
     const childAgents = yield* WorkflowChildAgentStore;
+    const jobs = yield* JobRuntime;
     return LoomRpcs.of({
       "Connection.Handshake": connection.handshake,
       "Session.Close": ({ sessionId }) =>
-        childAgents
-          .stopSession(sessionId)
-          .pipe(
-            Effect.mapError(
-              (error) => new CloseSessionError({ sessionId, message: error.message }),
-            ),
+        Effect.all([childAgents.stopSession(sessionId), jobs.closeSession(sessionId)], {
+          discard: true,
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new CloseSessionError({
+                sessionId,
+                message: Inspectable.toStringUnknown(error),
+              }),
           ),
+        ),
       "CodeKernel.EvaluateCell": AgentActor.EvaluateCell.execute,
       "CodeKernel.Reset": AgentActor.ResetCodeKernel.execute,
       "Workflow.Start": (request) =>

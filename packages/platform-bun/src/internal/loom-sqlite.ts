@@ -14,19 +14,6 @@ const createKernelSchema = Effect.gen(function* () {
     )
   `;
   yield* sql`
-    CREATE TABLE IF NOT EXISTS job_processes (
-      job_id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      pid INTEGER NOT NULL,
-      process_group_id INTEGER NOT NULL,
-      process_start_id TEXT NOT NULL,
-      stdout_path TEXT NOT NULL,
-      stderr_path TEXT NOT NULL,
-      status TEXT NOT NULL,
-      recovery_detail TEXT
-    )
-  `;
-  yield* sql`
     CREATE TABLE IF NOT EXISTS workflow_run_acceptance (
       session_id TEXT NOT NULL,
       workflow_name TEXT NOT NULL,
@@ -98,15 +85,6 @@ const createCapabilitySchema = Effect.gen(function* () {
   yield* sql`
     CREATE INDEX IF NOT EXISTS workflow_child_agents_session
     ON workflow_child_agents (session_id, status)
-  `;
-  yield* sql`
-    CREATE TABLE IF NOT EXISTS workflow_jobs (
-      activity_key TEXT PRIMARY KEY,
-      job_id TEXT NOT NULL UNIQUE,
-      session_id TEXT NOT NULL,
-      workflow_run_id TEXT NOT NULL,
-      status TEXT NOT NULL
-    )
   `;
 });
 
