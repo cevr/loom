@@ -41,6 +41,15 @@ const jobContext = WorkflowActivityContext.make({
   ...agentContext,
   activityKey: WorkflowActivityKey.make("workflow/job"),
 });
+const nextAgentContext = WorkflowActivityContext.make({
+  ...agentContext,
+  activityKey: WorkflowActivityKey.make("workflow-next/agent"),
+  workflowRunId: WorkflowRunId.make("workflow-2"),
+});
+const nextJobContext = WorkflowActivityContext.make({
+  ...nextAgentContext,
+  activityKey: WorkflowActivityKey.make("workflow-next/job"),
+});
 const agentCall = WorkflowStepCall.make({
   stepId: WorkflowStepId.make("agent-step"),
   capability: WorkflowCapability.make("agent"),
@@ -96,11 +105,15 @@ it.scopedLive.layer(BunServices.layer)("returns stable capability handles", () =
       );
 
       expect(agentResults[0].value).toEqual(agentResults[1].value);
+      const nextAgent = yield* executor.execute(agentCall, nextAgentContext);
+      expect(nextAgent.value).not.toEqual(agentResults[0].value);
       expect(
         yield* Schema.decodeUnknownEffect(WorkflowAgentHandle)(agentResults[0].value),
       ).toBeDefined();
-      expect(yield* agents.listActiveBySession(agentContext.sessionId)).toHaveLength(1);
+      expect(yield* agents.listActiveBySession(agentContext.sessionId)).toHaveLength(2);
       expect(jobResults[0].value).toEqual(jobResults[1].value);
+      const nextJob = yield* executor.execute(jobCall, nextJobContext);
+      expect(nextJob.value).not.toEqual(jobResults[0].value);
 
       const artifactWrite = WorkflowArtifactWrite.make({
         stepId: WorkflowStepId.make("artifact-step"),
@@ -111,6 +124,9 @@ it.scopedLive.layer(BunServices.layer)("returns stable capability handles", () =
         artifacts.store(artifactWrite, agentContext),
       ]);
       expect(artifactResults[0]).toEqual(artifactResults[1]);
+      expect(yield* artifacts.store(artifactWrite, nextAgentContext)).not.toEqual(
+        artifactResults[0],
+      );
 
       const job = yield* Schema.decodeUnknownEffect(WorkflowJobHandle)(jobResults[0].value);
       const stdoutPath = `${directory}/.loom/jobs/${encodeURIComponent(job.jobId)}/stdout.log`;

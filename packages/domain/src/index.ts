@@ -28,6 +28,9 @@ export type JobId = typeof JobId.Type;
 export const WorkflowRunId = identifier("@cvr/loom/WorkflowRunId");
 export type WorkflowRunId = typeof WorkflowRunId.Type;
 
+export const WorkflowIncarnationId = identifier("@cvr/loom/WorkflowIncarnationId");
+export type WorkflowIncarnationId = typeof WorkflowIncarnationId.Type;
+
 export const WorkflowName = identifier("@cvr/loom/WorkflowName");
 export type WorkflowName = typeof WorkflowName.Type;
 
@@ -151,9 +154,15 @@ export const WorkflowRunAddress = Schema.Struct({
 });
 export type WorkflowRunAddress = typeof WorkflowRunAddress.Type;
 
+export const WorkflowRunExecution = Schema.Struct({
+  incarnationId: WorkflowIncarnationId,
+  request: WorkflowRunRequest,
+});
+export type WorkflowRunExecution = typeof WorkflowRunExecution.Type;
+
 export const AcceptedWorkflowRun = Schema.Struct({
+  incarnationId: WorkflowIncarnationId,
   workflowRunId: WorkflowRunId,
-  identity: WorkflowIdentity,
   request: WorkflowRunRequest,
   digest: WorkflowRequestDigest,
 });

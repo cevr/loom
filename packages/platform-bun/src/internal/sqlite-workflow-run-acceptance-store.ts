@@ -1,4 +1,5 @@
 import {
+  WorkflowIncarnationId,
   WorkflowIdentity,
   WorkflowRequestDigest,
   WorkflowRunAddress,
@@ -6,6 +7,7 @@ import {
 } from "@cvr/loom-domain";
 import {
   WorkflowRunAcceptanceError,
+  WorkflowRunClaim,
   WorkflowRunAcceptanceStore,
   type WorkflowRunAcceptanceStoreShape,
 } from "@cvr/loom-runtime";
@@ -15,26 +17,29 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 const Claim = Schema.Struct({
   ...WorkflowIdentity.fields,
   digest: WorkflowRequestDigest,
+  incarnationId: WorkflowIncarnationId,
   workflowRunId: WorkflowRunId,
 });
-
-const DigestRow = Schema.Struct({ digest: WorkflowRequestDigest });
 
 const makeClaim = (sql: SqlClient.SqlClient) =>
   SqlSchema.findOne({
     Request: Claim,
-    Result: DigestRow,
+    Result: WorkflowRunClaim,
     execute: (claim) =>
       sql`
         INSERT INTO workflow_run_acceptance (
-          session_id, workflow_name, workflow_version, workflow_key, workflow_run_id, request_digest
+          session_id, workflow_name, workflow_version, workflow_key,
+          incarnation_id, workflow_run_id, request_digest
         ) VALUES (
           ${claim.sessionId}, ${claim.name}, ${claim.version}, ${claim.key},
-          ${claim.workflowRunId}, ${claim.digest}
+          ${claim.incarnationId}, ${claim.workflowRunId}, ${claim.digest}
         )
         ON CONFLICT(session_id, workflow_name, workflow_version, workflow_key)
         DO UPDATE SET request_digest = workflow_run_acceptance.request_digest
-        RETURNING request_digest AS digest
+        RETURNING
+          incarnation_id AS incarnationId,
+          workflow_run_id AS workflowRunId,
+          request_digest AS digest
       `,
   });
 
@@ -77,10 +82,8 @@ export const makeSqliteWorkflowRunAcceptanceStore: Effect.Effect<
   const lookup = makeLookup(sql);
   const list = makeList(sql);
   return WorkflowRunAcceptanceStore.of({
-    claim: (identity, digest, workflowRunId) =>
-      claim({ ...identity, digest, workflowRunId }).pipe(
-        Effect.map(({ digest: acceptedDigest }) => acceptedDigest),
-        // The upsert always returns the immutable accepted digest.
+    claim: (identity, digest, incarnationId, workflowRunId) =>
+      claim({ ...identity, digest, incarnationId, workflowRunId }).pipe(
         Effect.catchTags({
           NoSuchElementError: Effect.die,
           SchemaError: Effect.die,

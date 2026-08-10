@@ -136,7 +136,8 @@ It uses one immutable accepted request.
 The request stores exact source, JSON input, version, capabilities, signals, budgets, and interpreter version.
 The daemon derives one digest from the complete request.
 It does not store a second source hash.
-The daemon mints a Workflow Run ID when it accepts a new identity tuple.
+The daemon mints a Workflow Incarnation ID when it accepts a new identity tuple.
+Effect derives the Workflow Run ID from that idempotency key.
 The accepted request, signal declarations, and workflow send commit in one storage transaction.
 Each external Step becomes an Effect Workflow Activity.
 Every external Step requires an explicit and unique Step ID.

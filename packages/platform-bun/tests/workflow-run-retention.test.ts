@@ -25,7 +25,7 @@ scopedLive("retires terminal Workflow storage after its state lease", () =>
       Effect.gen(function* () {
         const runtime = yield* WorkflowRuntime;
         const workflowRunId = yield* runtime.send(acceptedRequest);
-        yield* runtime.wait(acceptedRequest);
+        yield* runtime.wait({ sessionId: acceptedRequest.sessionId, workflowRunId });
         expect((yield* storageCounts).acceptance).toBe(1);
         const retired = yield* storageCounts.pipe(
           Effect.repeat({
@@ -50,6 +50,43 @@ scopedLive("retires terminal Workflow storage after its state lease", () =>
     );
 
     expect(counts).toEqual({ acceptance: 0, signals: 0, messages: 0, replies: 0 });
+  }),
+);
+
+scopedLive("mints a new Workflow Run ID after terminal retirement", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-incarnation-" });
+    const filename = `${directory}/loom.sqlite`;
+    const executions = yield* Ref.make(0);
+
+    const [first, second] = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const runtime = yield* WorkflowRuntime;
+        const firstId = yield* runtime.send(request);
+        yield* runtime.wait({ sessionId: request.sessionId, workflowRunId: firstId });
+        yield* storageCounts.pipe(
+          Effect.repeat({
+            while: ({ acceptance }) => acceptance > 0,
+            schedule: Schedule.spaced("10 millis"),
+          }),
+        );
+        const secondId = yield* runtime.send(request);
+        yield* runtime.wait({ sessionId: request.sessionId, workflowRunId: secondId });
+        return [firstId, secondId];
+      }).pipe(
+        Effect.provide(
+          runtimeLayer(
+            filename,
+            executions,
+            layerLoomWorkflowRuntimeWith({ stateLease: "100 millis" }),
+          ),
+        ),
+      ),
+    );
+
+    expect(second).not.toBe(first);
+    expect(yield* Ref.get(executions)).toBe(2);
   }),
 );
 

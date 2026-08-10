@@ -29,18 +29,20 @@ const DurationOutcome = Schema.TaggedUnion({
   TimedOut: {},
 });
 
-export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (request, step) =>
+export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (execution, step) =>
   Effect.gen(function* () {
+    const { request } = execution;
+    const workflowRunId = WorkflowRunId.make(step.executionId);
     const capabilities = yield* WorkflowCapabilityExecutor;
     const artifacts = yield* WorkflowArtifactStore;
     return yield* interpretWorkflow<WorkflowEngine | WorkflowInstance>(request, {
-      workflowRunId: WorkflowRunId.make(step.executionId),
+      workflowRunId,
       activity: (stepId, execute, compensate) =>
         Effect.gen(function* () {
           const context = WorkflowActivityContext.make({
             activityKey: WorkflowActivityKey.make(yield* step.idempotencyKey(stepId)),
             sessionId: request.sessionId,
-            workflowRunId: WorkflowRunId.make(step.executionId),
+            workflowRunId,
           });
           return yield* step.run(stepId, {
             do: execute(context),

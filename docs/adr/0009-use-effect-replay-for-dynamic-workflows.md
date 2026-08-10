@@ -20,11 +20,11 @@ The accepted Workflow Run request contains these facts:
 - Resolved budgets.
 
 The Effect workflow payload stores the accepted request.
-The daemon mints the Workflow Run ID when it accepts a new identity tuple.
-The Effect workflow payload contains that ID.
-The Effect workflow definition uses that ID as its entity ID.
+The daemon mints a Workflow Incarnation ID when it accepts a new identity tuple.
+The Effect workflow payload contains that idempotency key.
+Effect derives the Workflow Run ID from the static `LoomDynamicWorkflow` name and the Workflow Incarnation ID.
 Two callers share one Workflow Run only while one accepted identity row exists.
-A new use of the identity tuple after retirement receives a new Workflow Run ID.
+A new use of the identity tuple after retirement receives a new Workflow Incarnation ID and Workflow Run ID.
 
 The daemon derives one canonical SHA-256 digest from the caller-provided request.
 The digest includes the source, input, capabilities, signals, budgets, and interpreter version.

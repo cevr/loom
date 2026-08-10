@@ -52,6 +52,7 @@ export {
   WorkflowStepError,
 } from "@cvr/loom-protocol";
 export {
+  WorkflowRunClaim,
   WorkflowRunAcceptanceStore,
   type WorkflowRunAcceptanceStoreShape,
 } from "./internal/workflow-run-acceptance-store.js";
@@ -114,10 +115,6 @@ export {
   type WorkflowRunRetentionShape,
 } from "./internal/workflow-run-retention.js";
 export { WorkflowRunRetentionError } from "./internal/workflow-run-retention-error.js";
-export {
-  encodeWorkflowIdentity,
-  workflowIdentityFromRequest,
-} from "./internal/workflow-identity.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";
 export {
   ProcessInspector,

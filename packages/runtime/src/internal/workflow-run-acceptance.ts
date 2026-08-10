@@ -1,8 +1,10 @@
 import {
   AcceptedWorkflowRun,
   type WorkflowRunAddress,
+  WorkflowIncarnationId,
   WorkflowRequestDigest,
-  type WorkflowRunId,
+  WorkflowRunExecution,
+  WorkflowRunId,
   WorkflowRunRequest,
 } from "@cvr/loom-domain";
 import {
@@ -13,12 +15,11 @@ import {
 import { Context, Crypto, Effect, Inspectable, Layer, Option, Schema } from "effect";
 import { canonicalJsonSha256 } from "effect-encore";
 import { WorkflowRunAcceptanceStore } from "./workflow-run-acceptance-store.js";
-import { workflowIdentityFromRequest } from "./workflow-identity.js";
+import { LoomDynamicWorkflow } from "./loom-dynamic-workflow.js";
 
 export interface WorkflowRunAcceptanceShape {
   readonly accept: (
     request: WorkflowRunRequest,
-    workflowRunId: WorkflowRunId,
   ) => Effect.Effect<
     AcceptedWorkflowRun,
     WorkflowIdentityConflictError | WorkflowRunAcceptanceError
@@ -49,6 +50,38 @@ const normalizeRequest = (request: WorkflowRunRequest): WorkflowRunRequest =>
     },
   });
 
+const acceptanceError = (operation: WorkflowRunAcceptanceError["operation"]) => (cause: object) =>
+  new WorkflowRunAcceptanceError({
+    operation,
+    message: Inspectable.toStringUnknown(cause),
+  });
+
+const makeDigestRequest = (crypto: Crypto.Crypto) =>
+  Effect.fn("WorkflowRunAcceptance.digest")(
+    function* (request: WorkflowRunRequest) {
+      const encoded = yield* encodeRequest(request);
+      const digest = yield* canonicalJsonSha256(encoded).pipe(
+        Effect.provideService(Crypto.Crypto, crypto),
+      );
+      return WorkflowRequestDigest.make(`sha256:${digest}`);
+    },
+    Effect.tapError((cause) => Effect.logError("Workflow request digest failed.", cause)),
+    Effect.mapError(acceptanceError("digest")),
+  );
+
+const makeWorkflowRunCandidate = (crypto: Crypto.Crypto) =>
+  Effect.fn("WorkflowRunAcceptance.mint")(function* (request: WorkflowRunRequest) {
+    const incarnationId = yield* crypto.randomUUIDv7.pipe(
+      Effect.map(WorkflowIncarnationId.make),
+      Effect.tapError((cause) => Effect.logError("Workflow incarnation mint failed.", cause)),
+      Effect.mapError(acceptanceError("mint")),
+    );
+    const workflowRunId = WorkflowRunId.make(
+      yield* LoomDynamicWorkflow.executionId(WorkflowRunExecution.make({ incarnationId, request })),
+    );
+    return { incarnationId, workflowRunId };
+  });
+
 const makeAuthorizeWorkflowRun = (store: WorkflowRunAcceptanceStore["Service"]) =>
   Effect.fn("WorkflowRunAcceptance.authorize")(function* (address: WorkflowRunAddress) {
     const identity = yield* store.lookup(address.workflowRunId);
@@ -63,41 +96,35 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
 > = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const store = yield* WorkflowRunAcceptanceStore;
-
-  const digestRequest = Effect.fn("WorkflowRunAcceptance.digest")(
-    function* (request: WorkflowRunRequest) {
-      const encoded = yield* encodeRequest(request);
-      const digest = yield* canonicalJsonSha256(encoded).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
-      );
-      return WorkflowRequestDigest.make(`sha256:${digest}`);
-    },
-    Effect.tapError((cause) => Effect.logError("Workflow request digest failed.", cause)),
-    Effect.mapError(
-      (cause) =>
-        new WorkflowRunAcceptanceError({
-          operation: "digest",
-          message: Inspectable.toStringUnknown(cause),
-        }),
-    ),
-  );
+  const digestRequest = makeDigestRequest(crypto);
+  const makeCandidate = makeWorkflowRunCandidate(crypto);
 
   const accept = Effect.fn("WorkflowRunAcceptance.accept")(function* (
     received: WorkflowRunRequest,
-    workflowRunId: WorkflowRunId,
   ) {
     const request = normalizeRequest(received);
-    const identity = workflowIdentityFromRequest(request);
+    const identity = {
+      sessionId: request.sessionId,
+      name: request.definition.name,
+      version: request.definition.version,
+      key: request.key,
+    };
     const digest = yield* digestRequest(request);
-    const acceptedDigest = yield* store.claim(identity, digest, workflowRunId);
-    if (acceptedDigest !== digest) {
+    const { incarnationId, workflowRunId } = yield* makeCandidate(request);
+    const accepted = yield* store.claim(identity, digest, incarnationId, workflowRunId);
+    if (accepted.digest !== digest) {
       return yield* new WorkflowIdentityConflictError({
         identity,
-        acceptedDigest,
+        acceptedDigest: accepted.digest,
         receivedDigest: digest,
       });
     }
-    return AcceptedWorkflowRun.make({ workflowRunId, identity, request, digest });
+    return AcceptedWorkflowRun.make({
+      incarnationId: accepted.incarnationId,
+      workflowRunId: accepted.workflowRunId,
+      request,
+      digest,
+    });
   });
 
   return WorkflowRunAcceptance.of({

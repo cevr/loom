@@ -12,7 +12,7 @@ It never reconstructs orchestration state from logs, Artifacts, or live actor pr
 | Cell request and outcome                                                         | Loom Orchestration Store                                      | Session ID, Agent ID, and Cell ID                             |
 | Code Kernel process identity                                                     | Loom Orchestration Store                                      | Session ID and Agent ID                                       |
 | Job request, state, and process identity                                         | Loom Orchestration Store                                      | Job ID                                                        |
-| Workflow Run acceptance, retirement state, and retirement deadline               | Loom Orchestration Store                                      | Session ID, Workflow name, Workflow version, and Workflow Key |
+| Workflow Run acceptance, Workflow Incarnation ID, retirement state, and deadline | Loom Orchestration Store                                      | Session ID, Workflow name, Workflow version, and Workflow Key |
 | Workflow mailbox, request, Step results, timers, compensation, and Signal values | Effect Cluster storage                                        | Workflow Run ID and Effect message identity                   |
 | Public Signal declaration projection                                             | Loom Orchestration Store                                      | Workflow Run ID and Signal name                               |
 | Workflow child Agent ownership                                                   | Loom Orchestration Store                                      | Activity key                                                  |
@@ -79,14 +79,15 @@ It never infers a Job result from log contents.
 
 ## Workflow recovery
 
-The Loom acceptance row maps the caller identity tuple to one minted Workflow Run ID and one canonical request digest.
-The daemon mints a new Workflow Run ID for each new acceptance.
-A retry shares the stored Workflow Run ID only while that acceptance row exists.
-Reusing the identity tuple after retirement creates a new Workflow Run ID.
+The Loom acceptance row maps the caller identity tuple to one Workflow Incarnation ID, one Workflow Run ID, and one canonical request digest.
+The daemon mints a new Workflow Incarnation ID for each new acceptance.
+Effect derives the Workflow Run ID from the static `LoomDynamicWorkflow` name and the Workflow Incarnation ID.
+A retry shares both stored IDs only while that acceptance row exists.
+Reusing the identity tuple after retirement creates a new Workflow Incarnation ID and Workflow Run ID.
 The immutable request lives in the accepted Effect Workflow message.
-It contains the minted Workflow Run ID.
+Its idempotency key is the Workflow Incarnation ID.
 The request digest covers caller-provided fields.
-It does not cover the minted Workflow Run ID.
+It does not cover the Workflow Incarnation ID or the derived Workflow Run ID.
 The acceptance row, public Signal declarations, and Workflow send commit in one SQLite transaction.
 
 Effect Cluster storage owns Workflow execution state.
@@ -94,7 +95,7 @@ It also owns Activity results, Step results, timers, compensation, and durable S
 Loom does not copy these facts into a second table.
 
 The Workflow identity tuple is the acceptance idempotency key.
-The minted Workflow Run ID separates later uses of that tuple.
+The Workflow Incarnation ID separates later uses of that tuple.
 The Activity key is the child Agent idempotency key.
 The Activity key derives each Workflow Job ID and Workflow Artifact ID.
 
@@ -161,7 +162,7 @@ The daemon rebuilds it from actor-owned state after startup.
 
 - [Replace the append-only source record with the durable Cell Ledger](https://github.com/cevr/loom/issues/32).
 - [Reconcile orphan Code Kernel processes before the daemon becomes ready](https://github.com/cevr/loom/issues/33).
-- [Mint a new Workflow Run ID for each new acceptance](https://github.com/cevr/loom/issues/35).
+- [Mint a new Workflow Incarnation ID for each new acceptance](https://github.com/cevr/loom/issues/35).
 - [Store one Workflow State Lease deadline for each terminal Workflow Run](https://github.com/cevr/loom/issues/28).
 - [Publish Workflow Artifacts with a temporary file and atomic rename](https://github.com/cevr/loom/issues/30).
 - [Stop and delete Workflow child Agent ownership during terminal Workflow retirement](https://github.com/cevr/loom/issues/29).

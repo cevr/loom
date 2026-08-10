@@ -1,18 +1,27 @@
-import type {
+import {
+  WorkflowIncarnationId,
   WorkflowIdentity,
   WorkflowRequestDigest,
-  WorkflowRunAddress,
   WorkflowRunId,
+  type WorkflowRunAddress,
 } from "@cvr/loom-domain";
-import { Context, type Effect, type Option } from "effect";
+import { Context, type Effect, type Option, Schema } from "effect";
 import type { WorkflowRunAcceptanceError } from "@cvr/loom-protocol";
+
+export const WorkflowRunClaim = Schema.Struct({
+  incarnationId: WorkflowIncarnationId,
+  workflowRunId: WorkflowRunId,
+  digest: WorkflowRequestDigest,
+});
+export type WorkflowRunClaim = typeof WorkflowRunClaim.Type;
 
 export interface WorkflowRunAcceptanceStoreShape {
   readonly claim: (
     identity: WorkflowIdentity,
     digest: WorkflowRequestDigest,
+    incarnationId: WorkflowIncarnationId,
     workflowRunId: WorkflowRunId,
-  ) => Effect.Effect<WorkflowRequestDigest, WorkflowRunAcceptanceError>;
+  ) => Effect.Effect<WorkflowRunClaim, WorkflowRunAcceptanceError>;
   readonly lookup: (
     workflowRunId: WorkflowRunId,
   ) => Effect.Effect<Option.Option<WorkflowIdentity>, WorkflowRunAcceptanceError>;

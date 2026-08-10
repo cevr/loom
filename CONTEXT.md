@@ -80,6 +80,10 @@ _Avoid_: Request ID, execution key
 One durable execution of a workflow.
 _Avoid_: Workflow instance, execution
 
+**Workflow Incarnation**:
+One accepted use of a Workflow identity tuple, identified by a daemon-minted idempotency key.
+_Avoid_: Attempt, generation
+
 **Workflow State Lease**:
 The limited period in which Loom keeps a terminal Workflow Run available for inspection.
 _Avoid_: Cleanup delay, history window

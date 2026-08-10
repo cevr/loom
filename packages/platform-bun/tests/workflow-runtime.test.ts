@@ -12,11 +12,17 @@ import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { layerLoomDynamicWorkflow, layerLoomWorkflowRuntimeWith } from "../src/index.js";
 import {
   durationRequest,
+  execution,
   failureRequest,
   request,
   signalRequest,
 } from "./workflow-runtime-fixtures.js";
-import { runtimeLayer, scopedLive, workflowSupport } from "./workflow-runtime-test-support.js";
+import {
+  runtimeLayer,
+  scopedLive,
+  storageCounts,
+  workflowSupport,
+} from "./workflow-runtime-test-support.js";
 
 const workflowLayer = (filename: string, executions: Ref.Ref<number>) => {
   const support = workflowSupport(filename, executions);
@@ -27,7 +33,7 @@ const workflowLayer = (filename: string, executions: Ref.Ref<number>) => {
 
 const execute = (filename: string, executions: Ref.Ref<number>, acceptedRequest = request) =>
   Effect.scoped(
-    LoomDynamicWorkflow.execute(acceptedRequest).pipe(
+    LoomDynamicWorkflow.execute(execution(acceptedRequest)).pipe(
       Effect.provide(workflowLayer(filename, executions)),
     ),
   );
@@ -47,9 +53,13 @@ scopedLive("shares one Workflow Run between matching callers", () =>
     const executions = yield* Ref.make(0);
 
     const results = yield* Effect.scoped(
-      Effect.all([LoomDynamicWorkflow.execute(request), LoomDynamicWorkflow.execute(request)], {
-        concurrency: "unbounded",
-      }).pipe(Effect.provide(workflowLayer(`${directory}/loom.sqlite`, executions))),
+      Effect.all(
+        [
+          LoomDynamicWorkflow.execute(execution(request)),
+          LoomDynamicWorkflow.execute(execution(request)),
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(Effect.provide(workflowLayer(`${directory}/loom.sqlite`, executions))),
     );
 
     expect(results).toEqual([request.input, request.input]);
@@ -164,6 +174,28 @@ scopedLive("rejects undeclared public Workflow signals", () =>
   }),
 );
 
+scopedLive("does not accept a Workflow Run through a read", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-read-" });
+    const executions = yield* Ref.make(0);
+
+    yield* Effect.gen(function* () {
+      const runtime = yield* WorkflowRuntime;
+      const address = {
+        sessionId: request.sessionId,
+        workflowRunId: WorkflowRunId.make("unknown-run"),
+      };
+      const waited = yield* runtime.wait(address).pipe(Effect.flip);
+      const watched = yield* runtime.watch(address).pipe(Stream.runCollect, Effect.flip);
+
+      expect(waited).toHaveProperty("_tag", "WorkflowRunNotFoundError");
+      expect(watched).toHaveProperty("_tag", "WorkflowRunNotFoundError");
+      expect((yield* storageCounts).acceptance).toBe(0);
+    }).pipe(Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, executions)), Effect.scoped);
+  }),
+);
+
 scopedLive("clears a failed Workflow Run after its state lease", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -204,8 +236,8 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
       const actors = yield* ActorStateHub;
       const executionId = yield* runtime.send(request);
       const address = { sessionId: request.sessionId, workflowRunId: executionId };
-      const states = yield* runtime.watch(request).pipe(Stream.runCollect);
-      const terminal = yield* runtime.wait(request);
+      const states = yield* runtime.watch(address).pipe(Stream.runCollect);
+      const terminal = yield* runtime.wait(address);
 
       expect(states.at(-1)).toEqual(terminal);
       expect(terminal).toHaveProperty("_tag", "Success");

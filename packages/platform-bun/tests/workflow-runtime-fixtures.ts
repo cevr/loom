@@ -3,13 +3,21 @@ import {
   WorkflowBudget,
   WorkflowCapability,
   WorkflowDefinition,
+  WorkflowIncarnationId,
   WorkflowKey,
   WorkflowName,
   WorkflowRunRequest,
+  WorkflowRunExecution,
   WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
 import { Option } from "effect";
+
+export const execution = (request: WorkflowRunRequest) =>
+  WorkflowRunExecution.make({
+    incarnationId: WorkflowIncarnationId.make(`workflow-incarnation-${request.key}`),
+    request,
+  });
 
 export const request = WorkflowRunRequest.make({
   sessionId: SessionId.make("session-1"),
