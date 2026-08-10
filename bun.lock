@@ -34,6 +34,7 @@
       "name": "@cvr/loom-daemon",
       "version": "0.0.0",
       "dependencies": {
+        "@cvr/loom-client": "workspace:*",
         "@cvr/loom-domain": "workspace:*",
         "@cvr/loom-platform-bun": "workspace:*",
         "@cvr/loom-protocol": "workspace:*",

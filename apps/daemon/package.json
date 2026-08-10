@@ -10,12 +10,12 @@
     "test": "bun test tests/"
   },
   "dependencies": {
+    "@cvr/loom-client": "workspace:*",
     "@cvr/loom-domain": "workspace:*",
     "@cvr/loom-platform-bun": "workspace:*",
     "@cvr/loom-protocol": "workspace:*",
     "@cvr/loom-runtime": "workspace:*",
-    "@effect/platform-bun": "catalog:",
-    "@effect/sql-sqlite-bun": "catalog:"
+    "@effect/platform-bun": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:"

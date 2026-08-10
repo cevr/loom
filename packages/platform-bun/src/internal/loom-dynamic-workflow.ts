@@ -83,10 +83,12 @@ export const layerLoomWorkflowRuntimeWith = (options: WorkflowRunStatePublisherO
   const acceptance = layerWorkflowRunAcceptance.pipe(
     Layer.provide(layerSqliteWorkflowRunAcceptanceStore),
   );
-  const workflow = layerLoomDynamicWorkflow.pipe(Layer.provideMerge(engine));
-  const publisher = layerWorkflowRunStatePublisher(options).pipe(Layer.provide(engine));
+  const workflow = Layer.merge(
+    layerLoomDynamicWorkflow,
+    layerWorkflowRunStatePublisher(options),
+  ).pipe(Layer.provideMerge(engine));
   return layerWorkflowRuntime.pipe(
-    Layer.provide([workflow, acceptance, layerSqliteWorkflowSignalDeclarations, publisher]),
+    Layer.provideMerge([workflow, acceptance, layerSqliteWorkflowSignalDeclarations]),
   );
 };
 
