@@ -31,6 +31,9 @@
     "gate": "concurrently -n type,style,build -c blue,yellow,cyan \"bun run typecheck\" \"bun run lint && bun run fmt:check\" \"bun run build\" && bun run test",
     "prepare": "lefthook install && effect-tsgo patch"
   },
+  "dependencies": {
+    "effect-encore": "0.22.0"
+  },
   "devDependencies": {
     "@effect/tsgo": "^0.24.3",
     "@types/bun": "latest",
