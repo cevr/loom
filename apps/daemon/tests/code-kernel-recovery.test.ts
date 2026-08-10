@@ -1,6 +1,10 @@
 import { BunServices } from "@effect/platform-bun";
 import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
-import { layerCellJournal, layerCodeKernelFactory } from "@cvr/loom-platform-bun";
+import {
+  layerCodeKernelFactory,
+  layerLoomSqlite,
+  layerSqliteCellJournal,
+} from "@cvr/loom-platform-bun";
 import { CellEvaluation } from "@cvr/loom-protocol";
 import {
   AgentActor,
@@ -19,23 +23,23 @@ const owner = {
   sessionId: SessionId.make("session-1"),
   agentId: AgentId.make("agent-1"),
 };
+const scopedLive = it.scopedLive.layer(BunServices.layer);
 
-it.scopedLive("preserves the Cell journal when a blocked Code Kernel is replaced", () =>
+scopedLive("preserves the Cell journal when a blocked Code Kernel is replaced", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-recovery-" });
     const filename = `${directory}/loom.sqlite`;
-    const journalLive = layerCellJournal({ filename });
     const live = Layer.merge(
       layerAgentActor.pipe(
         Layer.provide([
           TestRunner.layer,
-          journalLive,
+          layerSqliteCellJournal,
           layerCodeKernelFactory({ entryPath: workerEntry, cellTimeout: "250 millis" }),
         ]),
       ),
-      journalLive,
-    );
+      layerSqliteCellJournal,
+    ).pipe(Layer.provide(layerLoomSqlite({ filename })));
 
     yield* Effect.gen(function* () {
       yield* AgentActor.EvaluateCell.execute({
@@ -64,7 +68,7 @@ it.scopedLive("preserves the Cell journal when a blocked Code Kernel is replaced
         "retained",
       ]);
     }).pipe(Effect.provide(live));
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
 it.scopedLive("does not evaluate a Cell when the journal write fails", () =>
@@ -104,7 +108,7 @@ it.scopedLive("does not evaluate a Cell when the journal write fails", () =>
   }),
 );
 
-it.scopedLive("keeps Code Kernel bindings inside one Agent owner", () =>
+scopedLive("keeps Code Kernel bindings inside one Agent owner", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-agent-isolation-" });
@@ -113,9 +117,10 @@ it.scopedLive("keeps Code Kernel bindings inside one Agent owner", () =>
     const live = layerAgentActor.pipe(
       Layer.provide([
         TestRunner.layer,
-        layerCellJournal({ filename }),
+        layerSqliteCellJournal,
         layerCodeKernelFactory({ entryPath: workerEntry }),
       ]),
+      Layer.provide(layerLoomSqlite({ filename })),
     );
 
     yield* Effect.gen(function* () {
@@ -138,20 +143,22 @@ it.scopedLive("keeps Code Kernel bindings inside one Agent owner", () =>
       expect(sameOwner.display).toBe("42");
       expect(otherResult).toHaveProperty("_tag", "CellExecutionError");
     }).pipe(Effect.provide(live));
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("resets only the selected Agent Code Kernel", () =>
+scopedLive("resets only the selected Agent Code Kernel", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-agent-reset-" });
     const otherOwner = { ...owner, agentId: AgentId.make("agent-2") };
+    const filename = `${directory}/loom.sqlite`;
     const live = layerAgentActor.pipe(
       Layer.provide([
         TestRunner.layer,
-        layerCellJournal({ filename: `${directory}/loom.sqlite` }),
+        layerSqliteCellJournal,
         layerCodeKernelFactory({ entryPath: workerEntry }),
       ]),
+      Layer.provide(layerLoomSqlite({ filename })),
     );
 
     yield* Effect.gen(function* () {
@@ -180,19 +187,21 @@ it.scopedLive("resets only the selected Agent Code Kernel", () =>
       expect(resetOwner).toHaveProperty("_tag", "CellExecutionError");
       expect(otherAfterReset.display).toBe("7");
     }).pipe(Effect.provide(live));
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("starts a fresh Code Kernel after an Agent closes it", () =>
+scopedLive("starts a fresh Code Kernel after an Agent closes it", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-agent-close-" });
+    const filename = `${directory}/loom.sqlite`;
     const live = layerAgentActor.pipe(
       Layer.provide([
         TestRunner.layer,
-        layerCellJournal({ filename: `${directory}/loom.sqlite` }),
+        layerSqliteCellJournal,
         layerCodeKernelFactory({ entryPath: workerEntry }),
       ]),
+      Layer.provide(layerLoomSqlite({ filename })),
     );
 
     yield* Effect.gen(function* () {
@@ -210,5 +219,5 @@ it.scopedLive("starts a fresh Code Kernel after an Agent closes it", () =>
 
       expect(afterClose).toHaveProperty("_tag", "CellExecutionError");
     }).pipe(Effect.provide(live));
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );

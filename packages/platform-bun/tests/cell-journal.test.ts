@@ -2,21 +2,22 @@ import { BunServices } from "@effect/platform-bun";
 import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
 import { CellJournal } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem } from "effect";
-import { layerCellJournal } from "../src/index.js";
+import { Effect, FileSystem, Layer } from "effect";
+import { layerLoomSqlite, layerSqliteCellJournal } from "../src/index.js";
 
 const owner = {
   sessionId: SessionId.make("session-1"),
   agentId: AgentId.make("agent-1"),
 };
+const scopedLive = it.scopedLive.layer(BunServices.layer);
 
-const withJournal = <A, E>(
-  filename: string,
-  effect: Effect.Effect<A, E, CellJournal>,
-): Effect.Effect<A, E | unknown> =>
-  effect.pipe(Effect.provide(layerCellJournal({ filename })), Effect.scoped);
+const withJournal = <A, E>(filename: string, effect: Effect.Effect<A, E, CellJournal>) =>
+  effect.pipe(
+    Effect.provide(layerSqliteCellJournal.pipe(Layer.provide(layerLoomSqlite({ filename })))),
+    Effect.scoped,
+  );
 
-it.scopedLive("keeps the ordered Cell journal across SQLite client restarts", () =>
+scopedLive("keeps the ordered Cell journal across SQLite client restarts", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-cell-journal-" });
@@ -50,5 +51,5 @@ it.scopedLive("keeps the ordered Cell journal across SQLite client restarts", ()
     expect(entries[0]?.cellId).toBe(CellId.make("cell-1"));
     expect(entries[1]?.cellId).toBe(CellId.make("cell-2"));
     expect(entries.map((entry) => entry.source)).toEqual(["const answer = 40", "answer + 2"]);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );

@@ -1,11 +1,14 @@
 /* oxlint-disable effect/noGlobals -- This host adapter test inspects the current Bun process. */
 import { BunServices } from "@effect/platform-bun";
-import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { JobId, JobProcessRecord, ProcessIdentity, SessionId } from "@cvr/loom-domain";
 import { JobProcessStore, ProcessObservation } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, FileSystem, Layer } from "effect";
-import { layerSqliteJobProcessStore, makeBunProcessInspector } from "../src/index.js";
+import {
+  layerLoomSqlite,
+  layerSqliteJobProcessStore,
+  makeBunProcessInspector,
+} from "../src/index.js";
 
 const record = JobProcessRecord.make({
   jobId: JobId.make("job-persistent"),
@@ -20,17 +23,17 @@ const record = JobProcessRecord.make({
   status: "Running",
   recoveryDetail: null,
 });
+const scopedLive = it.scopedLive.layer(BunServices.layer);
+const live = it.live.layer(BunServices.layer);
 
 const withStore = <A, E>(filename: string, effect: Effect.Effect<A, E, JobProcessStore>) =>
   Effect.scoped(
     effect.pipe(
-      Effect.provide(
-        layerSqliteJobProcessStore.pipe(Layer.provide(SqliteClient.layer({ filename }))),
-      ),
+      Effect.provide(layerSqliteJobProcessStore.pipe(Layer.provide(layerLoomSqlite({ filename })))),
     ),
   );
 
-it.scoped("persists a recoverable process across SQLite client restarts", () =>
+scopedLive("persists a recoverable process across SQLite client restarts", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-job-recovery-" });
@@ -40,7 +43,6 @@ it.scoped("persists a recoverable process across SQLite client restarts", () =>
       filename,
       Effect.gen(function* () {
         const store = yield* JobProcessStore;
-        yield* store.initialize;
         yield* store.upsert(record);
       }),
     );
@@ -49,16 +51,15 @@ it.scoped("persists a recoverable process across SQLite client restarts", () =>
       filename,
       Effect.gen(function* () {
         const store = yield* JobProcessStore;
-        yield* store.initialize;
         return yield* store.listRecoverable;
       }),
     );
 
     expect(recovered).toEqual([record]);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.effect("reads the stable identity of a live process", () =>
+live("reads the stable identity of a live process", () =>
   Effect.gen(function* () {
     const inspector = yield* makeBunProcessInspector;
     const observation = yield* inspector.inspect(process.pid);
@@ -71,5 +72,5 @@ it.effect("reads the stable identity of a live process", () =>
           expect(identity.processStartId.length).toBeGreaterThan(0);
         }),
     });
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );

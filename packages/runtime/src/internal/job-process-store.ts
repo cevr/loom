@@ -3,7 +3,6 @@ import { Context, type Effect } from "effect";
 import type { JobProcessStoreError } from "./job-process-store-error.js";
 
 export interface JobProcessStoreShape {
-  readonly initialize: Effect.Effect<void, JobProcessStoreError>;
   readonly upsert: (record: JobProcessRecord) => Effect.Effect<void, JobProcessStoreError>;
   readonly listRecoverable: Effect.Effect<ReadonlyArray<JobProcessRecord>, JobProcessStoreError>;
   readonly updateRecovery: (

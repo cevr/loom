@@ -93,7 +93,6 @@ export const makeJobReconciler: Effect.Effect<
   });
 
   const reconcile = Effect.fn("JobReconciler.reconcile")(function* () {
-    yield* store.initialize;
     const records = yield* store.listRecoverable;
     return yield* Effect.forEach(records, reconcileOne);
   });

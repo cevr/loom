@@ -1,5 +1,4 @@
 import { BunServices } from "@effect/platform-bun";
-import { SqliteClient } from "@effect/sql-sqlite-bun";
 import {
   SessionId,
   WorkflowBudget,
@@ -16,7 +15,7 @@ import { WorkflowRunAcceptance, layerWorkflowRunAcceptance } from "@cvr/loom-run
 import { expect, it } from "effect-bun-test";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { layerSqliteWorkflowRunAcceptanceStore } from "../src/index.js";
+import { layerLoomSqlite, layerSqliteWorkflowRunAcceptanceStore } from "../src/index.js";
 
 const definition = WorkflowDefinition.make({
   name: WorkflowName.make("release"),
@@ -43,6 +42,7 @@ const request = WorkflowRunRequest.make({
   input: { target: "production", metadata: { region: "north", replicas: 2 } },
   budget,
 });
+const scopedLive = it.scopedLive.layer(BunServices.layer);
 
 const conflictingRequests = [
   WorkflowRunRequest.make({
@@ -77,7 +77,7 @@ const conflictingRequests = [
 const acceptanceLayer = (filename: string) =>
   layerWorkflowRunAcceptance.pipe(
     Layer.provide(
-      layerSqliteWorkflowRunAcceptanceStore.pipe(Layer.provide(SqliteClient.layer({ filename }))),
+      layerSqliteWorkflowRunAcceptanceStore.pipe(Layer.provide(layerLoomSqlite({ filename }))),
     ),
   );
 
@@ -95,9 +95,9 @@ const countAcceptanceRows = (filename: string) =>
       execute: () => sql`SELECT COUNT(*) AS count FROM workflow_run_acceptance`,
     });
     return (yield* count()).count;
-  }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped);
+  }).pipe(Effect.provide(layerLoomSqlite({ filename })), Effect.scoped);
 
-it.scopedLive("creates one acceptance row for concurrent matching requests", () =>
+scopedLive("creates one acceptance row for concurrent matching requests", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-acceptance-" });
@@ -116,10 +116,10 @@ it.scopedLive("creates one acceptance row for concurrent matching requests", () 
 
     expect(new Set(accepted.map(({ digest }) => digest)).size).toBe(1);
     expect(yield* countAcceptanceRows(filename)).toBe(1);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("normalizes names and JSON object keys before it attaches", () =>
+scopedLive("normalizes names and JSON object keys before it attaches", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-normalize-" });
@@ -154,10 +154,10 @@ it.scopedLive("normalizes names and JSON object keys before it attaches", () =>
       WorkflowCapability.make("job"),
     ]);
     expect(first.request.definition.signals).toEqual([WorkflowSignalName.make("approval")]);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("keeps the accepted request immutable across daemon storage restarts", () =>
+scopedLive("keeps the accepted request immutable across daemon storage restarts", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-restart-" });
@@ -197,5 +197,5 @@ it.scopedLive("keeps the accepted request immutable across daemon storage restar
         expect(yield* acceptance.accept(request)).toEqual(accepted);
       }),
     );
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );

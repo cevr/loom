@@ -1,14 +1,17 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { JobId, JobProcessRecord, SessionId } from "@cvr/loom-domain";
 import { JobProcessStore, ProcessInspector, ProcessObservation } from "@cvr/loom-runtime";
 import { Config, Effect, Layer, Schema } from "effect";
-import { layerBunProcessInspector, layerSqliteJobProcessStore } from "../src/index.js";
+import {
+  layerBunProcessInspector,
+  layerLoomSqlite,
+  layerSqliteJobProcessStore,
+} from "../src/index.js";
 
 const platformLayer = (filename: string) =>
   Layer.merge(
     layerBunProcessInspector,
-    layerSqliteJobProcessStore.pipe(Layer.provide(SqliteClient.layer({ filename }))),
+    layerSqliteJobProcessStore.pipe(Layer.provide(layerLoomSqlite({ filename }))),
   ).pipe(Layer.provide(BunServices.layer));
 
 const encodeRecord = Schema.encodeSync(Schema.fromJsonString(JobProcessRecord));
@@ -34,7 +37,6 @@ const program = Effect.gen(function* () {
       status: "Running",
       recoveryDetail: null,
     });
-    yield* store.initialize;
     yield* store.upsert(record);
     yield* Effect.log(encodeRecord(record));
   }).pipe(Effect.provide(platformLayer(filename)));

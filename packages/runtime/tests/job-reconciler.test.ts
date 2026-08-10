@@ -36,7 +36,6 @@ const record = JobProcessRecord.make({
 const makeStore = Effect.fn("JobReconcilerTest.makeStore")(function* () {
   const current = yield* Ref.make(record);
   const service = JobProcessStore.of({
-    initialize: Effect.void,
     upsert: (next) => Ref.set(current, next),
     listRecoverable: Ref.get(current).pipe(Effect.map((value) => [value])),
     updateRecovery: (jobId, status, recoveryDetail) =>

@@ -1,44 +1,28 @@
-import { JobProcessRecord, type JobId, type JobProcessStatus } from "@cvr/loom-domain";
+import {
+  JobProcessRecord,
+  ProcessIdentity,
+  type JobId,
+  type JobProcessStatus,
+} from "@cvr/loom-domain";
 import {
   JobProcessStore,
   JobProcessStoreError,
   type JobProcessStoreShape,
 } from "@cvr/loom-runtime";
 import { Effect, Layer, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 
 const PersistedJobProcess = Schema.Struct({
-  jobId: Schema.String,
-  sessionId: Schema.String,
-  pid: Schema.Finite,
-  processGroupId: Schema.Finite,
-  processStartId: Schema.String,
-  stdoutPath: Schema.String,
-  stderrPath: Schema.String,
-  status: Schema.String,
-  recoveryDetail: Schema.NullOr(Schema.String),
+  jobId: JobProcessRecord.fields.jobId,
+  sessionId: JobProcessRecord.fields.sessionId,
+  pid: ProcessIdentity.fields.pid,
+  processGroupId: ProcessIdentity.fields.processGroupId,
+  processStartId: ProcessIdentity.fields.processStartId,
+  stdoutPath: JobProcessRecord.fields.stdoutPath,
+  stderrPath: JobProcessRecord.fields.stderrPath,
+  status: JobProcessRecord.fields.status,
+  recoveryDetail: JobProcessRecord.fields.recoveryDetail,
 });
-
-const decodeRecords = Schema.decodeUnknownEffect(Schema.Array(PersistedJobProcess));
-const decodeRecord = Schema.decodeUnknownEffect(JobProcessRecord);
-
-const storeError = (operation: string) => (cause: unknown) =>
-  new JobProcessStoreError({ operation, cause });
-
-const initializeStore = (sql: SqlClient.SqlClient) =>
-  sql`
-    CREATE TABLE IF NOT EXISTS job_processes (
-      job_id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      pid INTEGER NOT NULL,
-      process_group_id INTEGER NOT NULL,
-      process_start_id TEXT NOT NULL,
-      stdout_path TEXT NOT NULL,
-      stderr_path TEXT NOT NULL,
-      status TEXT NOT NULL,
-      recovery_detail TEXT
-    )
-  `.pipe(Effect.asVoid, Effect.mapError(storeError("initialize")));
 
 const makeUpsert = (sql: SqlClient.SqlClient) =>
   Effect.fn("SqliteJobProcessStore.upsert")(function* (record: JobProcessRecord) {
@@ -60,12 +44,17 @@ const makeUpsert = (sql: SqlClient.SqlClient) =>
         stderr_path = excluded.stderr_path,
         status = excluded.status,
         recovery_detail = excluded.recovery_detail
-    `.pipe(Effect.asVoid, Effect.mapError(storeError("upsert")));
+    `.pipe(
+      Effect.asVoid,
+      Effect.mapError((cause) => new JobProcessStoreError({ operation: "upsert", cause })),
+    );
   });
 
 const listRecoverable = (sql: SqlClient.SqlClient) =>
-  Effect.gen(function* () {
-    const rows = yield* sql`
+  SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: PersistedJobProcess,
+    execute: () => sql`
       SELECT
         job_id AS jobId, session_id AS sessionId, pid,
         process_group_id AS processGroupId, process_start_id AS processStartId,
@@ -74,24 +63,8 @@ const listRecoverable = (sql: SqlClient.SqlClient) =>
       FROM job_processes
       WHERE status IN ('Running', 'Stopping', 'Recovered')
       ORDER BY job_id
-    `;
-    const persisted = yield* decodeRecords(rows);
-    return yield* Effect.forEach(persisted, (row) =>
-      decodeRecord({
-        jobId: row.jobId,
-        sessionId: row.sessionId,
-        identity: {
-          pid: row.pid,
-          processGroupId: row.processGroupId,
-          processStartId: row.processStartId,
-        },
-        stdoutPath: row.stdoutPath,
-        stderrPath: row.stderrPath,
-        status: row.status,
-        recoveryDetail: row.recoveryDetail,
-      }),
-    );
-  }).pipe(Effect.mapError(storeError("listRecoverable")));
+    `,
+  });
 
 const makeUpdateRecovery = (sql: SqlClient.SqlClient) =>
   Effect.fn("SqliteJobProcessStore.updateRecovery")(function* (
@@ -103,7 +76,10 @@ const makeUpdateRecovery = (sql: SqlClient.SqlClient) =>
       UPDATE job_processes
       SET status = ${status}, recovery_detail = ${detail}
       WHERE job_id = ${jobId}
-    `.pipe(Effect.asVoid, Effect.mapError(storeError("updateRecovery")));
+    `.pipe(
+      Effect.asVoid,
+      Effect.mapError((cause) => new JobProcessStoreError({ operation: "updateRecovery", cause })),
+    );
   });
 
 export const makeSqliteJobProcessStore: Effect.Effect<
@@ -112,10 +88,30 @@ export const makeSqliteJobProcessStore: Effect.Effect<
   SqlClient.SqlClient
 > = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const list = listRecoverable(sql);
   return JobProcessStore.of({
-    initialize: initializeStore(sql),
     upsert: makeUpsert(sql),
-    listRecoverable: listRecoverable(sql),
+    listRecoverable: list().pipe(
+      Effect.map((rows) =>
+        rows.map((row) =>
+          JobProcessRecord.make({
+            jobId: row.jobId,
+            sessionId: row.sessionId,
+            identity: {
+              pid: row.pid,
+              processGroupId: row.processGroupId,
+              processStartId: row.processStartId,
+            },
+            stdoutPath: row.stdoutPath,
+            stderrPath: row.stderrPath,
+            status: row.status,
+            recoveryDetail: row.recoveryDetail,
+          }),
+        ),
+      ),
+      Effect.catchTag("SchemaError", Effect.die),
+      Effect.mapError((cause) => new JobProcessStoreError({ operation: "listRecoverable", cause })),
+    ),
     updateRecovery: makeUpdateRecovery(sql),
   });
 });
