@@ -20,7 +20,6 @@ export type WorkflowAgentHandle = typeof WorkflowAgentHandle.Type;
 
 export const WorkflowJobInput = Schema.Struct({
   command: Schema.NonEmptyString,
-  attached: Schema.Boolean,
 });
 export type WorkflowJobInput = typeof WorkflowJobInput.Type;
 

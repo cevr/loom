@@ -1,4 +1,4 @@
-import { JobId, WorkflowJob, type WorkflowActivityKey } from "@cvr/loom-domain";
+import { JobId, WorkflowJob, workflowJobId, type WorkflowActivityKey } from "@cvr/loom-domain";
 import {
   WorkflowCapabilityStoreError,
   WorkflowJobStore,
@@ -13,7 +13,6 @@ const PersistedWorkflowJob = Schema.Struct({
   jobId: WorkflowJob.fields.jobId,
   sessionId: WorkflowJob.fields.sessionId,
   workflowRunId: WorkflowJob.fields.workflowRunId,
-  attached: Schema.BooleanFromBit,
   status: WorkflowJob.fields.status,
 });
 
@@ -28,37 +27,30 @@ const makeClaimRow = (sql: SqlClient.SqlClient) =>
     Request: Schema.Struct({
       ...WorkflowActivityContext.fields,
       jobId: JobId,
-      attached: Schema.Boolean,
     }),
     Result: PersistedWorkflowJob,
     execute: (claim) => sql`
       INSERT INTO workflow_jobs (
-        activity_key, job_id, session_id, workflow_run_id, attached, status
+        activity_key, job_id, session_id, workflow_run_id, status
       ) VALUES (
         ${claim.activityKey}, ${claim.jobId}, ${claim.sessionId},
-        ${claim.workflowRunId}, ${Number(claim.attached)}, 'Accepted'
+        ${claim.workflowRunId}, 'Accepted'
       )
       ON CONFLICT(activity_key) DO UPDATE SET activity_key = excluded.activity_key
       RETURNING
         activity_key AS activityKey, job_id AS jobId, session_id AS sessionId,
-        workflow_run_id AS workflowRunId, attached, status
+        workflow_run_id AS workflowRunId, status
     `,
   });
 
-const transition = (
-  sql: SqlClient.SqlClient,
-  operation: string,
-  activityKey: WorkflowActivityKey,
-  from: WorkflowJob["status"],
-  to: WorkflowJob["status"],
-) =>
+const begin = (sql: SqlClient.SqlClient, activityKey: WorkflowActivityKey) =>
   sql`
-    UPDATE workflow_jobs SET status = ${to}
-    WHERE activity_key = ${activityKey} AND status = ${from}
+    UPDATE workflow_jobs SET status = 'Starting'
+    WHERE activity_key = ${activityKey} AND status IN ('Accepted', 'Failed')
     RETURNING activity_key
   `.pipe(
     Effect.map((rows) => rows.length === 1),
-    Effect.mapError((cause) => storeError(operation, cause)),
+    Effect.mapError((cause) => storeError("beginJob", cause)),
   );
 
 const setStatus = (
@@ -81,8 +73,8 @@ export const makeSqliteWorkflowJobStore: Effect.Effect<
   const claimRow = makeClaimRow(sql);
 
   const claim = Effect.fn("SqliteWorkflowJobStore.claim")(
-    function* (context: WorkflowActivityContext, attached: boolean) {
-      return yield* claimRow({ ...context, jobId: JobId.make(context.activityKey), attached });
+    function* (context: WorkflowActivityContext) {
+      return yield* claimRow({ ...context, jobId: workflowJobId(context.activityKey) });
     },
     Effect.catchTags({ NoSuchElementError: Effect.die, SchemaError: Effect.die }),
     Effect.mapError((cause) => storeError("claimJob", cause)),
@@ -90,7 +82,7 @@ export const makeSqliteWorkflowJobStore: Effect.Effect<
 
   return WorkflowJobStore.of({
     claim,
-    begin: (activityKey) => transition(sql, "beginJob", activityKey, "Accepted", "Starting"),
+    begin: (activityKey) => begin(sql, activityKey),
     markRunning: (activityKey) => setStatus(sql, "markJobRunning", activityKey, "Running"),
     markFailed: (activityKey) => setStatus(sql, "markJobFailed", activityKey, "Failed"),
   });

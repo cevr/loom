@@ -2,6 +2,7 @@ import {
   AgentId,
   AgentParent,
   WorkflowChildAgent,
+  workflowAgentId,
   type SessionId,
   type WorkflowActivityKey,
 } from "@cvr/loom-domain";
@@ -19,6 +20,7 @@ const PersistedChildAgent = Schema.Struct({
   agentId: WorkflowChildAgent.fields.agentId,
   sessionId: WorkflowChildAgent.fields.parent.cases.WorkflowRun.fields.sessionId,
   workflowRunId: WorkflowChildAgent.fields.parent.cases.WorkflowRun.fields.workflowRunId,
+  prompt: WorkflowChildAgent.fields.prompt,
   status: WorkflowChildAgent.fields.status,
 });
 
@@ -30,6 +32,7 @@ const toChildAgent = (row: typeof PersistedChildAgent.Type) =>
       sessionId: row.sessionId,
       workflowRunId: row.workflowRunId,
     }),
+    prompt: row.prompt,
     status: row.status,
   });
 
@@ -44,18 +47,20 @@ const makeClaimRow = (sql: SqlClient.SqlClient) =>
     Request: Schema.Struct({
       ...WorkflowActivityContext.fields,
       agentId: AgentId,
+      prompt: WorkflowChildAgent.fields.prompt,
     }),
     Result: PersistedChildAgent,
     execute: (claim) => sql`
       INSERT INTO workflow_child_agents (
-        activity_key, agent_id, session_id, workflow_run_id, status
+        activity_key, agent_id, session_id, workflow_run_id, prompt, status
       ) VALUES (
-        ${claim.activityKey}, ${claim.agentId}, ${claim.sessionId}, ${claim.workflowRunId}, 'Active'
+        ${claim.activityKey}, ${claim.agentId}, ${claim.sessionId}, ${claim.workflowRunId},
+        ${claim.prompt}, 'Active'
       )
       ON CONFLICT(activity_key) DO UPDATE SET activity_key = excluded.activity_key
       RETURNING
         activity_key AS activityKey, agent_id AS agentId, session_id AS sessionId,
-        workflow_run_id AS workflowRunId, status
+        workflow_run_id AS workflowRunId, prompt, status
     `,
   });
 
@@ -66,7 +71,7 @@ const makeActiveRows = (sql: SqlClient.SqlClient) =>
     execute: ({ sessionId }) => sql`
       SELECT
         activity_key AS activityKey, agent_id AS agentId, session_id AS sessionId,
-        workflow_run_id AS workflowRunId, status
+        workflow_run_id AS workflowRunId, prompt, status
       FROM workflow_child_agents
       WHERE session_id = ${sessionId} AND status = 'Active'
       ORDER BY agent_id
@@ -83,8 +88,12 @@ export const makeSqliteWorkflowChildAgentStore: Effect.Effect<
   const activeRows = makeActiveRows(sql);
 
   const claim = Effect.fn("SqliteWorkflowChildAgentStore.claim")(
-    function* (context: WorkflowActivityContext) {
-      const row = yield* claimRow({ ...context, agentId: AgentId.make(context.activityKey) });
+    function* (context: WorkflowActivityContext, prompt: string) {
+      const row = yield* claimRow({
+        ...context,
+        agentId: workflowAgentId(context.activityKey),
+        prompt,
+      });
       return toChildAgent(row);
     },
     Effect.catchTags({ NoSuchElementError: Effect.die, SchemaError: Effect.die }),
@@ -109,7 +118,18 @@ export const makeSqliteWorkflowChildAgentStore: Effect.Effect<
     Effect.mapError((cause) => storeError("listActiveAgents", cause)),
   );
 
-  return WorkflowChildAgentStore.of({ claim, stop, listActiveBySession });
+  const stopSession = Effect.fn("SqliteWorkflowChildAgentStore.stopSession")(
+    function* (sessionId: SessionId) {
+      yield* sql`
+        UPDATE workflow_child_agents SET status = 'Stopped'
+        WHERE session_id = ${sessionId} AND status = 'Active'
+      `;
+    },
+    Effect.asVoid,
+    Effect.mapError((cause) => storeError("stopSessionAgents", cause)),
+  );
+
+  return WorkflowChildAgentStore.of({ claim, stop, listActiveBySession, stopSession });
 });
 
 export const layerSqliteWorkflowChildAgentStore = Layer.effect(

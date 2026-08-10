@@ -6,7 +6,6 @@ import type { WorkflowCapabilityStoreError } from "./workflow-capability-store-e
 export interface WorkflowJobStoreShape {
   readonly claim: (
     context: WorkflowActivityContext,
-    attached: boolean,
   ) => Effect.Effect<WorkflowJob, WorkflowCapabilityStoreError>;
   readonly begin: (
     activityKey: WorkflowActivityKey,

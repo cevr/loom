@@ -57,6 +57,7 @@ const createCapabilitySchema = Effect.gen(function* () {
       agent_id TEXT NOT NULL UNIQUE,
       session_id TEXT NOT NULL,
       workflow_run_id TEXT NOT NULL,
+      prompt TEXT NOT NULL,
       status TEXT NOT NULL
     )
   `;
@@ -70,7 +71,6 @@ const createCapabilitySchema = Effect.gen(function* () {
       job_id TEXT NOT NULL UNIQUE,
       session_id TEXT NOT NULL,
       workflow_run_id TEXT NOT NULL,
-      attached INTEGER NOT NULL,
       status TEXT NOT NULL
     )
   `;

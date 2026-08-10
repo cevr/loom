@@ -6,6 +6,7 @@ import type { WorkflowCapabilityStoreError } from "./workflow-capability-store-e
 export interface WorkflowChildAgentStoreShape {
   readonly claim: (
     context: WorkflowActivityContext,
+    prompt: string,
   ) => Effect.Effect<WorkflowChildAgent, WorkflowCapabilityStoreError>;
   readonly stop: (
     activityKey: WorkflowActivityKey,
@@ -13,6 +14,7 @@ export interface WorkflowChildAgentStoreShape {
   readonly listActiveBySession: (
     sessionId: SessionId,
   ) => Effect.Effect<ReadonlyArray<WorkflowChildAgent>, WorkflowCapabilityStoreError>;
+  readonly stopSession: (sessionId: SessionId) => Effect.Effect<void, WorkflowCapabilityStoreError>;
 }
 
 export class WorkflowChildAgentStore extends Context.Service<

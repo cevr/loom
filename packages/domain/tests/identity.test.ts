@@ -1,6 +1,15 @@
 import { describe, expect, it } from "effect-bun-test";
 import { Effect, Exit, Schema } from "effect";
-import { AgentOwner, AgentParent, WorkflowName, WorkflowRunRequest } from "../src/index.js";
+import {
+  AgentOwner,
+  AgentParent,
+  WorkflowActivityKey,
+  WorkflowName,
+  WorkflowRunRequest,
+  workflowAgentId,
+  workflowArtifactId,
+  workflowJobId,
+} from "../src/index.js";
 
 describe("Loom identity", () => {
   it.effect("decodes an agent owner", () =>
@@ -66,6 +75,18 @@ describe("Workflow identity", () => {
       });
 
       expect(parent).toHaveProperty("_tag", "WorkflowRun");
+    }),
+  );
+});
+
+describe("Workflow capability identity", () => {
+  it.effect("derives distinct identities from one Activity key", () =>
+    Effect.sync(() => {
+      const activityKey = WorkflowActivityKey.make("workflow/step");
+
+      expect(String(workflowAgentId(activityKey))).toBe("workflow-agent:workflow/step");
+      expect(String(workflowJobId(activityKey))).toBe("workflow-job:workflow/step");
+      expect(String(workflowArtifactId(activityKey))).toBe("workflow-artifact:workflow/step");
     }),
   );
 });

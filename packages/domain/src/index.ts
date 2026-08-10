@@ -46,6 +46,12 @@ export type WorkflowStepId = typeof WorkflowStepId.Type;
 export const WorkflowActivityKey = identifier("@cvr/loom/WorkflowActivityKey");
 export type WorkflowActivityKey = typeof WorkflowActivityKey.Type;
 
+export const workflowAgentId = (activityKey: WorkflowActivityKey): AgentId =>
+  AgentId.make(`workflow-agent:${activityKey}`);
+
+export const workflowJobId = (activityKey: WorkflowActivityKey): JobId =>
+  JobId.make(`workflow-job:${activityKey}`);
+
 export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
 export type WorkflowSignalName = typeof WorkflowSignalName.Type;
 
@@ -70,6 +76,9 @@ export type WorkflowIdentity = typeof WorkflowIdentity.Type;
 
 export const ArtifactId = identifier("@cvr/loom/ArtifactId");
 export type ArtifactId = typeof ArtifactId.Type;
+
+export const workflowArtifactId = (activityKey: WorkflowActivityKey): ArtifactId =>
+  ArtifactId.make(`workflow-artifact:${activityKey}`);
 
 export const AgentOwner = Schema.Struct({
   sessionId: SessionId,
@@ -99,6 +108,7 @@ export const WorkflowChildAgent = Schema.Struct({
   activityKey: WorkflowActivityKey,
   agentId: AgentId,
   parent: AgentParent,
+  prompt: Schema.NonEmptyString,
   status: WorkflowChildAgentStatus,
 });
 export type WorkflowChildAgent = typeof WorkflowChildAgent.Type;
@@ -111,7 +121,6 @@ export const WorkflowJob = Schema.Struct({
   jobId: JobId,
   sessionId: SessionId,
   workflowRunId: WorkflowRunId,
-  attached: Schema.Boolean,
   status: WorkflowJobStatus,
 });
 export type WorkflowJob = typeof WorkflowJob.Type;
@@ -203,6 +212,7 @@ export const JobProcessStatus = Schema.Literals([
   "Running",
   "Stopping",
   "Recovered",
+  "Exited",
   "ExitedWhileOffline",
   "IdentityMismatch",
 ]);

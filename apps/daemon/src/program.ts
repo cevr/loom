@@ -1,10 +1,14 @@
 import {
   layerBunLoomServer,
   layerCodeKernelFactory,
-  layerEmptyWorkflowHost,
+  layerBunProcessInspector,
   layerJobRecovery,
   layerLoomSqlite,
   layerLoomWorkflowRuntime,
+  layerSqliteJobProcessStore,
+  layerSqliteWorkflowChildAgentStore,
+  layerSqliteWorkflowJobStore,
+  layerWorkflowCapabilities,
   layerSqliteCellJournal,
   prepareDaemonSocket,
 } from "@cvr/loom-platform-bun";
@@ -45,11 +49,20 @@ export const program = Effect.gen(function* () {
         }),
       ]),
     );
-    const workflows = layerLoomWorkflowRuntime.pipe(
-      Layer.provide([cluster, layerEmptyWorkflowHost]),
+    const childAgents = layerSqliteWorkflowChildAgentStore;
+    const capabilities = layerWorkflowCapabilities({
+      workspaceRoot: config.workspaceRoot,
+    }).pipe(
+      Layer.provide([
+        childAgents,
+        layerSqliteWorkflowJobStore,
+        layerSqliteJobProcessStore,
+        layerBunProcessInspector,
+      ]),
     );
+    const workflows = layerLoomWorkflowRuntime.pipe(Layer.provide([cluster, capabilities]));
     const handlers = layerLoomRpcHandlers.pipe(
-      Layer.provide([agents, workflows]),
+      Layer.provide([agents, childAgents, workflows]),
       Layer.provide(
         layerConnectionHandshake({
           workspaceRoot: config.workspaceRoot,
