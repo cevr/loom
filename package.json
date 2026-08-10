@@ -41,7 +41,7 @@
     "lefthook": "2.1.10",
     "oxfmt": "0.62.0",
     "oxlint": "1.77.0",
-    "oxlint-plugin-effect": "0.6.0",
+    "oxlint-plugin-effect": "0.7.0",
     "turbo": "2.10.9",
     "typescript": "7.0.2"
   },
