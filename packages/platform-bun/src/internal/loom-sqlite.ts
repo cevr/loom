@@ -2,7 +2,7 @@ import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-const createSchema = Effect.gen(function* () {
+const createKernelSchema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE IF NOT EXISTS cell_journal (
@@ -36,6 +36,10 @@ const createSchema = Effect.gen(function* () {
       PRIMARY KEY (session_id, workflow_name, workflow_version, workflow_key)
     )
   `;
+});
+
+const createWorkflowSchema = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE IF NOT EXISTS workflow_signal_declarations (
       workflow_run_id TEXT NOT NULL,
@@ -44,6 +48,38 @@ const createSchema = Effect.gen(function* () {
     )
   `;
 });
+
+const createCapabilitySchema = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    CREATE TABLE IF NOT EXISTS workflow_child_agents (
+      activity_key TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL UNIQUE,
+      session_id TEXT NOT NULL,
+      workflow_run_id TEXT NOT NULL,
+      status TEXT NOT NULL
+    )
+  `;
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS workflow_child_agents_session
+    ON workflow_child_agents (session_id, status)
+  `;
+  yield* sql`
+    CREATE TABLE IF NOT EXISTS workflow_jobs (
+      activity_key TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL UNIQUE,
+      session_id TEXT NOT NULL,
+      workflow_run_id TEXT NOT NULL,
+      attached INTEGER NOT NULL,
+      status TEXT NOT NULL
+    )
+  `;
+});
+
+const createSchema = Effect.all(
+  [createKernelSchema, createWorkflowSchema, createCapabilitySchema],
+  { discard: true },
+);
 
 export interface LoomSqliteConfig {
   readonly filename: string;

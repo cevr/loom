@@ -41,6 +41,14 @@ export {
   makeSqliteWorkflowSignalDeclarations,
 } from "./internal/sqlite-workflow-signal-declarations.js";
 export {
+  layerSqliteWorkflowChildAgentStore,
+  makeSqliteWorkflowChildAgentStore,
+} from "./internal/sqlite-workflow-child-agent-store.js";
+export {
+  layerSqliteWorkflowJobStore,
+  makeSqliteWorkflowJobStore,
+} from "./internal/sqlite-workflow-job-store.js";
+export {
   interpretWorkflow,
   type WorkflowInterpreterHost,
 } from "./internal/workflow-interpreter.js";
