@@ -7,7 +7,6 @@ import { layerLoomSqlite } from "../src/index.js";
 
 const Table = Schema.Struct({ name: Schema.String });
 const Cell = Schema.Struct({ source: Schema.String });
-const Migration = Schema.Struct({ id: Schema.Natural, name: Schema.String });
 const scopedLive = it.scopedLive.layer(BunServices.layer);
 
 const inspectDatabase = Effect.gen(function* () {
@@ -19,12 +18,7 @@ const inspectDatabase = Effect.gen(function* () {
       SELECT name
       FROM sqlite_schema
       WHERE type = 'table'
-        AND name IN (
-          'cell_journal',
-          'job_processes',
-          'loom_migrations',
-          'workflow_run_acceptance'
-        )
+        AND name IN ('cell_journal', 'job_processes', 'workflow_run_acceptance')
       ORDER BY name
     `,
   });
@@ -33,26 +27,16 @@ const inspectDatabase = Effect.gen(function* () {
     Result: Cell,
     execute: () => sql`SELECT source FROM cell_journal ORDER BY journal_id`,
   });
-  const listMigrations = SqlSchema.findAll({
-    Request: Schema.Void,
-    Result: Migration,
-    execute: () => sql`
-      SELECT migration_id AS id, name
-      FROM loom_migrations
-      ORDER BY migration_id
-    `,
-  });
   return {
     tables: (yield* listTables()).map(({ name }) => name),
     cells: yield* readCells(),
-    migrations: yield* listMigrations(),
   };
 });
 
-scopedLive("migrates an existing database once without losing data", () =>
+scopedLive("creates the Loom schema and preserves existing data", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-migrations-" });
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-schema-" });
     const filename = `${directory}/loom.sqlite`;
 
     yield* Effect.gen(function* () {
@@ -73,13 +57,8 @@ scopedLive("migrates an existing database once without losing data", () =>
     }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped);
 
     const expected = {
-      tables: ["cell_journal", "job_processes", "loom_migrations", "workflow_run_acceptance"],
+      tables: ["cell_journal", "job_processes", "workflow_run_acceptance"],
       cells: [{ source: "const answer = 42" }],
-      migrations: [
-        { id: 1, name: "create_cell_journal" },
-        { id: 2, name: "create_job_processes" },
-        { id: 3, name: "create_workflow_run_acceptance" },
-      ],
     };
 
     expect(
