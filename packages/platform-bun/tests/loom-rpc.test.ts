@@ -60,7 +60,11 @@ const workflow = WorkflowRunRequest.make({
 const scoped = it.scoped.layer(BunServices.layer);
 const scopedLive = it.scopedLive.layer(BunServices.layer);
 
-const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRoot) =>
+const layerHandlers = (
+  daemonStartedAtMillis: number,
+  expectedRoot = workspaceRoot,
+  decideCompensation: () => Effect.Effect<void> = () => Effect.void,
+) =>
   LoomRpcs.toLayer(
     Effect.gen(function* () {
       const connection = makeConnectionHandshake({
@@ -82,12 +86,19 @@ const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRo
           Effect.succeed(WorkflowRunState.cases.Success.make({ value: workflow.input })),
         "Workflow.Interrupt": () => Effect.void,
         "Workflow.Resume": () => Effect.void,
+        "Workflow.DecideCompensation": decideCompensation,
       });
     }),
   );
 
-const layerServer = (socketPath: string, daemonStartedAtMillis: number) =>
-  layerBunLoomServer({ socketPath }).pipe(Layer.provide(layerHandlers(daemonStartedAtMillis)));
+const layerServer = (
+  socketPath: string,
+  daemonStartedAtMillis: number,
+  decideCompensation: () => Effect.Effect<void> = () => Effect.void,
+) =>
+  layerBunLoomServer({ socketPath }).pipe(
+    Layer.provide(layerHandlers(daemonStartedAtMillis, workspaceRoot, decideCompensation)),
+  );
 
 const layerClient = (socketPath: string, root = workspaceRoot) =>
   layerBunLoomClient({
@@ -118,6 +129,10 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
       const workflowState = yield* client.inspectWorkflow(workflowAddress);
       yield* client.interruptWorkflow(workflowAddress);
       yield* client.resumeWorkflow(workflowAddress);
+      yield* client.decideWorkflowCompensation({
+        address: workflowAddress,
+        decision: "Retry",
+      });
       yield* client.signalWorkflow({
         address: WorkflowSignalAddress.make({
           sessionId: owner.sessionId,
@@ -174,6 +189,38 @@ scopedLive("shows a typed failure when the daemon is unavailable", () =>
     );
 
     expect(error).toHaveProperty("_tag", "DaemonUnavailableError");
+  }),
+);
+
+scopedLive("bounds a daemon request separately from connection setup", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-request-timeout-" });
+    const socketPath = `${directory}/daemon.sock`;
+    const server = layerServer(socketPath, 100, () => Effect.never);
+    const client = layerBunLoomClient({
+      socketPath,
+      workspaceRoot,
+      connectionTimeout: "2 seconds",
+      requestTimeout: "25 millis",
+    });
+
+    const error = yield* Effect.gen(function* () {
+      const loom = yield* LoomClient;
+      return yield* loom
+        .decideWorkflowCompensation({
+          address: {
+            sessionId: owner.sessionId,
+            workflowRunId: WorkflowRunId.make("workflow-run-1"),
+          },
+          decision: "Retry",
+        })
+        .pipe(Effect.flip);
+    }).pipe(Effect.provide(Layer.merge(client, server)));
+
+    expect(error).toHaveProperty("_tag", "DaemonUnavailableError");
+    expect(error).toHaveProperty("operation", "decideWorkflowCompensation");
+    expect(error).toHaveProperty("reason", "RequestTimeout");
   }),
 );
 

@@ -3,6 +3,8 @@ import type {
   CellEvaluation,
   CellEvaluationError,
   CloseSessionError,
+  DecideWorkflowCompensationRequest,
+  DecideWorkflowCompensationError,
   EvaluateCellRequest,
   ExecuteWorkflowError,
   HandshakeError,
@@ -57,6 +59,12 @@ export interface LoomClientShape {
   readonly resumeWorkflow: (
     request: WorkflowRunAddress,
   ) => Effect.Effect<void, ResumeWorkflowError | HandshakeError | DaemonUnavailableError>;
+  readonly decideWorkflowCompensation: (
+    request: DecideWorkflowCompensationRequest,
+  ) => Effect.Effect<
+    void,
+    DecideWorkflowCompensationError | HandshakeError | DaemonUnavailableError
+  >;
 }
 
 export class LoomClient extends Context.Service<LoomClient, LoomClientShape>()(

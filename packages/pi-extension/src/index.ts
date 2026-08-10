@@ -45,6 +45,12 @@ export interface LoomExtensionApi {
 
 const daemonEntry = new URL("../../../apps/daemon/src/main.ts", import.meta.url).pathname;
 
+export const workflowRequestTimeout = (budget: WorkflowBudget): Duration.Input =>
+  Option.match(budget.maxDurationMillis, {
+    onNone: () => "5 minutes",
+    onSome: (milliseconds) => Duration.millis(milliseconds + 5_000),
+  });
+
 const connect = (
   workspaceRoot: WorkspaceRoot,
   socketPath: string,
@@ -77,10 +83,8 @@ const executeWorkflow = (cwd: string, request: WorkflowRunRequest) =>
         layerNodeLoomClient({
           workspaceRoot,
           socketPath: status.socketPath,
-          connectionTimeout: Option.match(request.budget.maxDurationMillis, {
-            onNone: () => "5 minutes",
-            onSome: (milliseconds) => Duration.millis(milliseconds + 5_000),
-          }),
+          connectionTimeout: "5 seconds",
+          requestTimeout: workflowRequestTimeout(request.budget),
         }),
       ),
     );

@@ -1,6 +1,8 @@
 import { type WorkflowRunAddress, WorkflowRunId, type WorkflowRunRequest } from "@cvr/loom-domain";
 import {
   type ExecuteWorkflowError,
+  type DecideWorkflowCompensationError,
+  type DecideWorkflowCompensationRequest,
   type SignalWorkflowError,
   type StartWorkflowError,
   type WorkflowIdentityConflictError,
@@ -19,6 +21,7 @@ import { LoomDynamicWorkflow, loomWorkflowSignal } from "./loom-dynamic-workflow
 import { WorkflowRunAcceptance } from "./workflow-run-acceptance.js";
 import { WorkflowSignalDeclarations } from "./workflow-signal-declarations.js";
 import { toWorkflowRunState, WorkflowRunStatePublisher } from "./workflow-run-state-publisher.js";
+import { makeDecideCompensation } from "./workflow-compensation-control.js";
 
 export type WorkflowRuntimeAcceptanceError = StartWorkflowError;
 export type WorkflowRuntimeError = ExecuteWorkflowError;
@@ -27,6 +30,7 @@ export type WorkflowRuntimeSignalError = SignalWorkflowError;
 export type WorkflowRuntimeState = PeekResult<Schema.Json, WorkflowRunError>;
 export type WorkflowRuntimeInspectError = WorkflowRunNotFoundError | WorkflowRunAcceptanceError;
 export type WorkflowRuntimeResumeError = WorkflowRuntimeInspectError | WorkflowRunNotSuspendedError;
+export type WorkflowRuntimeCompensationError = DecideWorkflowCompensationError;
 
 export interface WorkflowRuntimeShape {
   readonly execute: (
@@ -55,6 +59,9 @@ export interface WorkflowRuntimeShape {
     address: WorkflowRunAddress,
   ) => Effect.Effect<void, WorkflowRuntimeInspectError>;
   readonly resume: (address: WorkflowRunAddress) => Effect.Effect<void, WorkflowRuntimeResumeError>;
+  readonly decideCompensation: (
+    request: DecideWorkflowCompensationRequest,
+  ) => Effect.Effect<void, WorkflowRuntimeCompensationError>;
 }
 
 export class WorkflowRuntime extends Context.Service<WorkflowRuntime, WorkflowRuntimeShape>()(
@@ -99,12 +106,28 @@ const makeSignalWorkflow =
       Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
     );
 
+const makeRequireSuspended = (
+  acceptance: WorkflowRunAcceptance["Service"],
+  engine: WorkflowEngine.WorkflowEngine["Service"],
+) =>
+  Effect.fn("WorkflowRuntime.requireSuspended")(function* (address: WorkflowRunAddress) {
+    yield* acceptance.authorize(address);
+    const state = yield* LoomDynamicWorkflow.peekAt(address.workflowRunId).pipe(
+      Effect.map(toWorkflowRunState),
+      Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
+    );
+    if (!WorkflowRunState.guards.Suspended(state)) {
+      return yield* new WorkflowRunNotSuspendedError({ address, state });
+    }
+  });
+
 const makeControlWorkflow = (
   acceptance: WorkflowRunAcceptance["Service"],
   engine: WorkflowEngine.WorkflowEngine["Service"],
   publisher: WorkflowRunStatePublisher["Service"],
 ) => {
   const provideEngine = Effect.provideService(WorkflowEngine.WorkflowEngine, engine);
+  const requireSuspended = makeRequireSuspended(acceptance, engine);
   const inspect = Effect.fn("WorkflowRuntime.inspect")(function* (address: WorkflowRunAddress) {
     yield* acceptance.authorize(address);
     yield* publisher.watch(address);
@@ -122,17 +145,12 @@ const makeControlWorkflow = (
         provideEngine,
       ),
     resume: (address: WorkflowRunAddress) =>
-      acceptance.authorize(address).pipe(
-        Effect.andThen(LoomDynamicWorkflow.peekAt(address.workflowRunId)),
-        Effect.map(toWorkflowRunState),
-        Effect.filterOrFail(
-          WorkflowRunState.guards.Suspended,
-          (state) => new WorkflowRunNotSuspendedError({ address, state }),
-        ),
+      requireSuspended(address).pipe(
         Effect.andThen(LoomDynamicWorkflow.resume(address.workflowRunId)),
         Effect.tap(() => publisher.watch(address)),
         provideEngine,
       ),
+    decideCompensation: makeDecideCompensation(acceptance, engine, publisher),
   };
 };
 

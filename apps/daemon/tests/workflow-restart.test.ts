@@ -1,45 +1,10 @@
-import { BunServices } from "@effect/platform-bun";
-import { LoomClient, type LoomClientShape } from "@cvr/loom-client";
-import { ArtifactId, WorkspaceRoot } from "@cvr/loom-domain";
-import { layerBunLoomClient } from "@cvr/loom-platform-bun";
-import {
-  WorkflowArtifactReference,
-  WorkflowArtifactStore,
-  WorkflowCapabilityExecutor,
-  WorkflowStepExecution,
-  WorkflowStepError,
-  type WorkflowCapabilityExecutorShape,
-} from "@cvr/loom-runtime";
-import { expect, it } from "effect-bun-test";
-import { Deferred, Effect, Fiber, FileSystem, Layer, Ref } from "effect";
+import { WorkspaceRoot } from "@cvr/loom-domain";
+import { WorkflowStepExecution, WorkflowStepError } from "@cvr/loom-runtime";
+import { expect } from "effect-bun-test";
+import { Deferred, Effect, Fiber, FileSystem, Ref } from "effect";
 import { runLoomDaemon } from "../src/program.js";
 import { activityRestartRequest, compensationRestartRequest } from "./workflow-restart-fixtures.js";
-
-const withClient = <A, E, R>(
-  workspaceRoot: WorkspaceRoot,
-  socketPath: string,
-  use: (client: LoomClientShape) => Effect.Effect<A, E, R>,
-) =>
-  LoomClient.pipe(
-    Effect.flatMap(use),
-    Effect.provide(
-      layerBunLoomClient({ workspaceRoot, socketPath, connectionTimeout: "10 seconds" }),
-    ),
-  );
-
-const scopedLive = it.scopedLive.layer(BunServices.layer);
-const artifactStore = Layer.succeed(
-  WorkflowArtifactStore,
-  WorkflowArtifactStore.of({
-    store: () =>
-      Effect.succeed(WorkflowArtifactReference.make({ artifactId: ArtifactId.make("unused") })),
-  }),
-);
-const testCapabilities = (executor: WorkflowCapabilityExecutorShape) =>
-  Layer.merge(
-    Layer.succeed(WorkflowCapabilityExecutor, WorkflowCapabilityExecutor.of(executor)),
-    artifactStore,
-  );
+import { scopedLive, testCapabilities, withClient } from "./workflow-test-support.js";
 const blockUntilRestart = (
   counter: Ref.Ref<number>,
   started: Deferred.Deferred<true>,

@@ -8,22 +8,26 @@ import {
   WorkflowRunId,
   WorkflowSignalAddress,
   WorkflowSignalName,
+  WorkflowStepId,
   WorkflowVersion,
   WorkspaceRoot,
 } from "@cvr/loom-domain";
 import { describe, expect, it } from "effect-bun-test";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import {
   CellInterruptedError,
   CodeKernelDiagnostic,
   CodeKernelProcessRequest,
   CodeKernelProcessResponse,
+  DecideWorkflowCompensationRequest,
   EvaluateCell,
   EvaluateCellRequest,
   HandshakeRequest,
   LoomRpcs,
   SignalWorkflowRequest,
   WorkflowIdentityConflictError,
+  WorkflowCompensationDecisionConflictError,
+  WorkflowCompensationDecisionTimeoutError,
   WorkflowRunState,
   WorkflowSignalNotDeclaredError,
 } from "../src/index.js";
@@ -82,6 +86,7 @@ describe("Loom RPC registry", () => {
         "Workflow.Inspect",
         "Workflow.Interrupt",
         "Workflow.Resume",
+        "Workflow.DecideCompensation",
       ]);
     }),
   );
@@ -156,6 +161,53 @@ describe("Workflow Run state", () => {
       expect(yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(state))).toEqual(
         state,
       );
+    }),
+  );
+});
+
+describe("Workflow compensation protocol", () => {
+  it.effect("decodes a compensation decision", () =>
+    Effect.gen(function* () {
+      const request = yield* Schema.decodeUnknownEffect(DecideWorkflowCompensationRequest)({
+        address: {
+          sessionId: "session-1",
+          workflowRunId: "workflow-run-1",
+        },
+        decision: "Retry",
+      });
+
+      expect(request.decision).toBe("Retry");
+    }),
+  );
+
+  it.effect("round-trips compensation decision failures", () =>
+    Effect.gen(function* () {
+      const address = {
+        sessionId: SessionId.make("session-1"),
+        workflowRunId: WorkflowRunId.make("workflow-run-1"),
+      };
+      const conflictCodec = Schema.fromJsonString(
+        Schema.toCodecJson(WorkflowCompensationDecisionConflictError),
+      );
+      const conflict = new WorkflowCompensationDecisionConflictError({
+        address,
+        stepId: WorkflowStepId.make("compensate"),
+        attempt: 1,
+        acceptedDecision: Option.some("Stop"),
+      });
+      const decodedConflict = yield* Schema.decodeEffect(conflictCodec)(
+        yield* Schema.encodeEffect(conflictCodec)(conflict),
+      );
+      const timeoutCodec = Schema.fromJsonString(
+        Schema.toCodecJson(WorkflowCompensationDecisionTimeoutError),
+      );
+      const timeout = new WorkflowCompensationDecisionTimeoutError({ address });
+      const decodedTimeout = yield* Schema.decodeEffect(timeoutCodec)(
+        yield* Schema.encodeEffect(timeoutCodec)(timeout),
+      );
+
+      expect(decodedConflict.acceptedDecision).toEqual(Option.some("Stop"));
+      expect(decodedTimeout.address).toEqual(address);
     }),
   );
 });

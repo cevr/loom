@@ -6,9 +6,12 @@ import {
   minimumProtocolVersion,
   type EvaluateCellRequest,
 } from "@cvr/loom-protocol";
-import { Duration, Effect, Layer, Schedule, Scope } from "effect";
+import { Duration, Effect, Layer, Option, Schedule, Scope } from "effect";
 import { RpcClient, RpcClientError } from "effect/unstable/rpc";
-import { DaemonUnavailableError } from "./daemon-unavailable-error.js";
+import {
+  DaemonUnavailableError,
+  type DaemonUnavailableReason,
+} from "./daemon-unavailable-error.js";
 import { LoomClient, type LoomClientShape } from "./loom-client.js";
 import { MessageTooLargeError } from "./message-too-large-error.js";
 
@@ -16,22 +19,29 @@ export interface LoomRpcClientConfig {
   readonly socketPath: string;
   readonly workspaceRoot: WorkspaceRoot;
   readonly connectionTimeout?: Duration.Input;
+  readonly requestTimeout?: Duration.Input;
 }
 
-const unavailable = (config: LoomRpcClientConfig, operation: string, cause: unknown) =>
-  new DaemonUnavailableError({ socketPath: config.socketPath, operation, cause });
+const unavailable = (
+  config: LoomRpcClientConfig,
+  operation: string,
+  reason: DaemonUnavailableReason,
+  cause: Option.Option<unknown>,
+) => new DaemonUnavailableError({ socketPath: config.socketPath, operation, reason, cause });
 
 type RpcClientShape = RpcClient.FromGroup<typeof LoomRpcs, RpcClientError.RpcClientError>;
 
 const withTimeout = <A, E, R>(
   config: LoomRpcClientConfig,
   operation: string,
+  reason: DaemonUnavailableReason,
   effect: Effect.Effect<A, E, R>,
+  duration: Duration.Input,
 ) =>
   effect.pipe(
     Effect.timeoutOrElse({
-      duration: config.connectionTimeout ?? "1 second",
-      orElse: () => Effect.fail(unavailable(config, operation, "connection timed out")),
+      duration,
+      orElse: () => Effect.fail(unavailable(config, operation, reason, Option.none())),
     }),
   );
 
@@ -48,12 +58,14 @@ const makeDaemonRequest = <Request, Success, Error, Requirements>(
     withTimeout(
       config,
       operation,
+      "RequestTimeout",
       runHandshake.pipe(
         Effect.flatMap(() => send(request)),
         Effect.catchTag("RpcClientError", (cause) =>
-          Effect.fail(unavailable(config, operation, cause)),
+          Effect.fail(unavailable(config, operation, "TransportFailure", Option.some(cause))),
         ),
       ),
+      config.requestTimeout ?? "10 seconds",
     ),
   );
 
@@ -71,15 +83,17 @@ const makeRunHandshake = (config: LoomRpcClientConfig, rpc: RpcClientShape) => {
   return withTimeout(
     config,
     "handshake",
+    "ConnectionTimeout",
     handshake().pipe(
       Effect.catchTag("RpcClientError", (cause) =>
-        Effect.fail(unavailable(config, "handshake", cause)),
+        Effect.fail(unavailable(config, "handshake", "TransportFailure", Option.some(cause))),
       ),
       Effect.retry({
         while: (error) => error instanceof DaemonUnavailableError,
         schedule: Schedule.spaced("25 millis"),
       }),
     ),
+    config.connectionTimeout ?? "1 second",
   );
 };
 
@@ -87,8 +101,15 @@ const makeEvaluateCell = (
   config: LoomRpcClientConfig,
   rpc: RpcClientShape,
   runHandshake: LoomClientShape["handshake"],
-) =>
-  Effect.fn("LoomRpcClient.evaluateCell")(function* (request: EvaluateCellRequest) {
+) => {
+  const send = makeDaemonRequest(
+    "LoomRpcClient.sendEvaluateCell",
+    "evaluateCell",
+    config,
+    runHandshake,
+    rpc["CodeKernel.EvaluateCell"],
+  );
+  return Effect.fn("LoomRpcClient.evaluateCell")(function* (request: EvaluateCellRequest) {
     if (request.source.length > maximumCellSourceLength) {
       return yield* new MessageTooLargeError({
         operation: "evaluateCell",
@@ -96,17 +117,9 @@ const makeEvaluateCell = (
         maximum: maximumCellSourceLength,
       });
     }
-    return yield* withTimeout(
-      config,
-      "evaluateCell",
-      runHandshake.pipe(
-        Effect.flatMap(() => rpc["CodeKernel.EvaluateCell"](request)),
-        Effect.catchTag("RpcClientError", (cause) =>
-          Effect.fail(unavailable(config, "evaluateCell", cause)),
-        ),
-      ),
-    );
+    return yield* send(request);
   });
+};
 
 const makeWorkflowControls = (
   config: LoomRpcClientConfig,
@@ -133,6 +146,13 @@ const makeWorkflowControls = (
     config,
     runHandshake,
     rpc["Workflow.Resume"],
+  ),
+  decideWorkflowCompensation: makeDaemonRequest(
+    "LoomRpcClient.decideWorkflowCompensation",
+    "decideWorkflowCompensation",
+    config,
+    runHandshake,
+    rpc["Workflow.DecideCompensation"],
   ),
 });
 

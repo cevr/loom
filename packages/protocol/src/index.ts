@@ -24,6 +24,12 @@ export {
   ResumeWorkflow,
   ResumeWorkflowError,
 } from "./workflow-control.js";
+export {
+  DecideWorkflowCompensation,
+  DecideWorkflowCompensationError,
+  DecideWorkflowCompensationRequest,
+} from "./workflow-compensation-control.js";
+export { WorkflowCompensationDecision } from "./workflow-compensation-decision.js";
 export { LoomRpcs } from "./loom-rpcs.js";
 export {
   currentProtocolVersion,
@@ -54,6 +60,9 @@ export { WorkflowRunError } from "./workflow-run-error.js";
 export { WorkflowRunState } from "./workflow-run-state.js";
 export { WorkflowRunNotFoundError } from "./workflow-run-not-found-error.js";
 export { WorkflowRunNotSuspendedError } from "./workflow-run-not-suspended-error.js";
+export { WorkflowCompensationNotPendingError } from "./workflow-compensation-not-pending-error.js";
+export { WorkflowCompensationDecisionConflictError } from "./workflow-compensation-decision-conflict-error.js";
+export { WorkflowCompensationDecisionTimeoutError } from "./workflow-compensation-decision-timeout-error.js";
 export { WorkflowSourceError } from "./workflow-source-error.js";
 export { WorkflowStepError } from "./workflow-step-error.js";
 export { WorkspaceMismatchError } from "./workspace-mismatch-error.js";
