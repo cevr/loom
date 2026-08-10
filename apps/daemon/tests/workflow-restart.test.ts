@@ -1,115 +1,147 @@
 import { BunServices } from "@effect/platform-bun";
-import { LoomClient } from "@cvr/loom-client";
-import {
-  ArtifactId,
-  SessionId,
-  WorkflowBudget,
-  WorkflowCapability,
-  WorkflowDefinition,
-  WorkflowKey,
-  WorkflowName,
-  WorkflowRunRequest,
-  WorkflowVersion,
-  WorkspaceRoot,
-} from "@cvr/loom-domain";
+import { LoomClient, type LoomClientShape } from "@cvr/loom-client";
+import { ArtifactId, WorkspaceRoot } from "@cvr/loom-domain";
 import { layerBunLoomClient } from "@cvr/loom-platform-bun";
 import {
   WorkflowArtifactReference,
   WorkflowArtifactStore,
   WorkflowCapabilityExecutor,
   WorkflowStepExecution,
+  WorkflowStepError,
+  type WorkflowCapabilityExecutorShape,
 } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Deferred, Effect, Fiber, FileSystem, Layer, Option, Ref } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Layer, Ref } from "effect";
 import { runLoomDaemon } from "../src/program.js";
-
-const request = WorkflowRunRequest.make({
-  sessionId: SessionId.make("daemon-restart-session"),
-  key: WorkflowKey.make("activity-restart"),
-  definition: WorkflowDefinition.make({
-    name: WorkflowName.make("daemon-restart"),
-    version: WorkflowVersion.make("1"),
-    interpreterVersion: 1,
-    source: `
-      const completed = await step.run({
-        stepId: "completed",
-        capability: "test",
-        input: "completed",
-      })
-      const resumed = await step.run({
-        stepId: "blocked",
-        capability: "test",
-        input: "resumed",
-      })
-      return { completed, resumed }
-    `,
-    capabilities: [WorkflowCapability.make("test")],
-    signals: [],
-  }),
-  input: {},
-  budget: WorkflowBudget.make({
-    maxSteps: 2,
-    maxAgentRuns: 1,
-    maxParallelism: 1,
-    maxInlineStepResultBytes: 1_024,
-    maxTokens: Option.none(),
-    maxDurationMillis: Option.none(),
-  }),
-});
+import { activityRestartRequest, compensationRestartRequest } from "./workflow-restart-fixtures.js";
 
 const withClient = <A, E, R>(
   workspaceRoot: WorkspaceRoot,
   socketPath: string,
-  effect: Effect.Effect<A, E, R | LoomClient>,
+  use: (client: LoomClientShape) => Effect.Effect<A, E, R>,
 ) =>
-  effect.pipe(
+  LoomClient.pipe(
+    Effect.flatMap(use),
     Effect.provide(
       layerBunLoomClient({ workspaceRoot, socketPath, connectionTimeout: "10 seconds" }),
     ),
   );
 
 const scopedLive = it.scopedLive.layer(BunServices.layer);
+const artifactStore = Layer.succeed(
+  WorkflowArtifactStore,
+  WorkflowArtifactStore.of({
+    store: () =>
+      Effect.succeed(WorkflowArtifactReference.make({ artifactId: ArtifactId.make("unused") })),
+  }),
+);
+const testCapabilities = (executor: WorkflowCapabilityExecutorShape) =>
+  Layer.merge(
+    Layer.succeed(WorkflowCapabilityExecutor, WorkflowCapabilityExecutor.of(executor)),
+    artifactStore,
+  );
+const blockUntilRestart = (
+  counter: Ref.Ref<number>,
+  started: Deferred.Deferred<true>,
+  release: Deferred.Deferred<true>,
+) =>
+  Effect.uninterruptibleMask((restore) =>
+    Ref.update(counter, (count) => count + 1).pipe(
+      Effect.andThen(Deferred.succeed(started, true)),
+      Effect.andThen(restore(Deferred.await(release))),
+      Effect.asVoid,
+    ),
+  );
 
 const makeRestartHarness = Effect.gen(function* () {
   const completed = yield* Ref.make(0);
   const blocked = yield* Ref.make(0);
-  const activityStarted = yield* Deferred.make<boolean>();
-  const releaseActivity = yield* Deferred.make<boolean>();
-  const capabilities = Layer.merge(
-    Layer.succeed(
-      WorkflowCapabilityExecutor,
-      WorkflowCapabilityExecutor.of({
-        supports: () => true,
-        execute: (call) => {
-          if (call.stepId === "completed") {
-            return Ref.update(completed, (count) => count + 1).pipe(
-              Effect.as(
-                WorkflowStepExecution.make({ value: call.input, tokenCount: 0, agentRuns: 0 }),
-              ),
-            );
-          }
-          return Effect.uninterruptibleMask((restore) =>
-            Ref.update(blocked, (count) => count + 1).pipe(
-              Effect.andThen(Deferred.succeed(activityStarted, true)),
-              Effect.andThen(restore(Deferred.await(releaseActivity))),
-              Effect.as(
-                WorkflowStepExecution.make({ value: call.input, tokenCount: 0, agentRuns: 0 }),
-              ),
-            ),
-          );
-        },
-        compensate: () => Effect.void,
-      }),
-    ),
-    Layer.succeed(
-      WorkflowArtifactStore,
-      WorkflowArtifactStore.of({
-        store: () =>
-          Effect.succeed(WorkflowArtifactReference.make({ artifactId: ArtifactId.make("unused") })),
-      }),
-    ),
-  );
+  const activityStarted = yield* Deferred.make<true>();
+  const releaseActivity = yield* Deferred.make<true>();
+  const capabilities = testCapabilities({
+    supports: () => true,
+    execute: (call) => {
+      if (call.stepId === "completed") {
+        return Ref.update(completed, (count) => count + 1).pipe(
+          Effect.as(WorkflowStepExecution.make({ value: call.input, tokenCount: 0, agentRuns: 0 })),
+        );
+      }
+      return blockUntilRestart(blocked, activityStarted, releaseActivity).pipe(
+        Effect.as(WorkflowStepExecution.make({ value: call.input, tokenCount: 0, agentRuns: 0 })),
+      );
+    },
+    compensate: () => Effect.void,
+  });
   return { activityStarted, blocked, capabilities, completed, releaseActivity };
+});
+
+interface CompensationRestartState {
+  readonly blocked: Ref.Ref<number>;
+  readonly blockedCompensations: Ref.Ref<number>;
+  readonly completed: Ref.Ref<number>;
+  readonly completedCompensations: Ref.Ref<number>;
+  readonly compensationOrder: Ref.Ref<ReadonlyArray<string>>;
+  readonly compensationStarted: Deferred.Deferred<true>;
+  readonly failed: Ref.Ref<number>;
+  readonly releaseCompensation: Deferred.Deferred<true>;
+}
+
+const compensationCapabilities = (state: CompensationRestartState) =>
+  testCapabilities({
+    supports: () => true,
+    execute: (call) => {
+      if (call.stepId === "failed") {
+        return Ref.update(state.failed, (count) => count + 1).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new WorkflowStepError({
+                stepId: call.stepId,
+                capability: call.capability,
+                message: "failed",
+              }),
+            ),
+          ),
+        );
+      }
+      if (call.stepId === "blocked-compensation") {
+        return Ref.update(state.blocked, (count) => count + 1).pipe(
+          Effect.as(WorkflowStepExecution.make({ value: call.input, tokenCount: 0, agentRuns: 0 })),
+        );
+      }
+      return Ref.update(state.completed, (count) => count + 1).pipe(
+        Effect.as(WorkflowStepExecution.make({ value: call.input, tokenCount: 0, agentRuns: 0 })),
+      );
+    },
+    compensate: (call) => {
+      if (call.stepId === "completed-compensation") {
+        return Ref.update(state.completedCompensations, (count) => count + 1).pipe(
+          Effect.andThen(Ref.update(state.compensationOrder, (order) => [...order, "completed"])),
+        );
+      }
+      return Ref.update(state.compensationOrder, (order) => [...order, "blocked"]).pipe(
+        Effect.andThen(
+          blockUntilRestart(
+            state.blockedCompensations,
+            state.compensationStarted,
+            state.releaseCompensation,
+          ),
+        ),
+      );
+    },
+  });
+
+const makeCompensationRestartHarness = Effect.gen(function* () {
+  const state: CompensationRestartState = {
+    blocked: yield* Ref.make(0),
+    blockedCompensations: yield* Ref.make(0),
+    completed: yield* Ref.make(0),
+    completedCompensations: yield* Ref.make(0),
+    compensationOrder: yield* Ref.make<ReadonlyArray<string>>([]),
+    compensationStarted: yield* Deferred.make<true>(),
+    failed: yield* Ref.make(0),
+    releaseCompensation: yield* Deferred.make<true>(),
+  };
+  return { ...state, capabilities: compensationCapabilities(state) };
 });
 
 scopedLive(
@@ -129,35 +161,75 @@ scopedLive(
         yield* makeRestartHarness;
 
       const firstDaemon = yield* runLoomDaemon(config, capabilities).pipe(Effect.forkScoped);
-      yield* withClient(
-        workspaceRoot,
-        socketPath,
-        LoomClient.pipe(Effect.flatMap((client) => client.handshake)),
-      );
-      yield* withClient(
-        workspaceRoot,
-        socketPath,
-        LoomClient.pipe(Effect.flatMap((client) => client.startWorkflow(request))),
+      yield* withClient(workspaceRoot, socketPath, (client) => client.handshake);
+      yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.startWorkflow(activityRestartRequest),
       );
       yield* Deferred.await(activityStarted);
       yield* Fiber.interrupt(firstDaemon);
 
       const secondDaemon = yield* runLoomDaemon(config, capabilities).pipe(Effect.forkScoped);
-      yield* withClient(
-        workspaceRoot,
-        socketPath,
-        LoomClient.pipe(Effect.flatMap((client) => client.handshake)),
-      );
+      yield* withClient(workspaceRoot, socketPath, (client) => client.handshake);
       yield* Deferred.succeed(releaseActivity, true);
-      const result = yield* withClient(
-        workspaceRoot,
-        socketPath,
-        LoomClient.pipe(Effect.flatMap((client) => client.executeWorkflow(request))),
+      const result = yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.executeWorkflow(activityRestartRequest),
       );
 
       expect(result).toEqual({ completed: "completed", resumed: "resumed" });
       expect(yield* Ref.get(completed)).toBe(1);
       expect(yield* Ref.get(blocked)).toBe(2);
+      yield* Fiber.interrupt(secondDaemon);
+    }),
+  30_000,
+);
+
+scopedLive(
+  "recovers a compensation through a full daemon restart",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-daemon-compensation-" });
+      const workspaceRoot = WorkspaceRoot.make(directory);
+      const socketPath = `${directory}/daemon.sock`;
+      const config = {
+        workspaceRoot,
+        socketPath,
+        databasePath: `${directory}/loom.sqlite`,
+      };
+      const {
+        blocked,
+        blockedCompensations,
+        capabilities,
+        compensationStarted,
+        compensationOrder,
+        completed,
+        completedCompensations,
+        failed,
+        releaseCompensation,
+      } = yield* makeCompensationRestartHarness;
+
+      const firstDaemon = yield* runLoomDaemon(config, capabilities).pipe(Effect.forkScoped);
+      yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.startWorkflow(compensationRestartRequest),
+      );
+      yield* Deferred.await(compensationStarted);
+      yield* Fiber.interrupt(firstDaemon);
+
+      const secondDaemon = yield* runLoomDaemon(config, capabilities).pipe(Effect.forkScoped);
+      yield* withClient(workspaceRoot, socketPath, (client) => client.handshake);
+      yield* Deferred.succeed(releaseCompensation, true);
+      const error = yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.executeWorkflow(compensationRestartRequest),
+      ).pipe(Effect.flip);
+
+      expect(error).toHaveProperty("_tag", "WorkflowStepError");
+      expect(error).toHaveProperty("stepId", "failed");
+      expect(yield* Ref.get(blocked)).toBe(1);
+      expect(yield* Ref.get(completed)).toBe(1);
+      expect(yield* Ref.get(failed)).toBe(1);
+      expect(yield* Ref.get(completedCompensations)).toBe(1);
+      expect(yield* Ref.get(blockedCompensations)).toBe(2);
+      expect(yield* Ref.get(compensationOrder)).toEqual(["completed", "blocked", "blocked"]);
       yield* Fiber.interrupt(secondDaemon);
     }),
   30_000,
