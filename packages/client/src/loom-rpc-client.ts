@@ -116,6 +116,13 @@ const makeLoomRpcClient = (
     const runHandshake = makeRunHandshake(config, rpc);
     return LoomClient.of({
       handshake: runHandshake,
+      closeSession: makeDaemonRequest(
+        "LoomRpcClient.closeSession",
+        "closeSession",
+        config,
+        runHandshake,
+        (sessionId) => rpc["Session.Close"]({ sessionId }),
+      ),
       evaluateCell: makeEvaluateCell(config, rpc, runHandshake),
       resetCodeKernel: makeDaemonRequest(
         "LoomRpcClient.resetCodeKernel",

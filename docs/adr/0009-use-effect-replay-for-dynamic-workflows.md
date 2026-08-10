@@ -79,6 +79,13 @@ Each external service accepts the Activity idempotency key.
 The Job store deduplicates Job launch by this key.
 The Agent store deduplicates child Agent creation by this key.
 An Activity retry cannot create a second logical Job or child Agent.
+The Agent claim stores the prompt and Workflow Run parent with the Activity key.
+The Job claim moves through Accepted, Starting, Running, and Failed states.
+A failed launch can claim the launch right again.
+The Bun adapter keeps the child process scoped until it stores the process identity and Running state.
+It closes that scope when launch setup fails.
+It releases the child process only after durable launch setup succeeds.
+Artifact identity also derives from the Activity key.
 
 Effect owns parallel fibers, durable races, and concurrency primitives.
 Loom applies the resolved parallelism budget with an Effect semaphore.
@@ -111,6 +118,10 @@ A child Agent records its Workflow Run parent as a durable fact.
 The Agent belongs to the same Session as the Workflow Run.
 Workflow terminal cleanup stops attached child Agents through idempotent compensation Activities.
 Session closure can also find these Agents from their durable parent facts.
+The Agent store stops all active child Agents for one Session with one idempotent operation.
+The daemon exposes that operation through the typed Session close RPC.
+The Pi extension calls it when Pi closes or replaces a Session.
+An extension reload does not close the Session.
 
 ## Budgets
 

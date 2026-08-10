@@ -2,6 +2,7 @@ import type { AgentOwner, WorkflowRunRequest } from "@cvr/loom-domain";
 import type {
   CellEvaluation,
   CellEvaluationError,
+  CloseSessionError,
   EvaluateCellRequest,
   ExecuteWorkflowError,
   HandshakeError,
@@ -26,6 +27,9 @@ export interface LoomClientShape {
   readonly resetCodeKernel: (
     owner: AgentOwner,
   ) => Effect.Effect<void, HandshakeError | DaemonUnavailableError>;
+  readonly closeSession: (
+    sessionId: AgentOwner["sessionId"],
+  ) => Effect.Effect<void, CloseSessionError | HandshakeError | DaemonUnavailableError>;
   readonly executeWorkflow: (
     request: WorkflowRunRequest,
   ) => Effect.Effect<Schema.Json, ExecuteWorkflowError | HandshakeError | DaemonUnavailableError>;

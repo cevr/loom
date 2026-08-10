@@ -17,6 +17,7 @@ import type {
   AgentToolResult,
   ExtensionAPI,
   ExtensionContext,
+  SessionShutdownEvent,
   SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import { Duration, Effect, FileSystem, Option, Path, Schema } from "effect";
@@ -28,10 +29,16 @@ export interface LoomDaemonStatus {
 }
 
 export interface LoomExtensionApi {
-  readonly on: (
-    event: "session_start",
-    handler: (event: SessionStartEvent, context: ExtensionContext) => Promise<void> | void,
-  ) => void;
+  readonly on: {
+    (
+      event: "session_start",
+      handler: (event: SessionStartEvent, context: ExtensionContext) => Promise<void> | void,
+    ): void;
+    (
+      event: "session_shutdown",
+      handler: (event: SessionShutdownEvent, context: ExtensionContext) => Promise<void> | void,
+    ): void;
+  };
   readonly registerCommand: ExtensionAPI["registerCommand"];
   readonly registerTool: ExtensionAPI["registerTool"];
 }
@@ -74,6 +81,26 @@ const executeWorkflow = (cwd: string, request: WorkflowRunRequest) =>
             onNone: () => "5 minutes",
             onSome: (milliseconds) => Duration.millis(milliseconds + 5_000),
           }),
+        }),
+      ),
+    );
+  }).pipe(Effect.provide(layerNodeServices));
+
+const closeSession = (cwd: string, sessionId: SessionId) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const workspaceRoot = WorkspaceRoot.make(yield* fs.realPath(path.resolve(cwd)));
+    const status = yield* ensureLoomDaemon(cwd);
+    yield* Effect.gen(function* () {
+      const client = yield* LoomClient;
+      yield* client.closeSession(sessionId);
+    }).pipe(
+      Effect.provide(
+        layerNodeLoomClient({
+          workspaceRoot,
+          socketPath: status.socketPath,
+          connectionTimeout: "5 seconds",
         }),
       ),
     );
@@ -180,11 +207,25 @@ const ensureForSession = (context: ExtensionContext, ensureDaemon: EnsureLoomDae
     Effect.runPromise,
   );
 
+export const shouldCloseSession = (event: SessionShutdownEvent): boolean =>
+  event.reason !== "reload";
+
+const registerSessionLifecycle = (pi: LoomExtensionApi, ensureDaemon: EnsureLoomDaemon) => {
+  pi.on("session_start", (_event, context) => ensureForSession(context, ensureDaemon));
+  pi.on("session_shutdown", (event, context) => {
+    if (!shouldCloseSession(event)) return;
+    return closeSession(context.cwd, SessionId.make(context.sessionManager.getSessionId())).pipe(
+      Effect.catchCause((cause) => notifyFailure(context, cause)),
+      Effect.runPromise,
+    );
+  });
+};
+
 export const registerLoomExtension = (
   pi: LoomExtensionApi,
   ensureDaemon: EnsureLoomDaemon = ensureLoomDaemon,
 ): void => {
-  pi.on("session_start", (_event, context) => ensureForSession(context, ensureDaemon));
+  registerSessionLifecycle(pi, ensureDaemon);
   pi.registerCommand("loom", {
     description: "Show the Loom daemon state",
     handler: (_arguments, context) =>

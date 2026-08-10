@@ -65,6 +65,7 @@ const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRo
       const kernel = yield* makeInProcessCodeKernel;
       return LoomRpcs.of({
         "Connection.Handshake": connection.handshake,
+        "Session.Close": () => Effect.void,
         "CodeKernel.EvaluateCell": (request) =>
           kernel.evaluate({ cellId: request.cellId, source: request.source }),
         "CodeKernel.Reset": () => kernel.reset,
@@ -96,6 +97,7 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
     yield* Effect.gen(function* () {
       const client = yield* LoomClient;
       const handshake = yield* client.handshake;
+      yield* client.closeSession(owner.sessionId);
       const cell = yield* client.evaluateCell({
         ...owner,
         cellId: CellId.make("cell-1"),
