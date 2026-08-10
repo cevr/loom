@@ -23,10 +23,9 @@ import { ActorStateHub, type ActorStateHubShape } from "./actor-state-hub.js";
 import { LoomDynamicWorkflow } from "./loom-dynamic-workflow.js";
 import { WorkflowRunRetention } from "./workflow-run-retention.js";
 
-type WorkflowEngineState = PeekResult<Schema.Json, WorkflowRunError>;
-
 export interface WorkflowRunStatePublisherShape {
   readonly watch: (address: WorkflowRunAddress) => Effect.Effect<void>;
+  readonly retire: (address: WorkflowRunAddress) => Effect.Effect<void>;
   readonly recover: (address: WorkflowRunAddress) => Effect.Effect<void>;
 }
 
@@ -39,7 +38,9 @@ export interface WorkflowRunStatePublisherOptions {
   readonly stateLease: Duration.Input;
 }
 
-export const toWorkflowRunState = (state: WorkflowEngineState): WorkflowRunState =>
+export const toWorkflowRunState = (
+  state: PeekResult<Schema.Json, WorkflowRunError>,
+): WorkflowRunState =>
   Match.value(state).pipe(
     Match.tag("Defect", ({ cause }) =>
       WorkflowRunState.cases.Defect.make({ message: Inspectable.toStringUnknown(cause) }),
@@ -107,10 +108,56 @@ const makeCompleteActivity = (
     } else {
       return;
     }
-    yield* retention
-      .retire(address)
-      .pipe(Effect.catch((error) => Effect.logError("Workflow Run retention failed.", error)));
+    yield* retention.retire(address).pipe(
+      Effect.catch((error) =>
+        Effect.logError("Workflow Run retention failed.", error).pipe(
+          Effect.annotateLogs({
+            sessionId: address.sessionId,
+            workflowRunId: address.workflowRunId,
+          }),
+        ),
+      ),
+    );
   });
+
+const makeStartupOperations = (
+  engine: WorkflowEngine.WorkflowEngine["Service"],
+  retention: WorkflowRunRetention["Service"],
+  watch: WorkflowRunStatePublisherShape["watch"],
+) => {
+  const inspect = (address: WorkflowRunAddress) =>
+    LoomDynamicWorkflow.peekAt(address.workflowRunId).pipe(
+      Effect.map(toWorkflowRunState),
+      Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
+    );
+  const retire = Effect.fn("WorkflowRunStatePublisher.retire")(function* (
+    address: WorkflowRunAddress,
+  ) {
+    const state = yield* inspect(address);
+    if (WorkflowRunState.guards.Success(state) || WorkflowRunState.guards.Interrupted(state)) {
+      yield* retention.retire(address).pipe(
+        Effect.catch((error) =>
+          Effect.logError("Workflow Run retirement failed.", error).pipe(
+            Effect.annotateLogs({
+              sessionId: address.sessionId,
+              workflowRunId: address.workflowRunId,
+            }),
+          ),
+        ),
+      );
+    }
+  });
+  const recover = Effect.fn("WorkflowRunStatePublisher.recover")(function* (
+    address: WorkflowRunAddress,
+  ) {
+    const state = yield* inspect(address);
+    if (WorkflowRunState.guards.Success(state) || WorkflowRunState.guards.Interrupted(state)) {
+      return;
+    }
+    yield* watch(address);
+  });
+  return { recover, retire };
+};
 
 const makeWorkflowRunStatePublisher = (options: WorkflowRunStatePublisherOptions) =>
   Effect.gen(function* () {
@@ -138,22 +185,10 @@ const makeWorkflowRunStatePublisher = (options: WorkflowRunStatePublisherOptions
       );
     });
 
-    const recover = Effect.fn("WorkflowRunStatePublisher.recover")(
-      function* (address: WorkflowRunAddress) {
-        const state = yield* LoomDynamicWorkflow.peekAt(address.workflowRunId).pipe(
-          Effect.map(toWorkflowRunState),
-          Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
-        );
-        if (WorkflowRunState.guards.Success(state) || WorkflowRunState.guards.Interrupted(state)) {
-          yield* retention.retire(address);
-          return;
-        }
-        yield* watch(address);
-      },
-      Effect.catch((error) => Effect.logError("Workflow Run recovery failed.", error)),
-    );
-
-    return WorkflowRunStatePublisher.of({ recover, watch });
+    return WorkflowRunStatePublisher.of({
+      ...makeStartupOperations(engine, retention, watch),
+      watch,
+    });
   });
 
 export const layerWorkflowRunStatePublisher = (

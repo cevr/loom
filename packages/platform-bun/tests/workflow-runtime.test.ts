@@ -3,6 +3,7 @@ import {
   LoomDynamicWorkflow,
   ActorStateHub,
   type ActorStateHubShape,
+  WorkflowRunRecovery,
   WorkflowRuntime,
 } from "@cvr/loom-runtime";
 import { WorkflowRunState } from "@cvr/loom-protocol";
@@ -117,8 +118,11 @@ scopedLive("persists a Workflow signal across cluster restarts", () =>
     yield* Effect.scoped(
       Effect.gen(function* () {
         const runtime = yield* WorkflowRuntime;
+        const recovery = yield* WorkflowRunRecovery;
         const actors = yield* ActorStateHub;
-        expect((yield* waitForActorCount(actors, 1)).size).toBe(1);
+        yield* recovery.retire;
+        yield* recovery.recover;
+        yield* waitForActorCount(actors, 1);
         yield* runtime.signal({ address, value: { approved: true } });
       }).pipe(Effect.provide(runtimeLayer(filename, executions))),
     );
@@ -246,8 +250,7 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
       expect(yield* runtime.execute(request)).toEqual(request.input);
       const inflightId = yield* runtime.send(signalRequest);
       const inflight = { sessionId: signalRequest.sessionId, workflowRunId: inflightId };
-      const working = yield* waitForActorCount(actors, 1);
-      expect(working.size).toBe(1);
+      yield* waitForActorCount(actors, 1);
       yield* runtime.interrupt(inflight);
       const interrupted = yield* runtime.inspect(inflight).pipe(
         Effect.repeat({
@@ -256,8 +259,7 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
         }),
       );
       expect(WorkflowRunState.guards.Interrupted(interrupted)).toBe(true);
-      const stopped = yield* waitForActorCount(actors, 0);
-      expect(stopped.size).toBe(0);
+      yield* waitForActorCount(actors, 0);
     }).pipe(Effect.provide(layer), Effect.scoped);
 
     expect(yield* Ref.get(executions)).toBe(1);

@@ -1,5 +1,5 @@
 import { WorkflowDefinition, WorkflowKey, WorkflowSignalName } from "@cvr/loom-domain";
-import { WorkflowRuntime } from "@cvr/loom-runtime";
+import { WorkflowRunRecovery, WorkflowRuntime } from "@cvr/loom-runtime";
 import { expect } from "effect-bun-test";
 import { Effect, FileSystem, Ref, Schedule } from "effect";
 import { layerLoomWorkflowRuntimeWith } from "../src/index.js";
@@ -109,6 +109,9 @@ scopedLive("prunes old terminal Workflow storage during startup", () =>
     const after = yield* Effect.scoped(
       Effect.gen(function* () {
         yield* WorkflowRuntime;
+        const recovery = yield* WorkflowRunRecovery;
+        yield* recovery.retire;
+        yield* recovery.recover;
         return yield* storageCounts;
       }).pipe(Effect.provide(runtimeLayer(filename, executions))),
     );

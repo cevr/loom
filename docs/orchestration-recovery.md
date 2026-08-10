@@ -108,6 +108,8 @@ A stop failure keeps the acceptance and ownership rows for a later retry.
 Retirement then deletes Effect messages, Signal declarations, acceptance, and stopped child Agent rows in one transaction.
 It does not delete logs or Artifacts.
 
+The following retirement and Session-close rules are the target contract for the open work below.
+
 The acceptance row owns the Workflow State Lease deadline.
 The first terminal observation stores one `retire_after` value when no value exists.
 Later observations and daemon restarts do not extend it.
@@ -145,6 +147,10 @@ The daemon uses this order:
 6. Start Workflow recovery and state watchers.
 7. Publish the connection endpoint as ready.
 
+Service Layer construction does not run recovery work.
+One daemon startup effect runs all recovery phases in this order.
+The socket server starts only after that effect completes.
+
 A schema or store-open failure stops startup.
 A recovery failure for one record does not stop other records.
 Loom keeps the failed record and logs its identity and typed failure.
@@ -159,7 +165,6 @@ The daemon rebuilds it from actor-owned state after startup.
 
 ## Required implementation work
 
-- [Enforce the complete daemon recovery phase order](https://github.com/cevr/loom/issues/37).
 - [Store one Workflow State Lease deadline for each terminal Workflow Run](https://github.com/cevr/loom/issues/28).
 - [Publish Workflow Artifacts with a temporary file and atomic rename](https://github.com/cevr/loom/issues/30).
 - [Stop and delete Workflow child Agent ownership during terminal Workflow retirement](https://github.com/cevr/loom/issues/29).

@@ -126,6 +126,12 @@ export {
   type WorkflowRunStatePublisherOptions,
 } from "./internal/workflow-run-state-publisher.js";
 export {
+  WorkflowRunRecovery,
+  type WorkflowRunRecoveryShape,
+  layerWorkflowRunRecovery,
+  makeWorkflowRunRecovery,
+} from "./internal/workflow-run-recovery.js";
+export {
   WorkflowRunRetention,
   type WorkflowRunRetentionShape,
 } from "./internal/workflow-run-retention.js";
