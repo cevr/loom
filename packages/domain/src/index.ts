@@ -46,6 +46,12 @@ export type WorkflowStepId = typeof WorkflowStepId.Type;
 export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
 export type WorkflowSignalName = typeof WorkflowSignalName.Type;
 
+export const WorkflowSignalAddress = Schema.Struct({
+  workflowRunId: WorkflowRunId,
+  name: WorkflowSignalName,
+});
+export type WorkflowSignalAddress = typeof WorkflowSignalAddress.Type;
+
 export const WorkflowRequestDigest = Schema.String.check(
   Schema.isPattern(/^sha256:[0-9a-f]{64}$/u),
 ).pipe(Schema.brand("@cvr/loom/WorkflowRequestDigest"));

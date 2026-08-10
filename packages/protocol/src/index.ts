@@ -34,6 +34,10 @@ export {
 } from "./workflow-budget-exceeded-error.js";
 export { WorkflowCapabilityDeniedError } from "./workflow-capability-denied-error.js";
 export { WorkflowDuplicateStepError } from "./workflow-duplicate-step-error.js";
+export { WorkflowSignalNotDeclaredError } from "./workflow-signal-not-declared-error.js";
+export { WorkflowSignalDeclarationsError } from "./workflow-signal-declarations-error.js";
+export { StartWorkflow, StartWorkflowError, WorkflowRunHandle } from "./start-workflow.js";
+export { SignalWorkflow, SignalWorkflowError, SignalWorkflowRequest } from "./signal-workflow.js";
 export { WorkflowInterpreterVersionMismatchError } from "./workflow-interpreter-version-mismatch-error.js";
 export { workflowInterpreterVersion } from "./workflow-interpreter-version.js";
 export { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";

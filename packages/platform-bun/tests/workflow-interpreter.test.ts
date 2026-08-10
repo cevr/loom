@@ -1,7 +1,13 @@
-import { WorkflowCapability } from "@cvr/loom-domain";
+import {
+  WorkflowCapability,
+  WorkflowDefinition,
+  WorkflowRunRequest,
+  WorkflowSignalName,
+} from "@cvr/loom-domain";
 import {
   WorkflowCapabilityDeniedError,
   WorkflowDuplicateStepError,
+  WorkflowSignalNotDeclaredError,
   WorkflowSourceError,
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
@@ -9,6 +15,17 @@ import { expect, it } from "effect-bun-test";
 import { Cause, Effect, Exit } from "effect";
 import { interpretWorkflow } from "../src/index.js";
 import { execution, host, request } from "./workflow-interpreter-fixtures.js";
+
+const withApprovalSignal = (source: string) => {
+  const workflow = request(source);
+  return WorkflowRunRequest.make({
+    ...workflow,
+    definition: WorkflowDefinition.make({
+      ...workflow.definition,
+      signals: [WorkflowSignalName.make("approval")],
+    }),
+  });
+};
 
 it.effect("replays the same control path in a fresh context", () =>
   Effect.gen(function* () {
@@ -35,6 +52,28 @@ it.effect("replays the same control path in a fresh context", () =>
     expect(first).toEqual({ pass: 1, result: { value: 42 } });
     expect(second).toEqual(first);
     expect(calls.map(({ stepId }) => String(stepId))).toEqual(["echo", "echo"]);
+  }),
+);
+
+it.effect("waits for a declared signal", () =>
+  Effect.gen(function* () {
+    const result = yield* interpretWorkflow(
+      withApprovalSignal(`return await signal.wait("approval")`),
+      host((call) => Effect.succeed(execution(call.input))),
+    );
+
+    expect(result).toEqual({ received: true });
+  }),
+);
+
+it.effect("rejects an undeclared signal", () =>
+  Effect.gen(function* () {
+    const error = yield* interpretWorkflow(
+      request(`return await signal.wait("approval")`),
+      host((call) => Effect.succeed(execution(call.input))),
+    ).pipe(Effect.flip);
+
+    expect(error).toBeInstanceOf(WorkflowSignalNotDeclaredError);
   }),
 );
 

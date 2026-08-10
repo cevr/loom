@@ -8,7 +8,10 @@ import {
   WorkflowDefinition,
   WorkflowKey,
   WorkflowName,
+  WorkflowRunId,
   WorkflowRunRequest,
+  WorkflowSignalAddress,
+  WorkflowSignalName,
   WorkflowVersion,
   WorkspaceRoot,
 } from "@cvr/loom-domain";
@@ -66,6 +69,9 @@ const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRo
           kernel.evaluate({ cellId: request.cellId, source: request.source }),
         "CodeKernel.Reset": () => kernel.reset,
         "Workflow.Execute": (request) => Effect.succeed(request.input),
+        "Workflow.Signal": () => Effect.void,
+        "Workflow.Start": () =>
+          Effect.succeed({ workflowRunId: WorkflowRunId.make("workflow-run-1") }),
       });
     }),
   );
@@ -96,10 +102,19 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
         source: "40 + 2",
       });
       const workflowResult = yield* client.executeWorkflow(workflow);
+      const workflowHandle = yield* client.startWorkflow(workflow);
+      yield* client.signalWorkflow({
+        address: WorkflowSignalAddress.make({
+          workflowRunId: workflowHandle.workflowRunId,
+          name: WorkflowSignalName.make("approval"),
+        }),
+        value: { approved: true },
+      });
 
       expect(handshake.maximumFrameSize).toBe(maximumFrameSize);
       expect(cell.display).toBe("42");
       expect(workflowResult).toEqual(workflow.input);
+      expect(workflowHandle.workflowRunId).toBe(WorkflowRunId.make("workflow-run-1"));
     }).pipe(Effect.provide(live));
   }),
 );

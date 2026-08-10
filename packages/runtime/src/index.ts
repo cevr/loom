@@ -28,6 +28,8 @@ export {
   WorkflowBudgetName,
   WorkflowCapabilityDeniedError,
   WorkflowDuplicateStepError,
+  WorkflowSignalNotDeclaredError,
+  WorkflowSignalDeclarationsError,
   WorkflowInterpreterVersionMismatchError,
   WorkflowRunAcceptanceError,
   WorkflowRunError,
@@ -47,6 +49,7 @@ export {
 export {
   WorkflowArtifactReference,
   WorkflowArtifactWrite,
+  WorkflowHostCall,
   WorkflowStepCall,
   WorkflowStepExecution,
 } from "./internal/workflow-interpreter-model.js";
@@ -58,13 +61,18 @@ export {
   WorkflowArtifactStore,
   type WorkflowArtifactStoreShape,
 } from "./internal/workflow-artifact-store.js";
-export { LoomDynamicWorkflow } from "./internal/loom-dynamic-workflow.js";
+export { LoomDynamicWorkflow, loomWorkflowSignal } from "./internal/loom-dynamic-workflow.js";
+export {
+  WorkflowSignalDeclarations,
+  type WorkflowSignalDeclarationsShape,
+} from "./internal/workflow-signal-declarations.js";
 export {
   WorkflowRuntime,
   type WorkflowRuntimeAcceptanceError,
   type WorkflowRuntimeError,
-  type WorkflowRuntimeExecutionId,
+  type WorkflowRuntimeReadError,
   type WorkflowRuntimeShape,
+  type WorkflowRuntimeSignalError,
   type WorkflowRuntimeState,
   layerWorkflowRuntime,
   makeWorkflowRuntime,

@@ -1,21 +1,22 @@
-import { WorkflowRunRequest } from "@cvr/loom-domain";
+import { WorkflowRunId, WorkflowRunRequest } from "@cvr/loom-domain";
 import { Schema } from "effect";
 import { Rpc } from "effect/unstable/rpc";
 import { WorkflowIdentityConflictError } from "./workflow-identity-conflict-error.js";
 import { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
-import { WorkflowRunError } from "./workflow-run-error.js";
 import { WorkflowSignalDeclarationsError } from "./workflow-signal-declarations-error.js";
 
-export const ExecuteWorkflowError = Schema.Union([
+export const WorkflowRunHandle = Schema.Struct({ workflowRunId: WorkflowRunId });
+export type WorkflowRunHandle = typeof WorkflowRunHandle.Type;
+
+export const StartWorkflowError = Schema.Union([
   WorkflowIdentityConflictError,
   WorkflowRunAcceptanceError,
   WorkflowSignalDeclarationsError,
-  WorkflowRunError,
 ]);
-export type ExecuteWorkflowError = typeof ExecuteWorkflowError.Type;
+export type StartWorkflowError = typeof StartWorkflowError.Type;
 
-export class ExecuteWorkflow extends Rpc.make("Workflow.Execute", {
+export class StartWorkflow extends Rpc.make("Workflow.Start", {
   payload: WorkflowRunRequest,
-  success: Schema.Json,
-  error: ExecuteWorkflowError,
+  success: WorkflowRunHandle,
+  error: StartWorkflowError,
 }) {}

@@ -36,6 +36,13 @@ const createSchema = Effect.gen(function* () {
       PRIMARY KEY (session_id, workflow_name, workflow_version, workflow_key)
     )
   `;
+  yield* sql`
+    CREATE TABLE IF NOT EXISTS workflow_signal_declarations (
+      workflow_run_id TEXT NOT NULL,
+      signal_name TEXT NOT NULL,
+      PRIMARY KEY (workflow_run_id, signal_name)
+    )
+  `;
 });
 
 export interface LoomSqliteConfig {

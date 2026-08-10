@@ -5,6 +5,9 @@ import {
   WorkflowKey,
   WorkflowName,
   WorkflowRequestDigest,
+  WorkflowRunId,
+  WorkflowSignalAddress,
+  WorkflowSignalName,
   WorkflowVersion,
   WorkspaceRoot,
 } from "@cvr/loom-domain";
@@ -19,7 +22,9 @@ import {
   EvaluateCellRequest,
   HandshakeRequest,
   LoomRpcs,
+  SignalWorkflowRequest,
   WorkflowIdentityConflictError,
+  WorkflowSignalNotDeclaredError,
 } from "../src/index.js";
 
 describe("Loom RPC protocol", () => {
@@ -60,14 +65,18 @@ describe("Loom RPC protocol", () => {
       expect(request.workspaceRoot).toBe(WorkspaceRoot.make("/workspace"));
     }),
   );
+});
 
+describe("Loom RPC registry", () => {
   it.effect("registers the code kernel procedures", () =>
     Effect.sync(() => {
       expect(Array.from(LoomRpcs.requests.keys())).toEqual([
         "Connection.Handshake",
         "CodeKernel.EvaluateCell",
         "CodeKernel.Reset",
+        "Workflow.Start",
         "Workflow.Execute",
+        "Workflow.Signal",
       ]);
     }),
   );
@@ -134,6 +143,27 @@ describe("Code Kernel diagnostics", () => {
 });
 
 describe("Workflow protocol", () => {
+  it.effect("round-trips a public Workflow signal address", () =>
+    Effect.gen(function* () {
+      const address = WorkflowSignalAddress.make({
+        workflowRunId: WorkflowRunId.make("workflow-run-1"),
+        name: WorkflowSignalName.make("approval"),
+      });
+      const request = yield* Schema.decodeUnknownEffect(SignalWorkflowRequest)({
+        address,
+        value: { approved: true },
+      });
+      const codec = Schema.fromJsonString(WorkflowSignalNotDeclaredError);
+      const encoded = yield* Schema.encodeEffect(codec)(
+        new WorkflowSignalNotDeclaredError({ address }),
+      );
+      const decoded = yield* Schema.decodeEffect(codec)(encoded);
+
+      expect(request.address).toEqual(address);
+      expect(decoded.address).toEqual(address);
+    }),
+  );
+
   it.effect("round-trips a Workflow identity conflict", () =>
     Effect.gen(function* () {
       const acceptedDigest = WorkflowRequestDigest.make(`sha256:${"a".repeat(64)}`);

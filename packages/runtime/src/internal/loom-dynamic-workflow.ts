@@ -1,4 +1,4 @@
-import { WorkflowRunRequest } from "@cvr/loom-domain";
+import { type WorkflowSignalName, WorkflowRunRequest } from "@cvr/loom-domain";
 import { WorkflowRunError } from "@cvr/loom-protocol";
 import { Schema } from "effect";
 import { Actor } from "effect-encore";
@@ -10,3 +10,8 @@ export const LoomDynamicWorkflow = Actor.fromWorkflow("LoomDynamicWorkflow", {
   error: WorkflowRunError,
   id: (request) => encodeWorkflowIdentity(workflowIdentityFromRequest(request)),
 });
+
+export const loomWorkflowSignal = (name: WorkflowSignalName) =>
+  LoomDynamicWorkflow.signal(name, {
+    success: Schema.Json,
+  });

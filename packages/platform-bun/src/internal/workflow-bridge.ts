@@ -3,7 +3,6 @@ import {
   WorkflowDuplicateStepError,
   WorkflowRunError,
   WorkflowSourceError,
-  WorkflowStepExecution,
 } from "@cvr/loom-runtime";
 import {
   Cause,
@@ -14,6 +13,7 @@ import {
   Inspectable,
   Option,
   Predicate,
+  Schema,
   Scope,
 } from "effect";
 
@@ -49,10 +49,10 @@ const recoverSourceError = (
 };
 
 export const makeWorkflowBridge = <R>(
-  runStep: (received: unknown) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
+  runHostCall: (received: unknown) => Effect.Effect<Schema.Json, WorkflowRunError, R>,
 ): Effect.Effect<WorkflowBridge, never, R | Scope.Scope> =>
   Effect.gen(function* () {
-    const fibers = yield* FiberSet.make<WorkflowStepExecution, WorkflowRunError>();
+    const fibers = yield* FiberSet.make<Schema.Json, WorkflowRunError>();
     const fatal = yield* Deferred.make<never, WorkflowRunError>();
     const runFork = yield* FiberSet.runtime(fibers)<R>();
     const failures = new WeakMap<object, WorkflowRunError>();
@@ -67,9 +67,9 @@ export const makeWorkflowBridge = <R>(
           );
           return;
         }
-        runFork(runStep(received)).addObserver((exit) => {
+        runFork(runHostCall(received)).addObserver((exit) => {
           if (Exit.isSuccess(exit)) {
-            resolve(exit.value.value);
+            resolve(exit.value);
             return;
           }
           const error = Cause.findErrorOption(exit.cause);

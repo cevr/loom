@@ -1,5 +1,6 @@
 import {
   LoomDynamicWorkflow,
+  loomWorkflowSignal,
   WorkflowArtifactStore,
   WorkflowBudgetExceededError,
   WorkflowCapabilityExecutor,
@@ -8,11 +9,13 @@ import {
   WorkflowRunError,
   WorkflowStepExecution,
 } from "@cvr/loom-runtime";
+import { WorkflowRunId } from "@cvr/loom-domain";
 import { Effect, Layer, Schema } from "effect";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import type { WorkflowEngine, WorkflowInstance } from "effect/unstable/workflow/WorkflowEngine";
 import { Actor } from "effect-encore";
 import { layerSqliteWorkflowRunAcceptanceStore } from "./sqlite-workflow-run-acceptance-store.js";
+import { layerSqliteWorkflowSignalDeclarations } from "./sqlite-workflow-signal-declarations.js";
 import { interpretWorkflow } from "./workflow-interpreter.js";
 
 const durationStepId = "loom/workflow-duration";
@@ -27,6 +30,7 @@ export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (requ
     const capabilities = yield* WorkflowCapabilityExecutor;
     const artifacts = yield* WorkflowArtifactStore;
     return yield* interpretWorkflow<WorkflowEngine | WorkflowInstance>(request, {
+      workflowRunId: WorkflowRunId.make(step.executionId),
       activity: (stepId, execute) =>
         step.run(stepId, {
           do: execute,
@@ -36,6 +40,7 @@ export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (requ
       execute: capabilities.execute,
       supports: capabilities.supports,
       storeArtifact: artifacts.store,
+      awaitSignal: (name) => loomWorkflowSignal(name).await,
       withDurationLimit: (milliseconds, evaluation) =>
         Effect.gen(function* () {
           const outcome = yield* step.raceSignals(durationStepId, {
@@ -67,5 +72,7 @@ export const layerLoomWorkflowRuntime = (() => {
     Layer.provide(layerSqliteWorkflowRunAcceptanceStore),
   );
   const workflow = layerLoomDynamicWorkflow.pipe(Layer.provideMerge(engine));
-  return layerWorkflowRuntime.pipe(Layer.provide([workflow, acceptance]));
+  return layerWorkflowRuntime.pipe(
+    Layer.provide([workflow, acceptance, layerSqliteWorkflowSignalDeclarations]),
+  );
 })();

@@ -6,6 +6,10 @@ import type {
   ExecuteWorkflowError,
   HandshakeError,
   HandshakeSuccess,
+  SignalWorkflowError,
+  SignalWorkflowRequest,
+  StartWorkflowError,
+  WorkflowRunHandle,
 } from "@cvr/loom-protocol";
 import { Context, type Effect, type Schema } from "effect";
 import type { DaemonUnavailableError } from "./daemon-unavailable-error.js";
@@ -25,6 +29,15 @@ export interface LoomClientShape {
   readonly executeWorkflow: (
     request: WorkflowRunRequest,
   ) => Effect.Effect<Schema.Json, ExecuteWorkflowError | HandshakeError | DaemonUnavailableError>;
+  readonly startWorkflow: (
+    request: WorkflowRunRequest,
+  ) => Effect.Effect<
+    WorkflowRunHandle,
+    StartWorkflowError | HandshakeError | DaemonUnavailableError
+  >;
+  readonly signalWorkflow: (
+    request: SignalWorkflowRequest,
+  ) => Effect.Effect<void, SignalWorkflowError | HandshakeError | DaemonUnavailableError>;
 }
 
 export class LoomClient extends Context.Service<LoomClient, LoomClientShape>()(

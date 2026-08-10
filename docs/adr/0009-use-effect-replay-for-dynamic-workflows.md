@@ -99,7 +99,10 @@ The request declares signal names.
 All signal values use `Schema.Json`.
 The public protocol addresses a signal by Workflow Run ID and signal name.
 It does not expose Effect deferred tokens.
+Loom writes declared names to `workflow_signal_declarations` when it starts or executes a run.
+SQLite stores only the public Workflow Run ID and declared name.
 The daemon rejects an undeclared signal name.
+An unknown Workflow Run and an undeclared name return the same typed error.
 Effect Durable Deferred owns signal storage and wake-up.
 
 ## Child Agents
@@ -135,6 +138,8 @@ The static workflow error union contains these run failures:
 - Step failure.
 - Budget exceeded.
 - Capability denied.
+- Duplicate Step ID.
+- Undeclared signal.
 - Interpreter version mismatch.
 
 `WorkflowIdentityConflictError` belongs to daemon acceptance.

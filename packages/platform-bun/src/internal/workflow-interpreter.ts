@@ -1,12 +1,21 @@
 /* oxlint-disable effect/noGlobals, effect/noNodeBuiltinImport -- This adapter owns the unmatched VM APIs. */
-import { WorkflowCapability, type WorkflowRunRequest, type WorkflowStepId } from "@cvr/loom-domain";
+import {
+  WorkflowCapability,
+  type WorkflowRunId,
+  WorkflowSignalAddress,
+  type WorkflowRunRequest,
+  type WorkflowSignalName,
+  type WorkflowStepId,
+} from "@cvr/loom-domain";
 import {
   WorkflowArtifactWrite,
   WorkflowBudgetExceededError,
   WorkflowCapabilityDeniedError,
   WorkflowDuplicateStepError,
+  WorkflowHostCall,
   WorkflowInterpreterVersionMismatchError,
   WorkflowRunError,
+  WorkflowSignalNotDeclaredError,
   WorkflowSourceError,
   WorkflowStepCall,
   WorkflowStepExecution,
@@ -18,6 +27,7 @@ import * as NodeVm from "node:vm";
 import { makeWorkflowBridge, type WorkflowBridge, workflowSourceError } from "./workflow-bridge.js";
 
 export interface WorkflowInterpreterHost<R> {
+  readonly workflowRunId: WorkflowRunId;
   readonly activity: (
     stepId: WorkflowStepId,
     execute: Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
@@ -29,13 +39,16 @@ export interface WorkflowInterpreterHost<R> {
   readonly storeArtifact: (
     write: WorkflowArtifactWrite,
   ) => Effect.Effect<WorkflowArtifactReference, WorkflowRunError, R>;
+  readonly awaitSignal: (
+    name: WorkflowSignalName,
+  ) => Effect.Effect<Schema.Json, WorkflowRunError, R>;
   readonly withDurationLimit: (
     milliseconds: number,
     evaluation: Effect.Effect<Schema.Json, WorkflowRunError, R>,
   ) => Effect.Effect<Schema.Json, WorkflowRunError, R>;
 }
 
-const decodeCall = Schema.decodeUnknownEffect(WorkflowStepCall);
+const decodeHostCall = Schema.decodeUnknownEffect(WorkflowHostCall);
 const decodeResult = Schema.decodeUnknownEffect(Schema.Json);
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Json));
 const textEncoder = new TextEncoder();
@@ -58,7 +71,8 @@ const makeContext = (
   NodeVm.createContext(
     {
       input,
-      step: Object.freeze({ run }),
+      signal: Object.freeze({ wait: (name: unknown) => run({ _tag: "Signal", name }) }),
+      step: Object.freeze({ run: (call: unknown) => run({ _tag: "Step", call }) }),
       Bun: undefined,
       Date: undefined,
       fetch: undefined,
@@ -159,8 +173,7 @@ const makeRunStep = <R>(
   host: WorkflowInterpreterHost<R>,
   state: WorkflowPassState,
 ) =>
-  Effect.fn("WorkflowInterpreter.runStep")(function* (received: unknown) {
-    const call = yield* decodeCall(received).pipe(Effect.mapError(workflowSourceError));
+  Effect.fn("WorkflowInterpreter.runStep")(function* (call: WorkflowStepCall) {
     if (state.seenStepIds.has(call.stepId)) {
       return yield* new WorkflowDuplicateStepError({ stepId: call.stepId });
     }
@@ -191,6 +204,30 @@ const makeRunStep = <R>(
     return result;
   });
 
+const makeRunHostCall = <R>(
+  request: WorkflowRunRequest,
+  host: WorkflowInterpreterHost<R>,
+  state: WorkflowPassState,
+) => {
+  const runStep = makeRunStep(request, host, state);
+  const declaredSignals = new Set(request.definition.signals);
+  return Effect.fn("WorkflowInterpreter.runHostCall")(function* (received: unknown) {
+    const call = yield* decodeHostCall(received).pipe(Effect.mapError(workflowSourceError));
+    return yield* WorkflowHostCall.match(call, {
+      Step: ({ call: stepCall }) => runStep(stepCall).pipe(Effect.map((result) => result.value)),
+      Signal: ({ name }) => {
+        if (declaredSignals.has(name)) return host.awaitSignal(name);
+        return new WorkflowSignalNotDeclaredError({
+          address: WorkflowSignalAddress.make({
+            workflowRunId: host.workflowRunId,
+            name,
+          }),
+        });
+      },
+    });
+  });
+};
+
 const evaluatePass = <R>(
   request: WorkflowRunRequest,
   host: WorkflowInterpreterHost<R>,
@@ -202,7 +239,7 @@ const evaluatePass = <R>(
       semaphore: yield* Semaphore.make(request.budget.maxParallelism),
       usage: { agentRuns: 0, tokens: 0 },
     };
-    const bridge = yield* makeWorkflowBridge(makeRunStep(request, host, state));
+    const bridge = yield* makeWorkflowBridge(makeRunHostCall(request, host, state));
     const evaluation = Effect.raceFirst(evaluateSource(request, bridge), bridge.fatal);
     const evaluated = Option.match(request.budget.maxDurationMillis, {
       onNone: () => evaluation,

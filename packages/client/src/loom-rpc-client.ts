@@ -1,4 +1,4 @@
-import type { AgentOwner, WorkflowRunRequest, WorkspaceRoot } from "@cvr/loom-domain";
+import type { WorkspaceRoot } from "@cvr/loom-domain";
 import {
   currentProtocolVersion,
   LoomRpcs,
@@ -33,6 +33,28 @@ const withTimeout = <A, E, R>(
       duration: config.connectionTimeout ?? "1 second",
       orElse: () => Effect.fail(unavailable(config, operation, "connection timed out")),
     }),
+  );
+
+const makeDaemonRequest = <Request, Success, Error, Requirements>(
+  name: string,
+  operation: string,
+  config: LoomRpcClientConfig,
+  runHandshake: LoomClientShape["handshake"],
+  send: (
+    request: Request,
+  ) => Effect.Effect<Success, Error | RpcClientError.RpcClientError, Requirements>,
+) =>
+  Effect.fn(name)((request: Request) =>
+    withTimeout(
+      config,
+      operation,
+      runHandshake.pipe(
+        Effect.flatMap(() => send(request)),
+        Effect.catchTag("RpcClientError", (cause) =>
+          Effect.fail(unavailable(config, operation, cause)),
+        ),
+      ),
+    ),
   );
 
 const makeHandshake = (config: LoomRpcClientConfig, rpc: RpcClientShape) =>
@@ -86,42 +108,6 @@ const makeEvaluateCell = (
     );
   });
 
-const makeResetCodeKernel = (
-  config: LoomRpcClientConfig,
-  rpc: RpcClientShape,
-  runHandshake: LoomClientShape["handshake"],
-) =>
-  Effect.fn("LoomRpcClient.resetCodeKernel")(function* (owner: AgentOwner) {
-    return yield* withTimeout(
-      config,
-      "resetCodeKernel",
-      runHandshake.pipe(
-        Effect.flatMap(() => rpc["CodeKernel.Reset"](owner)),
-        Effect.catchTag("RpcClientError", (cause) =>
-          Effect.fail(unavailable(config, "resetCodeKernel", cause)),
-        ),
-      ),
-    );
-  });
-
-const makeExecuteWorkflow = (
-  config: LoomRpcClientConfig,
-  rpc: RpcClientShape,
-  runHandshake: LoomClientShape["handshake"],
-) =>
-  Effect.fn("LoomRpcClient.executeWorkflow")(function* (request: WorkflowRunRequest) {
-    return yield* withTimeout(
-      config,
-      "executeWorkflow",
-      runHandshake.pipe(
-        Effect.flatMap(() => rpc["Workflow.Execute"](request)),
-        Effect.catchTag("RpcClientError", (cause) =>
-          Effect.fail(unavailable(config, "executeWorkflow", cause)),
-        ),
-      ),
-    );
-  });
-
 const makeLoomRpcClient = (
   config: LoomRpcClientConfig,
 ): Effect.Effect<LoomClientShape, never, RpcClient.Protocol | Scope.Scope> =>
@@ -131,8 +117,34 @@ const makeLoomRpcClient = (
     return LoomClient.of({
       handshake: runHandshake,
       evaluateCell: makeEvaluateCell(config, rpc, runHandshake),
-      resetCodeKernel: makeResetCodeKernel(config, rpc, runHandshake),
-      executeWorkflow: makeExecuteWorkflow(config, rpc, runHandshake),
+      resetCodeKernel: makeDaemonRequest(
+        "LoomRpcClient.resetCodeKernel",
+        "resetCodeKernel",
+        config,
+        runHandshake,
+        rpc["CodeKernel.Reset"],
+      ),
+      startWorkflow: makeDaemonRequest(
+        "LoomRpcClient.startWorkflow",
+        "startWorkflow",
+        config,
+        runHandshake,
+        rpc["Workflow.Start"],
+      ),
+      executeWorkflow: makeDaemonRequest(
+        "LoomRpcClient.executeWorkflow",
+        "executeWorkflow",
+        config,
+        runHandshake,
+        rpc["Workflow.Execute"],
+      ),
+      signalWorkflow: makeDaemonRequest(
+        "LoomRpcClient.signalWorkflow",
+        "signalWorkflow",
+        config,
+        runHandshake,
+        rpc["Workflow.Signal"],
+      ),
     });
   });
 

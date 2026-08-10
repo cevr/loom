@@ -1,4 +1,9 @@
-import { ArtifactId, WorkflowCapability, WorkflowStepId } from "@cvr/loom-domain";
+import {
+  ArtifactId,
+  WorkflowCapability,
+  WorkflowSignalName,
+  WorkflowStepId,
+} from "@cvr/loom-domain";
 import { Schema } from "effect";
 
 export const WorkflowStepCall = Schema.Struct({
@@ -7,6 +12,12 @@ export const WorkflowStepCall = Schema.Struct({
   input: Schema.Json,
 });
 export type WorkflowStepCall = typeof WorkflowStepCall.Type;
+
+export const WorkflowHostCall = Schema.TaggedUnion({
+  Step: { call: WorkflowStepCall },
+  Signal: { name: WorkflowSignalName },
+});
+export type WorkflowHostCall = typeof WorkflowHostCall.Type;
 
 export const WorkflowStepExecution = Schema.Struct({
   value: Schema.Json,

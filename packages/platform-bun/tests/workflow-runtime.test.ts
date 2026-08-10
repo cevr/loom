@@ -7,7 +7,10 @@ import {
   WorkflowDefinition,
   WorkflowKey,
   WorkflowName,
+  WorkflowRunId,
   WorkflowRunRequest,
+  WorkflowSignalAddress,
+  WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
 import {
@@ -65,6 +68,17 @@ const durationRequest = WorkflowRunRequest.make({
   budget: WorkflowBudget.make({
     ...request.budget,
     maxDurationMillis: Option.some(25),
+  }),
+});
+
+const signalRequest = WorkflowRunRequest.make({
+  ...request,
+  key: WorkflowKey.make("signal"),
+  definition: WorkflowDefinition.make({
+    ...request.definition,
+    source: `return await signal.wait("approval")`,
+    capabilities: [],
+    signals: [WorkflowSignalName.make("approval")],
   }),
 });
 
@@ -166,6 +180,80 @@ scopedLive("persists the durable duration limit across cluster restarts", () =>
 
     expect(first).toHaveProperty("budget", "Duration");
     expect(replay).toEqual(first);
+  }),
+);
+
+scopedLive("persists a Workflow signal across cluster restarts", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-signal-" });
+    const filename = `${directory}/loom.sqlite`;
+    const executions = yield* Ref.make(0);
+
+    const executionId = yield* Effect.scoped(
+      WorkflowRuntime.pipe(
+        Effect.flatMap((runtime) => runtime.send(signalRequest)),
+        Effect.provide(runtimeLayer(filename, executions)),
+      ),
+    );
+    const address = WorkflowSignalAddress.make({
+      workflowRunId: executionId,
+      name: WorkflowSignalName.make("approval"),
+    });
+
+    yield* Effect.scoped(
+      WorkflowRuntime.pipe(
+        Effect.flatMap((runtime) => runtime.signal({ address, value: { approved: true } })),
+        Effect.provide(runtimeLayer(filename, executions)),
+      ),
+    );
+    const result = yield* Effect.scoped(
+      WorkflowRuntime.pipe(
+        Effect.flatMap((runtime) => runtime.execute(signalRequest)),
+        Effect.provide(runtimeLayer(filename, executions)),
+      ),
+    );
+
+    expect(result).toEqual({ approved: true });
+  }),
+);
+
+scopedLive("rejects undeclared public Workflow signals", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-signal-denied-" });
+    const executions = yield* Ref.make(0);
+    const layer = runtimeLayer(`${directory}/loom.sqlite`, executions);
+
+    yield* Effect.gen(function* () {
+      const runtime = yield* WorkflowRuntime;
+      const workflowRunId = yield* runtime.send(signalRequest);
+      const undeclared = yield* runtime
+        .signal({
+          address: WorkflowSignalAddress.make({
+            workflowRunId,
+            name: WorkflowSignalName.make("cancel"),
+          }),
+          value: true,
+        })
+        .pipe(Effect.flip);
+      const unknownRun = yield* runtime
+        .signal({
+          address: WorkflowSignalAddress.make({
+            workflowRunId: WorkflowRunId.make("unknown-run"),
+            name: WorkflowSignalName.make("approval"),
+          }),
+          value: true,
+        })
+        .pipe(Effect.flip);
+
+      expect(undeclared).toHaveProperty("_tag", "WorkflowSignalNotDeclaredError");
+      expect(undeclared).toHaveProperty("address.workflowRunId", workflowRunId);
+      expect(undeclared).toHaveProperty("address.name", WorkflowSignalName.make("cancel"));
+      expect(unknownRun).toHaveProperty("_tag", "WorkflowSignalNotDeclaredError");
+      expect(unknownRun).toHaveProperty("address.workflowRunId", WorkflowRunId.make("unknown-run"));
+      expect(unknownRun).toHaveProperty("address.name", WorkflowSignalName.make("approval"));
+    }).pipe(Effect.provide(layer), Effect.scoped);
   }),
 );
 

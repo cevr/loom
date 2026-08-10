@@ -6,6 +6,7 @@ import {
   WorkflowDefinition,
   WorkflowKey,
   WorkflowName,
+  WorkflowRunId,
   WorkflowRunRequest,
   WorkflowVersion,
 } from "@cvr/loom-domain";
@@ -50,7 +51,9 @@ export const execution = (value: WorkflowStepExecution["value"]): WorkflowStepEx
 export const host = (
   execute: WorkflowInterpreterHost<never>["execute"],
 ): WorkflowInterpreterHost<never> => ({
+  workflowRunId: WorkflowRunId.make("workflow-run-1"),
   activity: (_stepId, effect) => effect,
+  awaitSignal: () => Effect.succeed({ received: true }),
   supports: () => true,
   execute,
   storeArtifact: ({ stepId }) =>
