@@ -7,6 +7,7 @@ import {
   WorkflowKey,
   WorkflowName,
   WorkflowRunRequest,
+  WorkflowRunId,
   WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
@@ -42,6 +43,7 @@ const request = WorkflowRunRequest.make({
   input: { target: "production", metadata: { region: "north", replicas: 2 } },
   budget,
 });
+const workflowRunId = WorkflowRunId.make("workflow-run-1");
 const scopedLive = it.scopedLive.layer(BunServices.layer);
 
 const conflictingRequests = [
@@ -108,7 +110,7 @@ scopedLive("creates one acceptance row for concurrent matching requests", () =>
       Effect.gen(function* () {
         const acceptance = yield* WorkflowRunAcceptance;
         return yield* Effect.all(
-          Array.from({ length: 16 }, () => acceptance.accept(request)),
+          Array.from({ length: 16 }, () => acceptance.accept(request, workflowRunId)),
           { concurrency: "unbounded" },
         );
       }),
@@ -142,8 +144,8 @@ scopedLive("normalizes names and JSON object keys before it attaches", () =>
       filename,
       Effect.gen(function* () {
         const acceptance = yield* WorkflowRunAcceptance;
-        const initial = yield* acceptance.accept(request);
-        const retry = yield* acceptance.accept(reordered);
+        const initial = yield* acceptance.accept(request, workflowRunId);
+        const retry = yield* acceptance.accept(reordered, workflowRunId);
         return { first: initial, attached: retry };
       }),
     );
@@ -167,7 +169,7 @@ scopedLive("keeps the accepted request immutable across daemon storage restarts"
       filename,
       Effect.gen(function* () {
         const acceptance = yield* WorkflowRunAcceptance;
-        return yield* acceptance.accept(request);
+        return yield* acceptance.accept(request, workflowRunId);
       }),
     );
 
@@ -175,7 +177,7 @@ scopedLive("keeps the accepted request immutable across daemon storage restarts"
       filename,
       Effect.gen(function* () {
         const acceptance = yield* WorkflowRunAcceptance;
-        return yield* acceptance.accept(request);
+        return yield* acceptance.accept(request, workflowRunId);
       }),
     );
     expect(attached).toEqual(accepted);
@@ -186,7 +188,7 @@ scopedLive("keeps the accepted request immutable across daemon storage restarts"
         const acceptance = yield* WorkflowRunAcceptance;
         yield* Effect.forEach(conflictingRequests, (changed) =>
           Effect.gen(function* () {
-            const conflict = yield* acceptance.accept(changed).pipe(Effect.flip);
+            const conflict = yield* acceptance.accept(changed, workflowRunId).pipe(Effect.flip);
             expect(conflict).toBeInstanceOf(WorkflowIdentityConflictError);
             if (conflict instanceof WorkflowIdentityConflictError) {
               expect(conflict.acceptedDigest).toBe(accepted.digest);
@@ -194,7 +196,35 @@ scopedLive("keeps the accepted request immutable across daemon storage restarts"
             }
           }),
         );
-        expect(yield* acceptance.accept(request)).toEqual(accepted);
+        expect(yield* acceptance.accept(request, workflowRunId)).toEqual(accepted);
+      }),
+    );
+  }),
+);
+
+scopedLive("resolves only the accepted Session after storage restarts", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-address-" });
+    const filename = `${directory}/loom.sqlite`;
+    const address = { sessionId: request.sessionId, workflowRunId };
+
+    yield* withAcceptance(
+      filename,
+      WorkflowRunAcceptance.pipe(
+        Effect.flatMap((acceptance) => acceptance.accept(request, workflowRunId)),
+      ),
+    );
+
+    yield* withAcceptance(
+      filename,
+      Effect.gen(function* () {
+        const acceptance = yield* WorkflowRunAcceptance;
+        yield* acceptance.authorize(address);
+        const denied = yield* acceptance
+          .authorize({ ...address, sessionId: SessionId.make("session-2") })
+          .pipe(Effect.flip);
+        expect(denied).toHaveProperty("_tag", "WorkflowRunNotFoundError");
       }),
     );
   }),

@@ -17,6 +17,13 @@ export { Handshake, HandshakeError } from "./handshake.js";
 export { HandshakeRequest } from "./handshake-request.js";
 export { HandshakeSuccess } from "./handshake-success.js";
 export { IncompatibleProtocolError } from "./incompatible-protocol-error.js";
+export {
+  InspectWorkflow,
+  InspectWorkflowError,
+  InterruptWorkflow,
+  ResumeWorkflow,
+  ResumeWorkflowError,
+} from "./workflow-control.js";
 export { LoomRpcs } from "./loom-rpcs.js";
 export {
   currentProtocolVersion,
@@ -44,6 +51,9 @@ export { WorkflowInterpreterVersionMismatchError } from "./workflow-interpreter-
 export { workflowInterpreterVersion } from "./workflow-interpreter-version.js";
 export { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
 export { WorkflowRunError } from "./workflow-run-error.js";
+export { WorkflowRunState } from "./workflow-run-state.js";
+export { WorkflowRunNotFoundError } from "./workflow-run-not-found-error.js";
+export { WorkflowRunNotSuspendedError } from "./workflow-run-not-suspended-error.js";
 export { WorkflowSourceError } from "./workflow-source-error.js";
 export { WorkflowStepError } from "./workflow-step-error.js";
 export { WorkspaceMismatchError } from "./workspace-mismatch-error.js";

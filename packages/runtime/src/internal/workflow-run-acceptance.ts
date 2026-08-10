@@ -1,6 +1,16 @@
-import { AcceptedWorkflowRun, WorkflowRequestDigest, WorkflowRunRequest } from "@cvr/loom-domain";
-import { WorkflowIdentityConflictError, WorkflowRunAcceptanceError } from "@cvr/loom-protocol";
-import { Context, Crypto, Effect, Inspectable, Layer, Schema } from "effect";
+import {
+  AcceptedWorkflowRun,
+  type WorkflowRunAddress,
+  WorkflowRequestDigest,
+  type WorkflowRunId,
+  WorkflowRunRequest,
+} from "@cvr/loom-domain";
+import {
+  WorkflowIdentityConflictError,
+  WorkflowRunAcceptanceError,
+  WorkflowRunNotFoundError,
+} from "@cvr/loom-protocol";
+import { Context, Crypto, Effect, Inspectable, Layer, Option, Schema } from "effect";
 import { canonicalJsonSha256 } from "effect-encore";
 import { WorkflowRunAcceptanceStore } from "./workflow-run-acceptance-store.js";
 import { workflowIdentityFromRequest } from "./workflow-identity.js";
@@ -8,10 +18,14 @@ import { workflowIdentityFromRequest } from "./workflow-identity.js";
 export interface WorkflowRunAcceptanceShape {
   readonly accept: (
     request: WorkflowRunRequest,
+    workflowRunId: WorkflowRunId,
   ) => Effect.Effect<
     AcceptedWorkflowRun,
     WorkflowIdentityConflictError | WorkflowRunAcceptanceError
   >;
+  readonly authorize: (
+    address: WorkflowRunAddress,
+  ) => Effect.Effect<void, WorkflowRunNotFoundError | WorkflowRunAcceptanceError>;
 }
 
 export class WorkflowRunAcceptance extends Context.Service<
@@ -32,6 +46,15 @@ const normalizeRequest = (request: WorkflowRunRequest): WorkflowRunRequest =>
       capabilities: normalizeNames(request.definition.capabilities),
       signals: normalizeNames(request.definition.signals),
     },
+  });
+
+const makeAuthorizeWorkflowRun = (store: WorkflowRunAcceptanceStore["Service"]) =>
+  Effect.fn("WorkflowRunAcceptance.authorize")(function* (address: WorkflowRunAddress) {
+    const identity = yield* store.lookup(address.workflowRunId);
+    if (Option.exists(identity, (accepted) => accepted.sessionId === address.sessionId)) {
+      return;
+    }
+    return yield* new WorkflowRunNotFoundError({ address });
   });
 
 export const makeWorkflowRunAcceptance: Effect.Effect<
@@ -62,11 +85,12 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
 
   const accept = Effect.fn("WorkflowRunAcceptance.accept")(function* (
     received: WorkflowRunRequest,
+    workflowRunId: WorkflowRunId,
   ) {
     const request = normalizeRequest(received);
     const identity = workflowIdentityFromRequest(request);
     const digest = yield* digestRequest(request);
-    const acceptedDigest = yield* store.claim(identity, digest);
+    const acceptedDigest = yield* store.claim(identity, digest, workflowRunId);
     if (acceptedDigest !== digest) {
       return yield* new WorkflowIdentityConflictError({
         identity,
@@ -74,10 +98,10 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
         receivedDigest: digest,
       });
     }
-    return AcceptedWorkflowRun.make({ identity, request, digest });
+    return AcceptedWorkflowRun.make({ workflowRunId, identity, request, digest });
   });
 
-  return WorkflowRunAcceptance.of({ accept });
+  return WorkflowRunAcceptance.of({ accept, authorize: makeAuthorizeWorkflowRun(store) });
 });
 
 export const layerWorkflowRunAcceptance: Layer.Layer<

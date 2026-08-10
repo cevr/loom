@@ -1,4 +1,4 @@
-import type { AgentOwner, WorkflowRunRequest } from "@cvr/loom-domain";
+import type { AgentOwner, WorkflowRunAddress, WorkflowRunRequest } from "@cvr/loom-domain";
 import type {
   CellEvaluation,
   CellEvaluationError,
@@ -10,7 +10,10 @@ import type {
   SignalWorkflowError,
   SignalWorkflowRequest,
   StartWorkflowError,
+  InspectWorkflowError,
+  ResumeWorkflowError,
   WorkflowRunHandle,
+  WorkflowRunState,
 } from "@cvr/loom-protocol";
 import { Context, type Effect, type Schema } from "effect";
 import type { DaemonUnavailableError } from "./daemon-unavailable-error.js";
@@ -42,6 +45,18 @@ export interface LoomClientShape {
   readonly signalWorkflow: (
     request: SignalWorkflowRequest,
   ) => Effect.Effect<void, SignalWorkflowError | HandshakeError | DaemonUnavailableError>;
+  readonly inspectWorkflow: (
+    request: WorkflowRunAddress,
+  ) => Effect.Effect<
+    WorkflowRunState,
+    InspectWorkflowError | HandshakeError | DaemonUnavailableError
+  >;
+  readonly interruptWorkflow: (
+    request: WorkflowRunAddress,
+  ) => Effect.Effect<void, InspectWorkflowError | HandshakeError | DaemonUnavailableError>;
+  readonly resumeWorkflow: (
+    request: WorkflowRunAddress,
+  ) => Effect.Effect<void, ResumeWorkflowError | HandshakeError | DaemonUnavailableError>;
 }
 
 export class LoomClient extends Context.Service<LoomClient, LoomClientShape>()(

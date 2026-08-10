@@ -1,4 +1,4 @@
-import { WorkflowIdentity, WorkflowRequestDigest } from "@cvr/loom-domain";
+import { WorkflowIdentity, WorkflowRequestDigest, WorkflowRunId } from "@cvr/loom-domain";
 import {
   WorkflowRunAcceptanceError,
   WorkflowRunAcceptanceStore,
@@ -10,6 +10,7 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 const Claim = Schema.Struct({
   ...WorkflowIdentity.fields,
   digest: WorkflowRequestDigest,
+  workflowRunId: WorkflowRunId,
 });
 
 const DigestRow = Schema.Struct({ digest: WorkflowRequestDigest });
@@ -21,15 +22,34 @@ const makeClaim = (sql: SqlClient.SqlClient) =>
     execute: (claim) =>
       sql`
         INSERT INTO workflow_run_acceptance (
-          session_id, workflow_name, workflow_version, workflow_key, request_digest
+          session_id, workflow_name, workflow_version, workflow_key, workflow_run_id, request_digest
         ) VALUES (
-          ${claim.sessionId}, ${claim.name}, ${claim.version}, ${claim.key}, ${claim.digest}
+          ${claim.sessionId}, ${claim.name}, ${claim.version}, ${claim.key},
+          ${claim.workflowRunId}, ${claim.digest}
         )
         ON CONFLICT(session_id, workflow_name, workflow_version, workflow_key)
         DO UPDATE SET request_digest = workflow_run_acceptance.request_digest
         RETURNING request_digest AS digest
       `,
   });
+
+const makeLookup = (sql: SqlClient.SqlClient) =>
+  SqlSchema.findOneOption({
+    Request: WorkflowRunId,
+    Result: WorkflowIdentity,
+    execute: (workflowRunId) => sql`
+      SELECT
+        session_id AS sessionId,
+        workflow_name AS name,
+        workflow_version AS version,
+        workflow_key AS key
+      FROM workflow_run_acceptance
+      WHERE workflow_run_id = ${workflowRunId}
+    `,
+  });
+
+const storeError = (operation: WorkflowRunAcceptanceError["operation"], cause: unknown) =>
+  new WorkflowRunAcceptanceError({ operation, message: Inspectable.toStringUnknown(cause) });
 
 export const makeSqliteWorkflowRunAcceptanceStore: Effect.Effect<
   WorkflowRunAcceptanceStoreShape,
@@ -38,9 +58,10 @@ export const makeSqliteWorkflowRunAcceptanceStore: Effect.Effect<
 > = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const claim = makeClaim(sql);
+  const lookup = makeLookup(sql);
   return WorkflowRunAcceptanceStore.of({
-    claim: (identity, digest) =>
-      claim({ ...identity, digest }).pipe(
+    claim: (identity, digest, workflowRunId) =>
+      claim({ ...identity, digest, workflowRunId }).pipe(
         Effect.map(({ digest: acceptedDigest }) => acceptedDigest),
         // The upsert always returns the immutable accepted digest.
         Effect.catchTags({
@@ -48,13 +69,12 @@ export const makeSqliteWorkflowRunAcceptanceStore: Effect.Effect<
           SchemaError: Effect.die,
         }),
         Effect.tapError((cause) => Effect.logError("Workflow acceptance claim failed.", cause)),
-        Effect.mapError(
-          (cause) =>
-            new WorkflowRunAcceptanceError({
-              operation: "claim",
-              message: Inspectable.toStringUnknown(cause),
-            }),
-        ),
+        Effect.mapError((cause) => storeError("claim", cause)),
+      ),
+    lookup: (workflowRunId) =>
+      lookup(workflowRunId).pipe(
+        Effect.tapError((cause) => Effect.logError("Workflow acceptance lookup failed.", cause)),
+        Effect.mapError((cause) => storeError("lookup", cause)),
       ),
   });
 });

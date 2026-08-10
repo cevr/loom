@@ -3,7 +3,7 @@ import { Schema } from "effect";
 export class WorkflowRunAcceptanceError extends Schema.TaggedError<WorkflowRunAcceptanceError>()(
   "WorkflowRunAcceptanceError",
   {
-    operation: Schema.Literals(["claim", "digest"]),
+    operation: Schema.Literals(["claim", "digest", "lookup"]),
     message: Schema.String,
   },
 ) {}

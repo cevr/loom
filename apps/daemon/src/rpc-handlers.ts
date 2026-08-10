@@ -30,6 +30,9 @@ export const layerLoomRpcHandlers = LoomRpcs.toLayer(
           .pipe(Effect.map((workflowRunId) => WorkflowRunHandle.make({ workflowRunId }))),
       "Workflow.Execute": workflows.execute,
       "Workflow.Signal": workflows.signal,
+      "Workflow.Inspect": workflows.inspect,
+      "Workflow.Interrupt": workflows.interrupt,
+      "Workflow.Resume": workflows.resume,
     });
   }),
 );

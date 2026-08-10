@@ -32,6 +32,7 @@ const createKernelSchema = Effect.gen(function* () {
       workflow_name TEXT NOT NULL,
       workflow_version TEXT NOT NULL,
       workflow_key TEXT NOT NULL,
+      workflow_run_id TEXT NOT NULL UNIQUE,
       request_digest TEXT NOT NULL,
       PRIMARY KEY (session_id, workflow_name, workflow_version, workflow_key)
     )

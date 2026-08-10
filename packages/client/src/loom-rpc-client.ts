@@ -108,6 +108,34 @@ const makeEvaluateCell = (
     );
   });
 
+const makeWorkflowControls = (
+  config: LoomRpcClientConfig,
+  rpc: RpcClientShape,
+  runHandshake: LoomClientShape["handshake"],
+) => ({
+  inspectWorkflow: makeDaemonRequest(
+    "LoomRpcClient.inspectWorkflow",
+    "inspectWorkflow",
+    config,
+    runHandshake,
+    rpc["Workflow.Inspect"],
+  ),
+  interruptWorkflow: makeDaemonRequest(
+    "LoomRpcClient.interruptWorkflow",
+    "interruptWorkflow",
+    config,
+    runHandshake,
+    rpc["Workflow.Interrupt"],
+  ),
+  resumeWorkflow: makeDaemonRequest(
+    "LoomRpcClient.resumeWorkflow",
+    "resumeWorkflow",
+    config,
+    runHandshake,
+    rpc["Workflow.Resume"],
+  ),
+});
+
 const makeLoomRpcClient = (
   config: LoomRpcClientConfig,
 ): Effect.Effect<LoomClientShape, never, RpcClient.Protocol | Scope.Scope> =>
@@ -115,6 +143,7 @@ const makeLoomRpcClient = (
     const rpc = yield* RpcClient.make(LoomRpcs);
     const runHandshake = makeRunHandshake(config, rpc);
     return LoomClient.of({
+      ...makeWorkflowControls(config, rpc, runHandshake),
       handshake: runHandshake,
       closeSession: makeDaemonRequest(
         "LoomRpcClient.closeSession",

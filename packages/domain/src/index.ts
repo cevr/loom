@@ -156,7 +156,14 @@ export const WorkflowRunRequest = Schema.Struct({
 });
 export type WorkflowRunRequest = typeof WorkflowRunRequest.Type;
 
+export const WorkflowRunAddress = Schema.Struct({
+  sessionId: SessionId,
+  workflowRunId: WorkflowRunId,
+});
+export type WorkflowRunAddress = typeof WorkflowRunAddress.Type;
+
 export const AcceptedWorkflowRun = Schema.Struct({
+  workflowRunId: WorkflowRunId,
   identity: WorkflowIdentity,
   request: WorkflowRunRequest,
   digest: WorkflowRequestDigest,

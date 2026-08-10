@@ -24,6 +24,7 @@ import {
   LoomRpcs,
   SignalWorkflowRequest,
   WorkflowIdentityConflictError,
+  WorkflowRunState,
   WorkflowSignalNotDeclaredError,
 } from "../src/index.js";
 
@@ -78,6 +79,9 @@ describe("Loom RPC registry", () => {
         "Workflow.Start",
         "Workflow.Execute",
         "Workflow.Signal",
+        "Workflow.Inspect",
+        "Workflow.Interrupt",
+        "Workflow.Resume",
       ]);
     }),
   );
@@ -139,6 +143,19 @@ describe("Code Kernel diagnostics", () => {
       const decoded = yield* Schema.decodeEffect(codec)(encoded);
 
       expect(decoded.diagnostic).toEqual(diagnostic);
+    }),
+  );
+});
+
+describe("Workflow Run state", () => {
+  it.effect("round-trips public Workflow Run state", () =>
+    Effect.gen(function* () {
+      const state = WorkflowRunState.cases.Success.make({ value: { answer: 42 } });
+      const codec = Schema.fromJsonString(WorkflowRunState);
+
+      expect(yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(state))).toEqual(
+        state,
+      );
     }),
   );
 });

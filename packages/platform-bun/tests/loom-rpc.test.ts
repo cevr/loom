@@ -15,7 +15,12 @@ import {
   WorkflowVersion,
   WorkspaceRoot,
 } from "@cvr/loom-domain";
-import { LoomRpcs, maximumCellSourceLength, maximumFrameSize } from "@cvr/loom-protocol";
+import {
+  LoomRpcs,
+  maximumCellSourceLength,
+  maximumFrameSize,
+  WorkflowRunState,
+} from "@cvr/loom-protocol";
 import { makeConnectionHandshake } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, Exit, FileSystem, Layer, Option, Scope } from "effect";
@@ -73,6 +78,10 @@ const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRo
         "Workflow.Signal": () => Effect.void,
         "Workflow.Start": () =>
           Effect.succeed({ workflowRunId: WorkflowRunId.make("workflow-run-1") }),
+        "Workflow.Inspect": () =>
+          Effect.succeed(WorkflowRunState.cases.Success.make({ value: workflow.input })),
+        "Workflow.Interrupt": () => Effect.void,
+        "Workflow.Resume": () => Effect.void,
       });
     }),
   );
@@ -105,6 +114,10 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
       });
       const workflowResult = yield* client.executeWorkflow(workflow);
       const workflowHandle = yield* client.startWorkflow(workflow);
+      const workflowAddress = { sessionId: owner.sessionId, ...workflowHandle };
+      const workflowState = yield* client.inspectWorkflow(workflowAddress);
+      yield* client.interruptWorkflow(workflowAddress);
+      yield* client.resumeWorkflow(workflowAddress);
       yield* client.signalWorkflow({
         address: WorkflowSignalAddress.make({
           workflowRunId: workflowHandle.workflowRunId,
@@ -117,6 +130,7 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
       expect(cell.display).toBe("42");
       expect(workflowResult).toEqual(workflow.input);
       expect(workflowHandle.workflowRunId).toBe(WorkflowRunId.make("workflow-run-1"));
+      expect(workflowState).toEqual(WorkflowRunState.cases.Success.make({ value: workflow.input }));
     }).pipe(Effect.provide(live));
   }),
 );

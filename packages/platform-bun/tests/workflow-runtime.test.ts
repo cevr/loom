@@ -21,8 +21,9 @@ import {
   WorkflowRuntime,
   WorkflowStepExecution,
 } from "@cvr/loom-runtime";
+import { WorkflowRunState } from "@cvr/loom-protocol";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Option, Ref, Stream } from "effect";
+import { Effect, FileSystem, Layer, Option, Ref, Schedule, Stream } from "effect";
 import { ClusterWorkflowEngine, SingleRunner } from "effect/unstable/cluster";
 import {
   layerLoomDynamicWorkflow,
@@ -268,14 +269,29 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
     yield* Effect.gen(function* () {
       const runtime = yield* WorkflowRuntime;
       const executionId = yield* runtime.send(request);
+      const address = { sessionId: request.sessionId, workflowRunId: executionId };
       const states = yield* runtime.watch(request).pipe(Stream.runCollect);
       const terminal = yield* runtime.wait(request);
 
       expect(states.at(-1)).toEqual(terminal);
       expect(terminal).toHaveProperty("_tag", "Success");
-      yield* runtime.interrupt(executionId);
-      yield* runtime.resume(executionId);
+      expect(yield* runtime.inspect(address)).toHaveProperty("_tag", "Success");
+      yield* runtime.interrupt(address);
+      expect(yield* runtime.resume(address).pipe(Effect.flip)).toHaveProperty(
+        "_tag",
+        "WorkflowRunNotSuspendedError",
+      );
       expect(yield* runtime.execute(request)).toEqual(request.input);
+      const inflightId = yield* runtime.send(signalRequest);
+      const inflight = { sessionId: signalRequest.sessionId, workflowRunId: inflightId };
+      yield* runtime.interrupt(inflight);
+      const interrupted = yield* runtime.inspect(inflight).pipe(
+        Effect.repeat({
+          while: (state) => !WorkflowRunState.guards.Interrupted(state),
+          schedule: Schedule.spaced("10 millis"),
+        }),
+      );
+      expect(WorkflowRunState.guards.Interrupted(interrupted)).toBe(true);
     }).pipe(Effect.provide(layer), Effect.scoped);
 
     expect(yield* Ref.get(executions)).toBe(1);

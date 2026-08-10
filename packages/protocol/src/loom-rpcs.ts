@@ -2,6 +2,7 @@ import { RpcGroup } from "effect/unstable/rpc";
 import { EvaluateCell } from "./evaluate-cell.js";
 import { ExecuteWorkflow } from "./execute-workflow.js";
 import { Handshake } from "./handshake.js";
+import { InspectWorkflow, InterruptWorkflow, ResumeWorkflow } from "./workflow-control.js";
 import { CloseSession } from "./close-session.js";
 import { ResetCodeKernel } from "./reset-code-kernel.js";
 import { SignalWorkflow } from "./signal-workflow.js";
@@ -15,4 +16,7 @@ export class LoomRpcs extends RpcGroup.make(
   StartWorkflow,
   ExecuteWorkflow,
   SignalWorkflow,
+  InspectWorkflow,
+  InterruptWorkflow,
+  ResumeWorkflow,
 ) {}
