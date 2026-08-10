@@ -55,10 +55,14 @@ Seeded random values use a declared deterministic capability.
 
 The interpreter decodes host calls once with Effect Schema.
 Step inputs and results use `Schema.Json`.
+Source reads the accepted JSON value from `input`.
+Source calls `step.run({ stepId, capability, input })` for each external operation.
+The interpreter checks the call against the declared capability set before it starts the Activity.
+The Activity result stores the JSON value, child Agent count, and token count used for replayed budget accounting.
 An inline result that exceeds its byte budget becomes an Artifact reference when the workflow has the Artifact capability.
 The Step fails when that capability is absent.
 The interpreter does not use `Schema.Unknown`, hand-written record guards, or AST scans for determinism.
-The interpreter always uses the Effect Encore Step options form with explicit `Schema.Json` schemas.
+The production host must use the Effect Encore Step options form with explicit `Schema.Json` schemas.
 
 Effect interruption or suspension invalidates the current VM pass.
 The interpreter stops all host calls from that context.
@@ -119,6 +123,8 @@ The accepted request resolves these budgets:
 The interpreter derives spend from replayed Activity results.
 It does not store a second spend counter.
 A duration budget uses a durable race against Effect Durable Clock.
+The Bun interpreter accepts that race as a host Effect and does not expose a clock to source.
+The Bun VM timeout stops synchronous source that would block the Effect race.
 Budget failure uses a typed workflow error.
 
 ## Error contract
@@ -135,6 +141,8 @@ The static workflow error union contains these run failures:
 It does not belong to the Workflow Run error union.
 Loom keeps Effect defect capture enabled.
 Loom does not suspend every source failure.
+The VM bridge preserves host failures with host-owned object identity.
+Source cannot forge a typed Workflow Run failure with a matching JSON shape.
 
 ## Consequences
 

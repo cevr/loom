@@ -36,3 +36,8 @@ export {
   layerSqliteWorkflowRunAcceptanceStore,
   makeSqliteWorkflowRunAcceptanceStore,
 } from "./internal/sqlite-workflow-run-acceptance-store.js";
+export {
+  interpretWorkflow,
+  type WorkflowInterpreterHost,
+  workflowInterpreterVersion,
+} from "./internal/workflow-interpreter.js";

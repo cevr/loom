@@ -1,0 +1,27 @@
+import { ArtifactId, WorkflowCapability, WorkflowStepId } from "@cvr/loom-domain";
+import { Schema } from "effect";
+
+export const WorkflowStepCall = Schema.Struct({
+  stepId: WorkflowStepId,
+  capability: WorkflowCapability,
+  input: Schema.Json,
+});
+export type WorkflowStepCall = typeof WorkflowStepCall.Type;
+
+export const WorkflowStepExecution = Schema.Struct({
+  value: Schema.Json,
+  tokenCount: Schema.Natural,
+  agentRuns: Schema.Natural,
+});
+export type WorkflowStepExecution = typeof WorkflowStepExecution.Type;
+
+export const WorkflowArtifactReference = Schema.TaggedStruct("Artifact", {
+  artifactId: ArtifactId,
+});
+export type WorkflowArtifactReference = typeof WorkflowArtifactReference.Type;
+
+export const WorkflowArtifactWrite = Schema.Struct({
+  stepId: WorkflowStepId,
+  value: Schema.Json,
+});
+export type WorkflowArtifactWrite = typeof WorkflowArtifactWrite.Type;

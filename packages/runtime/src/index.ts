@@ -34,6 +34,21 @@ export {
   layerWorkflowRunAcceptance,
   makeWorkflowRunAcceptance,
 } from "./internal/workflow-run-acceptance.js";
+export {
+  WorkflowArtifactReference,
+  WorkflowArtifactWrite,
+  WorkflowStepCall,
+  WorkflowStepExecution,
+} from "./internal/workflow-interpreter-model.js";
+export {
+  WorkflowBudgetExceededError,
+  WorkflowBudgetName,
+} from "./internal/workflow-budget-exceeded-error.js";
+export { WorkflowCapabilityDeniedError } from "./internal/workflow-capability-denied-error.js";
+export { WorkflowInterpreterVersionMismatchError } from "./internal/workflow-interpreter-version-mismatch-error.js";
+export { WorkflowRunError } from "./internal/workflow-run-error.js";
+export { WorkflowSourceError } from "./internal/workflow-source-error.js";
+export { WorkflowStepError } from "./internal/workflow-step-error.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";
 export {
   JobReconciler,

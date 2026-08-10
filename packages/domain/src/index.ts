@@ -40,6 +40,9 @@ export type WorkflowKey = typeof WorkflowKey.Type;
 export const WorkflowCapability = identifier("@cvr/loom/WorkflowCapability");
 export type WorkflowCapability = typeof WorkflowCapability.Type;
 
+export const WorkflowStepId = identifier("@cvr/loom/WorkflowStepId");
+export type WorkflowStepId = typeof WorkflowStepId.Type;
+
 export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
 export type WorkflowSignalName = typeof WorkflowSignalName.Type;
 
