@@ -12,8 +12,9 @@ const owner = {
   sessionId: SessionId.make("session-1"),
   agentId: AgentId.make("agent-1"),
 };
+const scopedLive = it.scopedLive.layer(BunServices.layer);
 
-it.scopedLive("evaluates persistent TypeScript and imports in a separate Bun process", () =>
+scopedLive("evaluates persistent TypeScript and imports in a separate Bun process", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({ entryPath: workerEntry });
     yield* kernel.evaluate({
@@ -31,10 +32,10 @@ it.scopedLive("evaluates persistent TypeScript and imports in a separate Bun pro
 
     expect(retained.display).toBe("42");
     expect(imported.display).toBe('"kernel"');
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("returns a typed malformed Cell failure without replacing the process", () =>
+scopedLive("returns a typed malformed Cell failure without replacing the process", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({ entryPath: workerEntry });
     const failure = yield* kernel
@@ -50,10 +51,10 @@ it.scopedLive("returns a typed malformed Cell failure without replacing the proc
 
     expect(failure).toHaveProperty("_tag", "CellCompilationError");
     expect(next.display).toBe("42");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("replaces a blocked Code Kernel without replaying mutable state", () =>
+scopedLive("replaces a blocked Code Kernel without replaying mutable state", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({
       entryPath: workerEntry,
@@ -79,10 +80,10 @@ it.scopedLive("replaces a blocked Code Kernel without replaying mutable state", 
     expect(failure).toHaveProperty("_tag", "CellInterruptedError");
     expect(failure).toHaveProperty("reason", "TimedOut");
     expect(missingState).toHaveProperty("_tag", "CellExecutionError");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("replaces an interrupted Code Kernel before the next Cell", () =>
+scopedLive("replaces an interrupted Code Kernel before the next Cell", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({ entryPath: workerEntry });
     const running = yield* Effect.forkChild(
@@ -99,10 +100,10 @@ it.scopedLive("replaces an interrupted Code Kernel before the next Cell", () =>
     });
 
     expect(next.display).toBe("42");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("keeps the daemon process alive after the Code Kernel exits", () =>
+scopedLive("keeps the daemon process alive after the Code Kernel exits", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({ entryPath: workerEntry });
     const failure = yield* kernel
@@ -119,10 +120,10 @@ it.scopedLive("keeps the daemon process alive after the Code Kernel exits", () =
     expect(failure).toHaveProperty("_tag", "CellInterruptedError");
     expect(failure).toHaveProperty("reason", "ProcessExited");
     expect(next.display).toBe("42");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("clears persistent state when the Code Kernel resets", () =>
+scopedLive("clears persistent state when the Code Kernel resets", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({ entryPath: workerEntry });
     yield* kernel.evaluate({
@@ -138,10 +139,10 @@ it.scopedLive("clears persistent state when the Code Kernel resets", () =>
       .pipe(Effect.flip);
 
     expect(missingState).toHaveProperty("_tag", "CellExecutionError");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("returns bounded stderr and a retained diagnostic file when startup fails", () =>
+scopedLive("returns bounded stderr and a retained diagnostic file when startup fails", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-diagnostic-" });
@@ -164,10 +165,10 @@ it.scopedLive("returns bounded stderr and a retained diagnostic file when startu
         layerCodeKernelFactory({ entryPath: stderrExitEntry, diagnosticsDirectory: directory }),
       ),
     );
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("returns a typed failure when the Code Kernel executable cannot start", () =>
+scopedLive("returns a typed failure when the Code Kernel executable cannot start", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({
       entryPath: workerEntry,
@@ -180,10 +181,10 @@ it.scopedLive("returns a typed failure when the Code Kernel executable cannot st
     expect(failure).toHaveProperty("_tag", "CellInterruptedError");
     expect(failure).toHaveProperty("reason", "ProcessExited");
     expect(failure).toHaveProperty("diagnostic", undefined);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("retains only the configured number of stderr files", () =>
+scopedLive("retains only the configured number of stderr files", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-retention-" });
@@ -208,10 +209,10 @@ it.scopedLive("retains only the configured number of stderr files", () =>
 
     const files = yield* fs.readDirectory(`${directory}/session-1/agent-1`);
     expect(files).toHaveLength(2);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("blocks a repeated Code Kernel crash loop until its cooldown ends", () =>
+scopedLive("blocks a repeated Code Kernel crash loop until its cooldown ends", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({
       entryPath: workerEntry,
@@ -237,10 +238,10 @@ it.scopedLive("blocks a repeated Code Kernel crash loop until its cooldown ends"
 
     expect(blocked).toHaveProperty("reason", "CrashLoop");
     expect(recovered.display).toBe("42");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("forgets process failures outside the crash-loop window", () =>
+scopedLive("forgets process failures outside the crash-loop window", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({
       entryPath: workerEntry,
@@ -265,10 +266,10 @@ it.scopedLive("forgets process failures outside the crash-loop window", () =>
     });
 
     expect(recovered.display).toBe("42");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("replaces a Code Kernel that exits before reset", () =>
+scopedLive("replaces a Code Kernel that exits before reset", () =>
   Effect.gen(function* () {
     const kernel = yield* makeCodeKernel({ entryPath: resetExitEntry });
     yield* kernel.evaluate({
@@ -282,5 +283,5 @@ it.scopedLive("replaces a Code Kernel that exits before reset", () =>
     });
 
     expect(recovered.display).toBe("42");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );

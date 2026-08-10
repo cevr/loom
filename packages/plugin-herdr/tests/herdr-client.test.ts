@@ -17,8 +17,9 @@ const OkResponse = Schema.Struct({
   result: Schema.Struct({ type: Schema.Literal("ok") }),
 });
 const encodeResponse = Schema.encodeSync(Schema.fromJsonString(OkResponse));
+const scoped = it.scoped.layer(BunServices.layer);
 
-it.scoped("sends ordered reports through the Herdr Unix socket", () =>
+scoped("sends ordered reports through the Herdr Unix socket", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({
@@ -66,5 +67,5 @@ it.scoped("sends ordered reports through the Herdr Unix socket", () =>
     ]);
     expect(requests[1]?.params.seq).toBeGreaterThan(requests[0]?.params.seq ?? 0);
     expect(requests[2]?.params.seq).toBeGreaterThan(requests[1]?.params.seq ?? 0);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );

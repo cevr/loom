@@ -17,6 +17,8 @@ const owner = {
   sessionId: SessionId.make("session-1"),
   agentId: AgentId.make("agent-1"),
 };
+const scoped = it.scoped.layer(BunServices.layer);
+const scopedLive = it.scopedLive.layer(BunServices.layer);
 
 const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRoot) =>
   LoomRpcs.toLayer(
@@ -45,7 +47,7 @@ const layerClient = (socketPath: string, root = workspaceRoot) =>
     connectionTimeout: "2 seconds",
   });
 
-it.scoped("connects and evaluates a Cell through the real Unix socket", () =>
+scoped("connects and evaluates a Cell through the real Unix socket", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-" });
@@ -64,10 +66,10 @@ it.scoped("connects and evaluates a Cell through the real Unix socket", () =>
       expect(handshake.maximumFrameSize).toBe(maximumFrameSize);
       expect(cell.display).toBe("42");
     }).pipe(Effect.provide(live));
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scoped("rejects a client routed to another Workspace", () =>
+scoped("rejects a client routed to another Workspace", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-mismatch-" });
@@ -83,10 +85,10 @@ it.scoped("rejects a client routed to another Workspace", () =>
     }).pipe(Effect.provide(live));
 
     expect(error).toHaveProperty("_tag", "WorkspaceMismatchError");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("shows a typed failure when the daemon is unavailable", () =>
+scopedLive("shows a typed failure when the daemon is unavailable", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-missing-" });
@@ -105,10 +107,10 @@ it.scopedLive("shows a typed failure when the daemon is unavailable", () =>
     );
 
     expect(error).toHaveProperty("_tag", "DaemonUnavailableError");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scoped("rejects an oversized Cell before socket I/O", () =>
+scoped("rejects an oversized Cell before socket I/O", () =>
   Effect.gen(function* () {
     const client = yield* LoomClient;
     const error = yield* client
@@ -122,18 +124,15 @@ it.scoped("rejects an oversized Cell before socket I/O", () =>
     expect(error).toBeInstanceOf(MessageTooLargeError);
   }).pipe(
     Effect.provide(
-      Layer.merge(
-        layerBunLoomClient({
-          socketPath: "/tmp/loom-not-used.sock",
-          workspaceRoot,
-        }),
-        BunServices.layer,
-      ),
+      layerBunLoomClient({
+        socketPath: "/tmp/loom-not-used.sock",
+        workspaceRoot,
+      }),
     ),
   ),
 );
 
-it.scopedLive("reconnects after the daemon restarts", () =>
+scopedLive("reconnects after the daemon restarts", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-reconnect-" });
@@ -151,10 +150,10 @@ it.scopedLive("reconnects after the daemon restarts", () =>
       expect((yield* client.handshake).daemonStartedAtMillis).toBe(200);
       yield* Scope.close(secondScope, Exit.void);
     }).pipe(Effect.provide(layerClient(socketPath)));
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("removes a stale daemon socket path", () =>
+scopedLive("removes a stale daemon socket path", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-stale-" });
@@ -164,10 +163,10 @@ it.scopedLive("removes a stale daemon socket path", () =>
     yield* prepareDaemonSocket(socketPath);
 
     expect(yield* fs.exists(socketPath)).toBe(false);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("rejects a live daemon socket", () =>
+scopedLive("rejects a live daemon socket", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-live-" });
@@ -177,5 +176,5 @@ it.scopedLive("rejects a live daemon socket", () =>
     const error = yield* prepareDaemonSocket(socketPath).pipe(Effect.flip);
 
     expect(error).toHaveProperty("_tag", "DaemonAlreadyRunningError");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );

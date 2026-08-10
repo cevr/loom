@@ -2,7 +2,7 @@ import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
 import { BunServices } from "@effect/platform-bun";
 import { CodeKernelFactory } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Option } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { layerCodeKernelFactory } from "../src/index.js";
 
 const workerEntry = new URL("../../../apps/code-kernel/src/main.ts", import.meta.url).pathname;
@@ -12,8 +12,9 @@ const owner = {
   sessionId: SessionId.make("session-1"),
   agentId: AgentId.make("agent-1"),
 };
+const scopedLive = it.scopedLive.layer(BunServices.layer);
 
-it.scopedLive("bounds each diagnostic file and retains the stderr tail", () =>
+scopedLive("bounds each diagnostic file and retains the stderr tail", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-byte-limit-" });
@@ -43,10 +44,10 @@ it.scopedLive("bounds each diagnostic file and retains the stderr tail", () =>
     expect(text).toContain("head:");
     expect(text).toContain("[loom: stderr truncated]");
     expect(text).toContain(":tail\n");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("prunes the oldest diagnostic across owners and removes its empty directory", () =>
+scopedLive("prunes the oldest diagnostic across owners and removes its empty directory", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-global-limit-" });
@@ -80,10 +81,10 @@ it.scopedLive("prunes the oldest diagnostic across owners and removes its empty 
       entry.endsWith(".stderr.log"),
     );
     expect(files).toHaveLength(2);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("cleans stale and oversized diagnostics when the factory starts", () =>
+scopedLive("cleans stale and oversized diagnostics when the factory starts", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-restart-cleanup-" });
@@ -107,10 +108,10 @@ it.scopedLive("cleans stale and oversized diagnostics when the factory starts", 
     );
     expect(yield* fs.readDirectory(ownerDirectory)).toEqual(["2-2.stderr.log"]);
     expect(yield* fs.exists(`${directory}/empty-session`)).toBe(false);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("recreates an owner directory after self-eviction", () =>
+scopedLive("recreates an owner directory after self-eviction", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-self-prune-" });
@@ -135,10 +136,10 @@ it.scopedLive("recreates an owner directory after self-eviction", () =>
       ),
     );
     expect(yield* fs.readDirectory(`${directory}/session-1/agent-1`)).toHaveLength(1);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("does not follow an owner directory symlink outside the diagnostic root", () =>
+scopedLive("does not follow an owner directory symlink outside the diagnostic root", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-containment-" });
@@ -173,10 +174,10 @@ it.scopedLive("does not follow an owner directory symlink outside the diagnostic
       ),
     );
     expect(yield* fs.readFileString(`${outside}/1-1.stderr.log`)).toBe("keep");
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("runs without a diagnostic file when active kernels fill the global limit", () =>
+scopedLive("runs without a diagnostic file when active kernels fill the global limit", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-active-limit-" });
@@ -203,10 +204,10 @@ it.scopedLive("runs without a diagnostic file when active kernels fill the globa
       ),
     );
     expect(yield* fs.exists(`${directory}/session-1/agent-2`)).toBe(false);
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("keeps directories that belong to an active diagnostic lease", () =>
+scopedLive("keeps directories that belong to an active diagnostic lease", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-active-owner-" });
@@ -228,10 +229,10 @@ it.scopedLive("keeps directories that belong to an active diagnostic lease", () 
         layerCodeKernelFactory({ entryPath: workerEntry, diagnosticsDirectory: directory }),
       ),
     );
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("skips a broken owner entry during allocation cleanup", () =>
+scopedLive("skips a broken owner entry during allocation cleanup", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-kernel-broken-link-" });
@@ -248,10 +249,10 @@ it.scopedLive("skips a broken owner entry during allocation cleanup", () =>
         layerCodeKernelFactory({ entryPath: stderrExitEntry, diagnosticsDirectory: directory }),
       ),
     );
-  }).pipe(Effect.provide(BunServices.layer)),
+  }),
 );
 
-it.scopedLive("allows the in-memory stderr tail to be disabled", () =>
+scopedLive("allows the in-memory stderr tail to be disabled", () =>
   Effect.gen(function* () {
     const factory = yield* CodeKernelFactory;
     const kernel = yield* factory.spawn(owner);
@@ -260,10 +261,6 @@ it.scopedLive("allows the in-memory stderr tail to be disabled", () =>
       .pipe(Effect.flip);
     expect(failure).toHaveProperty("diagnostic.stderrTail", undefined);
   }).pipe(
-    Effect.provide(
-      layerCodeKernelFactory({ entryPath: stderrExitEntry, stderrTailCharacters: 0 }).pipe(
-        Layer.provide(BunServices.layer),
-      ),
-    ),
+    Effect.provide(layerCodeKernelFactory({ entryPath: stderrExitEntry, stderrTailCharacters: 0 })),
   ),
 );
