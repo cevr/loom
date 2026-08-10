@@ -1,12 +1,12 @@
 import type { RegisteredCommand } from "@earendil-works/pi-coding-agent";
 import { expect, it } from "bun:test";
-import { WorkflowBudget } from "@cvr/loom-domain";
-import { Duration, Option } from "effect";
-import loomExtension, { shouldCloseSession, workflowRequestTimeout } from "../src/index.js";
+import { Effect, Option } from "effect";
+import loomExtension, { shouldCloseSession } from "../src/index.js";
+import { runTool } from "../src/internal/tool-result.js";
 
 it("registers the Loom development command", () => {
   let command = Option.none<Omit<RegisteredCommand, "name" | "sourceInfo">>();
-  let toolName = Option.none<string>();
+  const toolNames = new Set<string>();
   const events = new Set<string>();
   const pi = {
     on: (event: "session_start" | "session_shutdown") => {
@@ -17,14 +17,24 @@ it("registers the Loom development command", () => {
       command = Option.some(options);
     },
     registerTool: (tool: { readonly name: string }) => {
-      toolName = Option.some(tool.name);
+      toolNames.add(tool.name);
     },
   };
 
   loomExtension(pi);
 
   expect(Option.getOrThrow(command).description).toBe("Show the Loom daemon state");
-  expect(Option.getOrThrow(toolName)).toBe("loom_workflow");
+  expect(toolNames).toEqual(
+    new Set([
+      "loom_cell",
+      "loom_cell_reset",
+      "loom_workflow_start",
+      "loom_workflow_inspect",
+      "loom_workflow_signal",
+      "loom_workflow_interrupt",
+      "loom_workflow_compensation",
+    ]),
+  );
   expect(events).toEqual(new Set(["session_start", "session_shutdown"]));
 });
 
@@ -33,20 +43,9 @@ it("keeps the Session active during extension reload", () => {
   expect(shouldCloseSession({ type: "session_shutdown", reason: "quit" })).toBe(true);
 });
 
-it("sets the workflow request timeout from its duration budget", () => {
-  const budget = WorkflowBudget.make({
-    maxSteps: 1,
-    maxAgentRuns: 1,
-    maxParallelism: 1,
-    maxInlineStepResultBytes: 1,
-    maxTokens: Option.none(),
-    maxDurationMillis: Option.some(10_000),
-  });
-
-  expect(Duration.toMillis(workflowRequestTimeout(budget))).toBe(15_000);
+it("reports a typed Loom tool failure to Pi", () =>
   expect(
-    Duration.toMillis(
-      workflowRequestTimeout(WorkflowBudget.make({ ...budget, maxDurationMillis: Option.none() })),
-    ),
-  ).toBe(300_000);
-});
+    runTool(Effect.fail({ _tag: "AdapterProbeError", detail: "preserved" }), {
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow(/AdapterProbeError.*preserved/u));

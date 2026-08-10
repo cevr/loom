@@ -12,6 +12,12 @@ Run `/loom` in Pi to confirm the daemon connection.
 
 Run `/reload` after you change Loom extension source files.
 
+Use Shift+Enter to insert a new line.
+Pi owns this key behavior.
+
+The Loom extension registers persistent Cell and durable Workflow tools.
+See [the Pi Client Adapter contract](./pi-client-adapter.md).
+
 The development command loads the source file directly. It does not copy the extension into the global Pi directory.
 
 Use Herdr to start Pi in a managed pane.
