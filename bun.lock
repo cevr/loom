@@ -145,7 +145,7 @@
     "@effect/platform-node-shared": "4.0.0-beta.106",
     "@effect/sql-sqlite-bun": "4.0.0-beta.106",
     "effect": "4.0.0-beta.106",
-    "effect-encore": "0.16.0",
+    "effect-encore": "0.17.0",
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.91.1", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-LAmu761tSN9r66ixvmciswUj/ZC+1Q4iAfpedTfSVLeswRwnY3n2Nb6Tsk+cLPP28aLOPWeMgIuTuCcMC6W/iw=="],
@@ -568,7 +568,7 @@
 
     "effect-bun-test": ["effect-bun-test@0.3.0", "", { "peerDependencies": { "bun": "*", "effect": ">=3.19.0" } }, "sha512-P2xZ4HBZg4bFw2ePY4E5UB6EZ2d1L/HO13+KdoprTYFuc8B1uTpdn7V4UU6qyYiYsqTY9DZ1TFB94Ekx2YLA4g=="],
 
-    "effect-encore": ["effect-encore@0.16.0", "", { "peerDependencies": { "effect": ">=4.0.0-beta.106" } }, "sha512-m0fQd9u3ijpqqYadIyWmpdr8PgrOJXf+XS+z+aEka4QTeHWCjWe3qYc3aZd8avnqSpT/6h6dXZ6dMJ2lffDEpg=="],
+    "effect-encore": ["effect-encore@0.17.0", "", { "peerDependencies": { "effect": ">=4.0.0-beta.106" } }, "sha512-Fn3bhI9lwmEu9be6ChV0ZCOSLbWYnlTSddFaYKb8u8l80TtgfMMfwYecpcosOwU5awupOotSv7lwiqCmNX601w=="],
 
     "emoji-regex": ["emoji-regex@10.6.0", "", {}, "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A=="],
 
