@@ -21,6 +21,16 @@ export {
   type CellTerminalOutcome,
 } from "./internal/cell-ledger.js";
 export { CodeKernelFactory, type CodeKernelFactoryShape } from "./internal/code-kernel-factory.js";
+export { CodeKernelProcessRecoveryError } from "./internal/code-kernel-process-recovery-error.js";
+export {
+  type CodeKernelProcessRecoveryServices,
+  reconcileCodeKernelProcesses,
+} from "./internal/code-kernel-process-recovery.js";
+export { CodeKernelProcessStoreError } from "./internal/code-kernel-process-store-error.js";
+export {
+  CodeKernelProcessStore,
+  type CodeKernelProcessStoreShape,
+} from "./internal/code-kernel-process-store.js";
 export {
   CodeKernel,
   type CodeKernelShape,

@@ -25,6 +25,13 @@ import {
 } from "./code-kernel-diagnostics.js";
 import type { KernelDiagnosticFile } from "./code-kernel-diagnostic-store.js";
 import { CodeKernelProcessError } from "./code-kernel-process-error.js";
+import {
+  type KernelProcessLifecycle,
+  type KernelProcessRegistration,
+  makeKernelProcessRegistration,
+  registerKernelProcess,
+  releaseKernelProcess,
+} from "./code-kernel-process-lifecycle.js";
 
 export interface CodeKernelProcessTransportConfig extends CodeKernelDiagnosticsConfig {
   readonly entryPath: string;
@@ -39,6 +46,7 @@ export interface KernelChild {
   readonly responses: Queue.Queue<CodeKernelProcessResponse, CodeKernelProcessError>;
   readonly diagnostics: KernelDiagnosticSource;
   readonly stderrCapture: Fiber.Fiber<void>;
+  readonly registration: KernelProcessRegistration;
 }
 
 export type ReserveKernelDiagnostic = (
@@ -53,7 +61,7 @@ const failResponses = (
   error: {
     readonly reason: CodeKernelProcessError["reason"];
     readonly message: string;
-    readonly cause: unknown;
+    readonly cause: CodeKernelProcessError["cause"];
     readonly exitCode?: number;
   },
 ) =>
@@ -89,6 +97,8 @@ const listenForResponses = (child: KernelChild) =>
     }),
   );
 
+export const releaseKernelChild = (child: KernelChild) => releaseKernelProcess(child.registration);
+
 const reportProcessExit = Effect.fn("CodeKernelProcess.reportExit")(function* (child: KernelChild) {
   yield* Fiber.await(child.stderrCapture);
   yield* child.handle.exitCode.pipe(
@@ -107,6 +117,7 @@ const reportProcessExit = Effect.fn("CodeKernelProcess.reportExit")(function* (c
           exitCode,
         }),
     }),
+    Effect.ensuring(releaseKernelChild(child)),
   );
 });
 
@@ -165,8 +176,10 @@ export const spawnKernelChild = Effect.fn("CodeKernelProcess.spawn")(function* (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   fs: FileSystem.FileSystem,
   reserveDiagnostic: Option.Option<ReserveKernelDiagnostic>,
+  lifecycle: Option.Option<KernelProcessLifecycle>,
 ) {
   const scope = yield* Scope.fork(parentScope);
+  const registration = yield* makeKernelProcessRegistration(lifecycle);
   return yield* Effect.gen(function* () {
     const responses = yield* Queue.unbounded<CodeKernelProcessResponse, CodeKernelProcessError>();
     const stderrTail = yield* Ref.make("");
@@ -189,9 +202,17 @@ export const spawnKernelChild = Effect.fn("CodeKernelProcess.spawn")(function* (
       ),
       scope,
     );
-    const child = { scope, handle, responses, diagnostics, stderrCapture };
+    const child = {
+      scope,
+      handle,
+      responses,
+      diagnostics,
+      stderrCapture,
+      registration,
+    };
     yield* Effect.forkIn(listenForResponses(child), scope);
     yield* waitForReady(config, child);
+    yield* Effect.uninterruptible(registerKernelProcess(registration, handle.pid));
     return child;
   }).pipe(Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
 });

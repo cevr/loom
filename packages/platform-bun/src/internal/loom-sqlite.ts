@@ -5,6 +5,16 @@ import { SqlClient } from "effect/unstable/sql";
 const createKernelSchema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
+    CREATE TABLE IF NOT EXISTS code_kernel_processes (
+      session_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      pid INTEGER NOT NULL,
+      process_group_id INTEGER NOT NULL,
+      process_start_id TEXT NOT NULL,
+      PRIMARY KEY (session_id, agent_id)
+    )
+  `;
+  yield* sql`
     CREATE TABLE IF NOT EXISTS cell_ledger (
       session_id TEXT NOT NULL,
       agent_id TEXT NOT NULL,

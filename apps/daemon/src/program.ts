@@ -2,24 +2,29 @@ import {
   layerBunLoomServer,
   layerBunJobRuntime,
   layerBunProcessController,
-  layerCodeKernelFactory,
   layerBunProcessInspector,
+  layerCodeKernelFactory,
   layerLoomSqlite,
   layerLoomWorkflowRuntime,
   layerSqliteJobStore,
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
   layerSqliteCellLedger,
+  layerSqliteCodeKernelProcessStore,
   prepareDaemonSocket,
 } from "@cvr/loom-platform-bun";
 import {
   JobRuntime,
   CellLedger,
+  CodeKernelProcessStore,
+  ProcessController,
+  ProcessInspector,
   WorkflowArtifactStore,
   WorkflowCapabilityExecutor,
   layerActorStateHub,
   layerAgentActor,
   layerConnectionHandshake,
+  reconcileCodeKernelProcesses,
 } from "@cvr/loom-runtime";
 import { Clock, Context, Effect, FileSystem, Layer, Path } from "effect";
 import { SingleRunner } from "effect/unstable/cluster";
@@ -28,18 +33,27 @@ import { layerLoomRpcHandlers } from "./rpc-handlers.js";
 
 const codeKernelEntry = new URL("../../code-kernel/src/main.ts", import.meta.url).pathname;
 
-const makeAgentLayer = (config: DaemonConfig) =>
-  layerAgentActor.pipe(
-    Layer.provide([
-      layerSqliteCellLedger.pipe(
-        Layer.tap((services) => Context.get(services, CellLedger).reconcile),
-      ),
-      layerCodeKernelFactory({
-        entryPath: codeKernelEntry,
-        diagnosticsDirectory: `${config.workspaceRoot}/.loom/diagnostics/code-kernels`,
-      }),
-    ]),
+const makeAgentLayer = (config: DaemonConfig) => {
+  const processServices = Layer.mergeAll(
+    layerSqliteCodeKernelProcessStore,
+    layerBunProcessInspector,
+    layerBunProcessController,
   );
+  const kernelFactory = layerCodeKernelFactory({
+    entryPath: codeKernelEntry,
+    diagnosticsDirectory: `${config.workspaceRoot}/.loom/diagnostics/code-kernels`,
+  }).pipe(Layer.provideMerge(processServices));
+  const dependencies = Layer.merge(kernelFactory, layerSqliteCellLedger).pipe(
+    Layer.tap((services) =>
+      reconcileCodeKernelProcesses({
+        store: Context.get(services, CodeKernelProcessStore),
+        inspector: Context.get(services, ProcessInspector),
+        controller: Context.get(services, ProcessController),
+      }).pipe(Effect.andThen(Context.get(services, CellLedger).reconcile)),
+    ),
+  );
+  return layerAgentActor.pipe(Layer.provide(dependencies));
+};
 
 const makeJobLayer = (config: DaemonConfig, actors: typeof layerActorStateHub) =>
   layerBunJobRuntime({

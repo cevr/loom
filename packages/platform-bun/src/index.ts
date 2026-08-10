@@ -36,6 +36,10 @@ export {
   makeBunJobRuntime,
 } from "./internal/bun-job-runtime.js";
 export { layerSqliteCellLedger, makeSqliteCellLedger } from "./internal/sqlite-cell-ledger.js";
+export {
+  layerSqliteCodeKernelProcessStore,
+  makeSqliteCodeKernelProcessStore,
+} from "./internal/sqlite-code-kernel-process-store.js";
 export { type LoomSqliteConfig, layerLoomSqlite } from "./internal/loom-sqlite.js";
 export {
   layerSqliteWorkflowRunAcceptanceStore,

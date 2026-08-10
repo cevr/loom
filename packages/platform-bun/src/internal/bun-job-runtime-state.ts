@@ -6,7 +6,6 @@ import {
   JobAddress,
   JobOutcome,
   type JobRecord,
-  type ProcessIdentity,
 } from "@cvr/loom-domain";
 import {
   JobRuntimeError,
@@ -36,11 +35,6 @@ export const mapRuntimeError =
 
 export const jobAddress = (job: JobRecord) =>
   JobAddress.make({ jobId: job.jobId, sessionId: job.sessionId });
-
-export const identitiesMatch = (expected: ProcessIdentity, actual: ProcessIdentity): boolean =>
-  expected.pid === actual.pid &&
-  expected.processGroupId === actual.processGroupId &&
-  expected.processStartId === actual.processStartId;
 
 const revision = (job: JobRecord): number => {
   switch (job.status) {

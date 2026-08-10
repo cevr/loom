@@ -1,5 +1,6 @@
 import {
   JobOutcome,
+  processIdentitiesMatch,
   type JobId,
   JobRecord,
   type ProcessIdentity,
@@ -11,7 +12,6 @@ import type { ChildProcessSpawner } from "effect/unstable/process";
 import { makeJobCommand, outcomeForExitCode, releaseJob } from "./bun-job-command.js";
 import {
   completeJob,
-  identitiesMatch,
   jobAddress,
   type JobRuntimeServices,
   mapRuntimeError,
@@ -111,7 +111,7 @@ const stillRunning = (identity: ProcessIdentity, observation: TerminationObserva
     onNone: () => true,
     onSome: ProcessObservation.$match({
       Missing: () => true,
-      Found: ({ identity: actual }) => identitiesMatch(identity, actual),
+      Found: ({ identity: actual }) => processIdentitiesMatch(identity, actual),
     }),
   });
 };
@@ -165,7 +165,7 @@ export const cancelRunningJob = Effect.fn("BunJobRuntime.cancelRunning")(functio
     before.process,
     ProcessObservation.$match({
       Missing: () => false,
-      Found: ({ identity: actual }) => !identitiesMatch(identity, actual),
+      Found: ({ identity: actual }) => !processIdentitiesMatch(identity, actual),
     }),
   );
   if (changedBefore) {
@@ -182,7 +182,7 @@ export const cancelRunningJob = Effect.fn("BunJobRuntime.cancelRunning")(functio
   const after = yield* waitForTermination(services, grace, identity);
   const found = Option.filter(after.process, ProcessObservation.$is("Found"));
   if (Option.isSome(found)) {
-    if (identitiesMatch(identity, found.value.identity)) {
+    if (processIdentitiesMatch(identity, found.value.identity)) {
       yield* signalUnlessMissing(services, identity, "SIGKILL");
       return yield* completeJob(services, job, JobOutcome.cases.Cancelled.make({}));
     }
@@ -261,7 +261,7 @@ export const monitorJob = (
         ProcessObservation.$match(observation, {
           Missing: () => settleMissingJob(services, job).pipe(Effect.as(false)),
           Found: ({ identity: actual }) => {
-            if (identitiesMatch(identity, actual)) return Effect.succeed(true);
+            if (processIdentitiesMatch(identity, actual)) return Effect.succeed(true);
             return completeJob(
               services,
               job,

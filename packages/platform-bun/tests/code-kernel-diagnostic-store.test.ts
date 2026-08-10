@@ -3,7 +3,7 @@ import { BunServices } from "@effect/platform-bun";
 import { CodeKernelFactory } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, FileSystem, Option } from "effect";
-import { layerCodeKernelFactory } from "../src/index.js";
+import { layerUntrackedCodeKernelFactory } from "../src/internal/code-kernel-process.js";
 
 const workerEntry = new URL("../../../apps/code-kernel/src/main.ts", import.meta.url).pathname;
 const stderrExitEntry = new URL("./fixtures/stderr-exit.ts", import.meta.url).pathname;
@@ -26,7 +26,7 @@ scopedLive("bounds each diagnostic file and retains the stderr tail", () =>
         .pipe(Effect.flip);
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({
+        layerUntrackedCodeKernelFactory({
           entryPath: largeStderrExitEntry,
           diagnosticsDirectory: directory,
           maxFileBytes: 128,
@@ -67,7 +67,7 @@ scopedLive("prunes the oldest diagnostic across owners and removes its empty dir
         .pipe(Effect.flip);
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({
+        layerUntrackedCodeKernelFactory({
           entryPath: stderrExitEntry,
           diagnosticsDirectory: directory,
           maxFilesPerOwner: 5,
@@ -97,7 +97,7 @@ scopedLive("cleans stale and oversized diagnostics when the factory starts", () 
     yield* CodeKernelFactory.pipe(
       Effect.asVoid,
       Effect.provide(
-        layerCodeKernelFactory({
+        layerUntrackedCodeKernelFactory({
           entryPath: workerEntry,
           diagnosticsDirectory: directory,
           maxFileBytes: 4,
@@ -127,7 +127,7 @@ scopedLive("recreates an owner directory after self-eviction", () =>
       expect(second).toHaveProperty("diagnostic.stderrPath", expect.any(String));
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({
+        layerUntrackedCodeKernelFactory({
           entryPath: stderrExitEntry,
           diagnosticsDirectory: directory,
           maxFilesPerOwner: 1,
@@ -170,7 +170,10 @@ scopedLive("does not follow an owner directory symlink outside the diagnostic ro
       expect(agentFailure).not.toHaveProperty("diagnostic.stderrPath");
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({ entryPath: stderrExitEntry, diagnosticsDirectory: directory }),
+        layerUntrackedCodeKernelFactory({
+          entryPath: stderrExitEntry,
+          diagnosticsDirectory: directory,
+        }),
       ),
     );
     expect(yield* fs.readFileString(`${outside}/1-1.stderr.log`)).toBe("keep");
@@ -196,7 +199,7 @@ scopedLive("runs without a diagnostic file when active kernels fill the global l
       expect(failure).not.toHaveProperty("diagnostic.stderrPath");
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({
+        layerUntrackedCodeKernelFactory({
           entryPath: workerEntry,
           diagnosticsDirectory: directory,
           maxFilesTotal: 1,
@@ -226,7 +229,10 @@ scopedLive("keeps directories that belong to an active diagnostic lease", () =>
       expect(yield* fs.exists(`${directory}/session-1`)).toBe(true);
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({ entryPath: workerEntry, diagnosticsDirectory: directory }),
+        layerUntrackedCodeKernelFactory({
+          entryPath: workerEntry,
+          diagnosticsDirectory: directory,
+        }),
       ),
     );
   }),
@@ -246,7 +252,10 @@ scopedLive("skips a broken owner entry during allocation cleanup", () =>
       expect(failure).toHaveProperty("diagnostic.stderrPath", expect.any(String));
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({ entryPath: stderrExitEntry, diagnosticsDirectory: directory }),
+        layerUntrackedCodeKernelFactory({
+          entryPath: stderrExitEntry,
+          diagnosticsDirectory: directory,
+        }),
       ),
     );
   }),
@@ -261,6 +270,8 @@ scopedLive("allows the in-memory stderr tail to be disabled", () =>
       .pipe(Effect.flip);
     expect(failure).not.toHaveProperty("diagnostic.stderrTail");
   }).pipe(
-    Effect.provide(layerCodeKernelFactory({ entryPath: stderrExitEntry, stderrTailCharacters: 0 })),
+    Effect.provide(
+      layerUntrackedCodeKernelFactory({ entryPath: stderrExitEntry, stderrTailCharacters: 0 }),
+    ),
   ),
 );

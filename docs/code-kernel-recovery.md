@@ -57,6 +57,18 @@ The daemon stores Cell source before evaluation.
 The Cell Ledger survives process replacement.
 Mutable bindings do not survive process replacement.
 
+The daemon stores one Process Identity for each Session ID and Agent ID.
+It stores the PID, process group ID, and process start ID after the ready frame.
+It stores this identity before the first Cell request.
+It removes the exact record after the process exits.
+
+Daemon startup inspects every stored identity.
+It sends `SIGKILL` only when all identity fields match.
+It waits for that process group to stop before it removes the record.
+It removes a record when the process is absent.
+It removes a record when the PID now identifies a different process.
+It never signals that different process.
+
 The process boundary is a recovery boundary.
 It is not a security boundary.
 See [Code Kernel limits](./adr/0007-bound-code-kernel-failures-and-diagnostics.md).

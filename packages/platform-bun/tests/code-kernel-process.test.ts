@@ -3,7 +3,8 @@ import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
 import { CodeKernelFactory } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, Fiber, FileSystem } from "effect";
-import { layerCodeKernelFactory, makeCodeKernel } from "../src/index.js";
+import { makeCodeKernel } from "../src/index.js";
+import { layerUntrackedCodeKernelFactory } from "../src/internal/code-kernel-process.js";
 
 const workerEntry = new URL("../../../apps/code-kernel/src/main.ts", import.meta.url).pathname;
 const stderrExitEntry = new URL("./fixtures/stderr-exit.ts", import.meta.url).pathname;
@@ -162,7 +163,10 @@ scopedLive("returns bounded stderr and a retained diagnostic file when startup f
       expect(contents).toEqual(["loom kernel boot failure\n"]);
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({ entryPath: stderrExitEntry, diagnosticsDirectory: directory }),
+        layerUntrackedCodeKernelFactory({
+          entryPath: stderrExitEntry,
+          diagnosticsDirectory: directory,
+        }),
       ),
     );
   }),
@@ -198,7 +202,7 @@ scopedLive("retains only the configured number of stderr files", () =>
       );
     }).pipe(
       Effect.provide(
-        layerCodeKernelFactory({
+        layerUntrackedCodeKernelFactory({
           entryPath: stderrExitEntry,
           diagnosticsDirectory: directory,
           maxFilesPerOwner: 2,

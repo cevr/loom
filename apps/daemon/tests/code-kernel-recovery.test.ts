@@ -1,9 +1,11 @@
 import { BunServices } from "@effect/platform-bun";
 import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
 import {
+  layerBunProcessInspector,
   layerCodeKernelFactory,
   layerLoomSqlite,
   layerSqliteCellLedger,
+  layerSqliteCodeKernelProcessStore,
 } from "@cvr/loom-platform-bun";
 import { CellEvaluation } from "@cvr/loom-protocol";
 import {
@@ -25,6 +27,14 @@ const owner = {
 };
 const scopedLive = it.scopedLive.layer(BunServices.layer);
 
+const trackedFactory = (filename: string, config: Parameters<typeof layerCodeKernelFactory>[0]) =>
+  layerCodeKernelFactory(config).pipe(
+    Layer.provide([
+      layerBunProcessInspector,
+      layerSqliteCodeKernelProcessStore.pipe(Layer.provide(layerLoomSqlite({ filename }))),
+    ]),
+  );
+
 scopedLive("preserves the Cell Ledger when a blocked Code Kernel is replaced", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -35,7 +45,7 @@ scopedLive("preserves the Cell Ledger when a blocked Code Kernel is replaced", (
         Layer.provide([
           TestRunner.layer,
           layerSqliteCellLedger,
-          layerCodeKernelFactory({ entryPath: workerEntry, cellTimeout: "250 millis" }),
+          trackedFactory(filename, { entryPath: workerEntry, cellTimeout: "250 millis" }),
         ]),
       ),
       layerSqliteCellLedger,
@@ -112,7 +122,7 @@ scopedLive("keeps Code Kernel bindings inside one Agent owner", () =>
       Layer.provide([
         TestRunner.layer,
         layerSqliteCellLedger,
-        layerCodeKernelFactory({ entryPath: workerEntry }),
+        trackedFactory(filename, { entryPath: workerEntry }),
       ]),
       Layer.provide(layerLoomSqlite({ filename })),
     );
@@ -150,7 +160,7 @@ scopedLive("resets only the selected Agent Code Kernel", () =>
       Layer.provide([
         TestRunner.layer,
         layerSqliteCellLedger,
-        layerCodeKernelFactory({ entryPath: workerEntry }),
+        trackedFactory(filename, { entryPath: workerEntry }),
       ]),
       Layer.provide(layerLoomSqlite({ filename })),
     );
@@ -193,7 +203,7 @@ scopedLive("starts a fresh Code Kernel after an Agent closes it", () =>
       Layer.provide([
         TestRunner.layer,
         layerSqliteCellLedger,
-        layerCodeKernelFactory({ entryPath: workerEntry }),
+        trackedFactory(filename, { entryPath: workerEntry }),
       ]),
       Layer.provide(layerLoomSqlite({ filename })),
     );

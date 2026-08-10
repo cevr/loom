@@ -9,6 +9,7 @@ export class CellInterruptedError extends Schema.TaggedError<CellInterruptedErro
     reason: Schema.Literals([
       "JournalFailure",
       "ProcessExited",
+      "ProcessIdentityFailure",
       "ProtocolFailure",
       "TimedOut",
       "CrashLoop",

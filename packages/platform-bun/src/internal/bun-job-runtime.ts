@@ -3,6 +3,7 @@ import {
   JobOutcome,
   JobRecord,
   JobSubmission,
+  processIdentitiesMatch,
   type JobId,
   type JobRequest,
   type SessionId,
@@ -23,7 +24,6 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { detachJob, makeCancel, superviseCancellation } from "./bun-job-cancellation.js";
 import {
   completeJob,
-  identitiesMatch,
   jobAddress,
   type JobRuntimeServices,
   mapRuntimeError,
@@ -168,7 +168,7 @@ const reconcileIdentity = (
               return settleMissingJob(services, job).pipe(Effect.map(Option.getOrElse(() => job)));
             },
             Found: ({ identity: actual }) => {
-              if (identitiesMatch(identity, actual)) {
+              if (processIdentitiesMatch(identity, actual)) {
                 if (job.status === "Stopping") {
                   return superviseCancellation(services, grace, cancellationFibers, job).pipe(
                     Effect.as(job),

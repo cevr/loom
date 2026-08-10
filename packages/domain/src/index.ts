@@ -205,6 +205,20 @@ export const ProcessIdentity = Schema.Struct({
 });
 export type ProcessIdentity = typeof ProcessIdentity.Type;
 
+export const processIdentitiesMatch = (
+  expected: ProcessIdentity,
+  actual: ProcessIdentity,
+): boolean =>
+  expected.pid === actual.pid &&
+  expected.processGroupId === actual.processGroupId &&
+  expected.processStartId === actual.processStartId;
+
+export const CodeKernelProcessRecord = Schema.Struct({
+  ...AgentOwner.fields,
+  ...ProcessIdentity.fields,
+});
+export type CodeKernelProcessRecord = typeof CodeKernelProcessRecord.Type;
+
 export const JobActiveStatus = Schema.Literals(["Accepted", "Starting", "Running", "Stopping"]);
 export type JobActiveStatus = typeof JobActiveStatus.Type;
 
