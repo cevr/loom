@@ -25,6 +25,14 @@ export { JobProcessStoreError } from "./internal/job-process-store-error.js";
 export { JobProcessStore, type JobProcessStoreShape } from "./internal/job-process-store.js";
 export { JobStoreError } from "./internal/job-store-error.js";
 export { JobStore, type JobStoreShape } from "./internal/job-store.js";
+export { JobRuntimeError } from "./internal/job-runtime-error.js";
+export { JobRuntime, type JobRuntimeShape } from "./internal/job-runtime.js";
+export { ProcessControllerError } from "./internal/process-controller-error.js";
+export {
+  ProcessController,
+  type ProcessControllerShape,
+  type ProcessSignal,
+} from "./internal/process-controller.js";
 export {
   WorkflowBudgetExceededError,
   WorkflowBudgetName,

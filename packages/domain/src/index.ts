@@ -239,6 +239,14 @@ export const JobSubmission = Schema.Struct({
 });
 export type JobSubmission = typeof JobSubmission.Type;
 
+export const JobRequest = Schema.Struct({
+  jobId: JobId,
+  sessionId: SessionId,
+  command: Schema.NonEmptyString,
+  attached: Schema.Boolean,
+});
+export type JobRequest = typeof JobRequest.Type;
+
 export const JobOutcome = Schema.TaggedUnion({
   Succeeded: { exitCode: Schema.Literal(0) },
   Failed: {

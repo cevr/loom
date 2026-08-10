@@ -26,6 +26,10 @@ export {
   makeBunProcessInspector,
 } from "./internal/bun-process-inspector.js";
 export {
+  layerBunProcessController,
+  makeBunProcessController,
+} from "./internal/bun-process-controller.js";
+export {
   layerSqliteJobProcessStore,
   makeSqliteJobProcessStore,
 } from "./internal/sqlite-job-process-store.js";
