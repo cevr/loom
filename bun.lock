@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "@cvr/loom",
-      "dependencies": {
-        "effect-encore": "0.22.0",
-      },
       "devDependencies": {
         "@effect/tsgo": "^0.24.3",
         "@types/bun": "latest",
@@ -152,7 +149,7 @@
     "@effect/platform-node-shared": "4.0.0-beta.106",
     "@effect/sql-sqlite-bun": "4.0.0-beta.106",
     "effect": "4.0.0-beta.106",
-    "effect-encore": "0.21.1",
+    "effect-encore": "0.22.0",
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.91.1", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-LAmu761tSN9r66ixvmciswUj/ZC+1Q4iAfpedTfSVLeswRwnY3n2Nb6Tsk+cLPP28aLOPWeMgIuTuCcMC6W/iw=="],
@@ -764,10 +761,6 @@
     "@aws-sdk/credential-provider-sso/@aws-sdk/token-providers": ["@aws-sdk/token-providers@3.1103.0", "", { "dependencies": { "@aws-sdk/core": "^3.977.6", "@aws-sdk/nested-clients": "^3.997.41", "@aws-sdk/types": "^3.974.2", "@smithy/core": "^3.31.1", "@smithy/types": "^4.16.1", "tslib": "^2.6.2" } }, "sha512-N4wy26MNn31ItGVHYHPrEuCIFY4MBBjC+C5v1lJKqIUSA7OZBdhleCY53zCCrXn27hsk7YNOaTuhQu807S4AfQ=="],
 
     "@aws-sdk/nested-clients/@smithy/node-http-handler": ["@smithy/node-http-handler@4.9.13", "", { "dependencies": { "@smithy/core": "^3.31.1", "@smithy/types": "^4.16.1", "tslib": "^2.6.2" } }, "sha512-Nmd/Nl35zfYrd+a6OO2cDJb3GPh9bgTjIUhcM+JFfjpp8/osCgboDV5nCT1I01Pv6R13eSKDKLSoVa5ZB6Zsfw=="],
-
-    "@cvr/loom-platform-bun/effect-encore": ["effect-encore@0.21.1", "", { "peerDependencies": { "effect": ">=4.0.0-beta.106" } }, "sha512-wNi11/R2z0TeTKdH6BnfQYpDQDBkEzkB6sBCBWnXGtPEaCxNamjt0YlTSOFG2jt8pxr3ZfmlK+tE6vbmQLOYKw=="],
-
-    "@cvr/loom-runtime/effect-encore": ["effect-encore@0.21.1", "", { "peerDependencies": { "effect": ">=4.0.0-beta.106" } }, "sha512-wNi11/R2z0TeTKdH6BnfQYpDQDBkEzkB6sBCBWnXGtPEaCxNamjt0YlTSOFG2jt8pxr3ZfmlK+tE6vbmQLOYKw=="],
 
     "p-retry/retry": ["retry@0.13.1", "", {}, "sha512-XQBQ3I8W1Cge0Seh+6gjj03LbmRFWuoszgK9ooCpwYIrhhoO80pfq4cUkU5DkknwfOfFteRwlZ56PYOGYyFWdg=="],
   }

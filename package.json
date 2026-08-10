@@ -31,9 +31,6 @@
     "gate": "concurrently -n type,style,build -c blue,yellow,cyan \"bun run typecheck\" \"bun run lint && bun run fmt:check\" \"bun run build\" && bun run test",
     "prepare": "lefthook install && effect-tsgo patch"
   },
-  "dependencies": {
-    "effect-encore": "0.22.0"
-  },
   "devDependencies": {
     "@effect/tsgo": "^0.24.3",
     "@types/bun": "latest",
@@ -56,6 +53,6 @@
     "@effect/sql-sqlite-bun": "4.0.0-beta.106",
     "@earendil-works/pi-ai": "0.84.1",
     "@earendil-works/pi-coding-agent": "0.84.1",
-    "effect-encore": "0.21.1"
+    "effect-encore": "0.22.0"
   }
 }
