@@ -59,9 +59,27 @@ const setStatus = (
   activityKey: WorkflowActivityKey,
   status: WorkflowJob["status"],
 ) =>
-  sql`UPDATE workflow_jobs SET status = ${status} WHERE activity_key = ${activityKey}`.pipe(
+  sql`
+    UPDATE workflow_jobs SET status = ${status}
+    WHERE activity_key = ${activityKey} AND status IN ('Starting', 'Running')
+  `.pipe(
     Effect.asVoid,
     Effect.mapError((cause) => storeError(operation, cause)),
+  );
+
+const failStarting = (sql: SqlClient.SqlClient) =>
+  SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: Schema.Struct({ jobId: JobId }),
+    execute: () => sql`
+      UPDATE workflow_jobs SET status = 'Failed'
+      WHERE status = 'Starting'
+      RETURNING job_id AS jobId
+    `,
+  })().pipe(
+    Effect.map((rows) => rows.map((row) => row.jobId)),
+    Effect.catchTag("SchemaError", Effect.die),
+    Effect.mapError((cause) => storeError("failStartingJobs", cause)),
   );
 
 export const makeSqliteWorkflowJobStore: Effect.Effect<
@@ -85,6 +103,7 @@ export const makeSqliteWorkflowJobStore: Effect.Effect<
     begin: (activityKey) => begin(sql, activityKey),
     markRunning: (activityKey) => setStatus(sql, "markJobRunning", activityKey, "Running"),
     markFailed: (activityKey) => setStatus(sql, "markJobFailed", activityKey, "Failed"),
+    failStarting: failStarting(sql),
   });
 });
 

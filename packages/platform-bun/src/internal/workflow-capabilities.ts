@@ -1,12 +1,7 @@
-import {
-  JobProcessRecord,
-  WorkflowCapability,
-  workflowArtifactId,
-  type WorkspaceRoot,
-} from "@cvr/loom-domain";
+import { WorkflowCapability, workflowArtifactId, type WorkspaceRoot } from "@cvr/loom-domain";
 import {
   ProcessInspector,
-  ProcessObservation,
+  JobReconciler,
   JobProcessStore,
   WorkflowAgentHandle,
   WorkflowAgentInput,
@@ -20,15 +15,13 @@ import {
   WorkflowStepExecution,
   type WorkflowActivityContext,
   type WorkflowArtifactStoreShape,
-  type JobProcessStoreShape,
-  type ProcessInspectorShape,
   type WorkflowChildAgentStoreShape,
-  type WorkflowJobStoreShape,
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
 import { WorkflowStepError } from "@cvr/loom-protocol";
-import { Effect, Exit, FileSystem, Inspectable, Layer, Option, Schema, Scope } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { Effect, Exit, FileSystem, Inspectable, Layer, Schema } from "effect";
+import { ChildProcessSpawner } from "effect/unstable/process";
+import { launchProcess, type WorkflowJobServices } from "./workflow-job-launch.js";
 
 const agentCapability = WorkflowCapability.make("agent");
 const jobCapability = WorkflowCapability.make("job");
@@ -46,7 +39,7 @@ const stepError = (call: WorkflowStepCall, message: string) =>
 
 const decodeInput = <A>(
   call: WorkflowStepCall,
-  decode: (input: Schema.Json) => Effect.Effect<A, object>,
+  decode: (input: Schema.Json) => Effect.Effect<A, Schema.SchemaError>,
 ) =>
   decode(call.input).pipe(
     Effect.mapError((cause) => stepError(call, Inspectable.toStringUnknown(cause))),
@@ -68,118 +61,6 @@ const launchAgent = Effect.fn("WorkflowCapabilities.launchAgent")(function* (
   });
 });
 
-const makeJobCommand = (command: string, stdoutPath: string, stderrPath: string) =>
-  ChildProcess.make(
-    "/bin/sh",
-    ["-lc", 'exec >"$1" 2>"$2"; eval "$3"', "loom-job", stdoutPath, stderrPath, command],
-    {
-      detached: true,
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-      killSignal: "SIGTERM",
-      forceKillAfter: "500 millis",
-    },
-  );
-
-const requireProcessIdentity = (call: WorkflowStepCall, observation: ProcessObservation) =>
-  ProcessObservation.$match(observation, {
-    Found: ({ identity }) => Effect.succeed(identity),
-    Missing: ({ pid }) => Effect.fail(stepError(call, `Job process ${pid} disappeared at launch.`)),
-  });
-
-const prepareJobFiles = Effect.fn("WorkflowCapabilities.prepareJobFiles")(function* (
-  fs: FileSystem.FileSystem,
-  call: WorkflowStepCall,
-  workspaceRoot: WorkspaceRoot,
-  jobId: JobProcessRecord["jobId"],
-) {
-  const directory = `${workspaceRoot}/.loom/jobs/${encodeURIComponent(jobId)}`;
-  yield* fs
-    .makeDirectory(directory, { recursive: true })
-    .pipe(Effect.mapError((cause) => stepError(call, Inspectable.toStringUnknown(cause))));
-  return {
-    stdoutPath: `${directory}/stdout.log`,
-    stderrPath: `${directory}/stderr.log`,
-  };
-});
-
-const observeJobExit = (
-  processes: JobProcessStoreShape,
-  child: ChildProcessSpawner.ChildProcessHandle,
-  jobId: JobProcessRecord["jobId"],
-  processScope: Scope.Closeable,
-) =>
-  Effect.forkDetach(
-    child.exitCode.pipe(
-      Effect.exit,
-      Effect.flatMap(() =>
-        processes
-          .updateRecovery(jobId, "Exited", Option.none())
-          .pipe(
-            Effect.catchCause((cause) => Effect.logError("Job exit state update failed.", cause)),
-          ),
-      ),
-      Effect.ensuring(Scope.close(processScope, Exit.void)),
-    ),
-  ).pipe(Effect.asVoid);
-
-interface WorkflowJobServices {
-  readonly fs: FileSystem.FileSystem;
-  readonly inspector: ProcessInspectorShape;
-  readonly jobs: WorkflowJobStoreShape;
-  readonly processes: JobProcessStoreShape;
-  readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
-}
-
-const launchProcess = Effect.fn("WorkflowCapabilities.launchProcess")(function* (
-  services: WorkflowJobServices,
-  call: WorkflowStepCall,
-  context: WorkflowActivityContext,
-  command: string,
-  jobId: JobProcessRecord["jobId"],
-  workspaceRoot: WorkspaceRoot,
-) {
-  const { stdoutPath, stderrPath } = yield* prepareJobFiles(
-    services.fs,
-    call,
-    workspaceRoot,
-    jobId,
-  );
-  const processScope = yield* Scope.make();
-  const child = yield* services.spawner.spawn(makeJobCommand(command, stdoutPath, stderrPath)).pipe(
-    Effect.provideService(Scope.Scope, processScope),
-    Effect.mapError((cause) => stepError(call, Inspectable.toStringUnknown(cause))),
-  );
-  yield* Effect.gen(function* () {
-    const identity = yield* services.inspector.inspect(child.pid).pipe(
-      Effect.mapError((cause) => stepError(call, cause.message)),
-      Effect.flatMap((observation) => requireProcessIdentity(call, observation)),
-    );
-    yield* services.jobs
-      .markRunning(context.activityKey)
-      .pipe(Effect.mapError((error) => stepError(call, error.message)));
-    yield* services.processes
-      .upsert(
-        JobProcessRecord.make({
-          jobId,
-          sessionId: context.sessionId,
-          identity,
-          stdoutPath,
-          stderrPath,
-          status: "Running",
-          recoveryDetail: Option.none(),
-        }),
-      )
-      .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))));
-    yield* child.unref.pipe(
-      Effect.asVoid,
-      Effect.mapError((cause) => stepError(call, Inspectable.toStringUnknown(cause))),
-    );
-    yield* observeJobExit(services.processes, child, jobId, processScope);
-  }).pipe(Effect.onError(() => Scope.close(processScope, Exit.void)));
-});
-
 const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
   services: WorkflowJobServices,
   workspaceRoot: WorkspaceRoot,
@@ -190,14 +71,28 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
   const job = yield* services.jobs
     .claim(context)
     .pipe(Effect.mapError((error) => stepError(call, error.message)));
-  const ownsLaunch = yield* services.jobs
-    .begin(context.activityKey)
-    .pipe(Effect.mapError((error) => stepError(call, error.message)));
-  if (ownsLaunch) {
-    yield* launchProcess(services, call, context, input.command, job.jobId, workspaceRoot).pipe(
-      Effect.tapError(() => services.jobs.markFailed(context.activityKey).pipe(Effect.orDie)),
-    );
-  }
+  yield* Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const ownsLaunch = yield* services.jobs
+        .begin(context.activityKey)
+        .pipe(Effect.mapError((error) => stepError(call, error.message)));
+      if (!ownsLaunch) return;
+      yield* launchProcess(
+        services,
+        call,
+        context,
+        input.command,
+        job.jobId,
+        workspaceRoot,
+        restore,
+      ).pipe(
+        Effect.onExit((exit) => {
+          if (Exit.isSuccess(exit)) return Effect.void;
+          return services.jobs.markFailed(context.activityKey).pipe(Effect.orDie);
+        }),
+      );
+    }),
+  );
   return WorkflowStepExecution.make({
     value: WorkflowJobHandle.make({ jobId: job.jobId }),
     tokenCount: 0,
@@ -245,6 +140,7 @@ export const layerWorkflowCapabilities = (config: WorkflowCapabilitiesConfig) =>
         const childAgents = yield* WorkflowChildAgentStore;
         const jobs = yield* WorkflowJobStore;
         const processes = yield* JobProcessStore;
+        const reconciler = yield* JobReconciler;
         const inspector = yield* ProcessInspector;
         const fs = yield* FileSystem.FileSystem;
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -256,7 +152,7 @@ export const layerWorkflowCapabilities = (config: WorkflowCapabilitiesConfig) =>
             }
             if (call.capability === jobCapability) {
               return launchJob(
-                { jobs, processes, inspector, fs, spawner },
+                { jobs, processes, reconciler, inspector, fs, spawner },
                 config.workspaceRoot,
                 call,
                 context,

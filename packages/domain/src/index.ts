@@ -218,7 +218,6 @@ export type ProcessIdentity = typeof ProcessIdentity.Type;
 
 export const JobProcessStatus = Schema.Literals([
   "Running",
-  "Stopping",
   "Recovered",
   "Exited",
   "ExitedWhileOffline",

@@ -120,6 +120,8 @@ Background jobs write complete output to files from process start.
 This allows safe recovery after a daemon restart.
 
 The Job launcher must store the PID, process group ID, and process start identity before it reports a Job as live.
+The Job process waits on a parent-owned input gate until Loom commits that identity.
+The Job command starts in the Workspace root.
 After a restart, Loom adopts only an exact identity match.
 It does not signal a process after an identity mismatch.
 See [Job process recovery](./job-recovery.md).

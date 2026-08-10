@@ -82,9 +82,11 @@ An Activity retry cannot create a second logical Job or child Agent.
 The Agent claim stores the prompt and Workflow Run parent with the Activity key.
 The Job claim moves through Accepted, Starting, Running, and Failed states.
 A failed launch can claim the launch right again.
-The Bun adapter keeps the child process scoped until it stores the process identity and Running state.
-It closes that scope when launch setup fails.
-It releases the child process only after durable launch setup succeeds.
+The Bun adapter keeps the child process scoped and behind an input gate during launch setup.
+It stores the process identity before it marks the Job as Running.
+It releases the input gate and process only after durable launch setup succeeds.
+Interruption closes the gate and stops the process before it can run the command.
+Daemon startup changes every stale Starting claim to Failed before it accepts work.
 Artifact identity also derives from the Activity key.
 
 Effect owns parallel fibers, durable races, and concurrency primitives.

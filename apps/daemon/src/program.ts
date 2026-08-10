@@ -20,20 +20,21 @@ import {
   layerAgentActor,
   layerConnectionHandshake,
 } from "@cvr/loom-runtime";
-import { Clock, Effect, FileSystem, Layer, Path } from "effect";
+import { Clock, Context, Effect, FileSystem, Layer, Path } from "effect";
 import { SingleRunner } from "effect/unstable/cluster";
 import { type DaemonConfig, loadDaemonConfig } from "./daemon-config.js";
 import { layerLoomRpcHandlers } from "./rpc-handlers.js";
 
 const codeKernelEntry = new URL("../../code-kernel/src/main.ts", import.meta.url).pathname;
 
-const reconcileJobs = Effect.fn("LoomDaemon.reconcileJobs")(function* () {
-  const results = yield* Effect.gen(function* () {
-    const reconciler = yield* JobReconciler;
-    return yield* reconciler.reconcile;
-  }).pipe(Effect.provide(layerJobRecovery));
-  yield* Effect.logInfo("Job restart reconciliation completed.", results);
-});
+const layerJobSupervisor = layerJobRecovery.pipe(
+  Layer.tap((services) => {
+    const reconciler = Context.get(services, JobReconciler);
+    return reconciler.reconcile.pipe(
+      Effect.tap((results) => Effect.logInfo("Job restart reconciliation completed.", results)),
+    );
+  }),
+);
 
 export const runLoomDaemon = <E, R>(
   config: DaemonConfig,
@@ -45,7 +46,6 @@ export const runLoomDaemon = <E, R>(
     const path = yield* Path.Path;
     yield* fs.makeDirectory(path.dirname(config.databasePath), { recursive: true });
     return yield* Effect.gen(function* () {
-      yield* reconcileJobs();
       const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
       const cluster = SingleRunner.layer({
         runnerStorage: "sql",
@@ -66,6 +66,7 @@ export const runLoomDaemon = <E, R>(
       );
       const application = Layer.mergeAll(agents, childAgents, workflows).pipe(
         Layer.provide(cluster),
+        Layer.provideMerge(layerJobSupervisor),
       );
       const handlers = layerLoomRpcHandlers.pipe(
         Layer.provide(application),
@@ -81,7 +82,7 @@ export const runLoomDaemon = <E, R>(
         Layer.tap(() => Effect.logInfo("Loom daemon is ready")),
       );
       return yield* Layer.launch(server);
-    }).pipe(Effect.scoped, Effect.provide(layerLoomSqlite({ filename: config.databasePath })));
+    }).pipe(Effect.provide(layerLoomSqlite({ filename: config.databasePath })));
   });
 
 export const program = Effect.gen(function* () {

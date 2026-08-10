@@ -11,6 +11,7 @@ import {
   ProcessInspectionError,
   ProcessInspector,
   ProcessObservation,
+  layerJobReconciler,
   WorkflowActivityContext,
   WorkflowArtifactStore,
   WorkflowArtifactWrite,
@@ -20,7 +21,7 @@ import {
   WorkflowStepCall,
 } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Option, Ref, Schema } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Layer, Option, Ref, Schedule, Schema } from "effect";
 import {
   layerBunProcessInspector,
   layerLoomSqlite,
@@ -49,9 +50,19 @@ const jobCall = WorkflowStepCall.make({
   stepId: WorkflowStepId.make("job-step"),
   capability: WorkflowCapability.make("job"),
   input: {
-    command: "sleep 0.3; printf 'job-finished\\n'",
+    command: ": > cwd-marker; printf 'job-finished\\n'",
   },
 });
+
+const waitForOutput = (fs: FileSystem.FileSystem, path: string, expected: string) =>
+  fs.readFileString(path).pipe(
+    Effect.retry(Schedule.spaced("10 millis")),
+    Effect.repeat({
+      while: (output) => output !== expected,
+      schedule: Schedule.spaced("10 millis"),
+    }),
+    Effect.timeout("5 seconds"),
+  );
 
 const capabilityLayer = <E, R>(
   filename: string,
@@ -62,8 +73,11 @@ const capabilityLayer = <E, R>(
   const agents = layerSqliteWorkflowChildAgentStore.pipe(Layer.provide(database));
   const jobs = layerSqliteWorkflowJobStore.pipe(Layer.provide(database));
   const processes = layerSqliteJobProcessStore.pipe(Layer.provide(database));
+  const reconciler = layerJobReconciler.pipe(
+    Layer.provide(Layer.mergeAll(processes, inspector, jobs)),
+  );
   const capabilities = layerWorkflowCapabilities({ workspaceRoot }).pipe(
-    Layer.provide([agents, jobs, processes, inspector]),
+    Layer.provide([agents, jobs, processes, inspector, reconciler]),
   );
   return Layer.mergeAll(database, agents, jobs, processes, capabilities);
 };
@@ -105,9 +119,8 @@ it.scopedLive.layer(BunServices.layer)(
 
         const job = yield* Schema.decodeUnknownEffect(WorkflowJobHandle)(jobResults[0].value);
         const stdoutPath = `${directory}/.loom/jobs/${encodeURIComponent(job.jobId)}/stdout.log`;
-        expect(yield* fs.readFileString(stdoutPath)).toBe("");
-        yield* Effect.sleep("500 millis");
-        expect(yield* fs.readFileString(stdoutPath)).toBe("job-finished\n");
+        expect(yield* waitForOutput(fs, stdoutPath, "job-finished\n")).toBe("job-finished\n");
+        expect(yield* fs.exists(`${directory}/cwd-marker`)).toBe(true);
 
         yield* executor.compensate(agentCall, agentContext);
         yield* executor.compensate(agentCall, agentContext);
@@ -143,6 +156,7 @@ it.scopedLive.layer(BunServices.layer)(
             ),
         }),
       );
+
       const filename = `${directory}/loom.sqlite`;
 
       yield* Effect.gen(function* () {
@@ -168,8 +182,50 @@ it.scopedLive.layer(BunServices.layer)(
         const job = yield* Schema.decodeUnknownEffect(WorkflowJobHandle)(result.value);
         const stdoutPath = `${directory}/.loom/jobs/${encodeURIComponent(job.jobId)}/stdout.log`;
 
-        yield* Effect.sleep("500 millis");
-        expect(yield* fs.readFileString(stdoutPath)).toBe("job-finished\n");
+        expect(yield* waitForOutput(fs, stdoutPath, "job-finished\n")).toBe("job-finished\n");
+        expect(yield* fs.exists(`${directory}/cwd-marker`)).toBe(true);
+      }).pipe(Effect.provide(capabilityLayer(filename, workspaceRoot, layerBunProcessInspector)));
+    }),
+);
+
+it.scopedLive.layer(BunServices.layer)(
+  "stops a gated launch on interruption and runs it once after retry",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped({
+        prefix: "loom-capability-interrupt-",
+      });
+      const workspaceRoot = WorkspaceRoot.make(directory);
+      const attemptedPid = yield* Deferred.make<number>();
+      const blockingInspector = Layer.succeed(
+        ProcessInspector,
+        ProcessInspector.of({
+          inspect: (pid) => Deferred.succeed(attemptedPid, pid).pipe(Effect.andThen(Effect.never)),
+        }),
+      );
+      const filename = `${directory}/loom.sqlite`;
+      const sideEffectPath = `${directory}/side-effect`;
+      const interruptedCall = WorkflowStepCall.make({
+        ...jobCall,
+        input: { command: `printf x >> '${sideEffectPath}'` },
+      });
+
+      const pid = yield* Effect.gen(function* () {
+        const executor = yield* WorkflowCapabilityExecutor;
+        const launch = yield* executor.execute(interruptedCall, jobContext).pipe(Effect.forkChild);
+        const observedPid = yield* Deferred.await(attemptedPid);
+        yield* Fiber.interrupt(launch);
+        return observedPid;
+      }).pipe(Effect.provide(capabilityLayer(filename, workspaceRoot, blockingInspector)));
+
+      const inspector = yield* makeBunProcessInspector;
+      expect(ProcessObservation.$is("Missing")(yield* inspector.inspect(pid))).toBe(true);
+
+      yield* Effect.gen(function* () {
+        const executor = yield* WorkflowCapabilityExecutor;
+        yield* executor.execute(interruptedCall, jobContext);
+        expect(yield* waitForOutput(fs, sideEffectPath, "x")).toBe("x");
       }).pipe(Effect.provide(capabilityLayer(filename, workspaceRoot, layerBunProcessInspector)));
     }),
 );

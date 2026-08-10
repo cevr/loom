@@ -58,6 +58,8 @@ it.scopedLive.layer(BunServices.layer)("deduplicates Agent and Job claims by Act
       expect(claimedJobs[0]).toEqual(claimedJobs[1]);
       expect(launchRights.filter(Boolean)).toHaveLength(1);
 
+      expect(yield* jobs.failStarting).toEqual([claimedJobs[0].jobId]);
+      expect(yield* jobs.begin(context.activityKey)).toBe(true);
       yield* jobs.markFailed(context.activityKey);
       expect(yield* jobs.begin(context.activityKey)).toBe(true);
 

@@ -14,8 +14,18 @@ import {
   ProcessInspectionError,
   ProcessInspector,
   ProcessObservation,
+  WorkflowJobStore,
   type ProcessInspectorShape,
+  type WorkflowJobStoreShape,
 } from "../src/index.js";
+
+const jobs = WorkflowJobStore.of({
+  claim: () => Effect.die("Unexpected Job claim."),
+  begin: () => Effect.die("Unexpected Job launch."),
+  markRunning: () => Effect.die("Unexpected Job state update."),
+  markFailed: () => Effect.die("Unexpected Job state update."),
+  failStarting: Effect.succeed([]),
+});
 
 const identity = ProcessIdentity.make({
   pid: 41001,
@@ -48,11 +58,13 @@ const makeStore = Effect.fn("JobReconcilerTest.makeStore")(function* () {
 
 const runRecovery = Effect.fn("JobReconcilerTest.runRecovery")(function* (
   inspector: ProcessInspectorShape,
+  jobStore: WorkflowJobStoreShape = jobs,
 ) {
   const store = yield* makeStore();
   const reconciler = yield* makeJobReconciler.pipe(
     Effect.provideService(JobProcessStore, store.service),
     Effect.provideService(ProcessInspector, ProcessInspector.of(inspector)),
+    Effect.provideService(WorkflowJobStore, jobStore),
   );
   const results = yield* reconciler.reconcile;
   return { results, stored: yield* Ref.get(store.current) };
@@ -62,7 +74,7 @@ const expectStatus = (status: JobProcessStatus) => (stored: JobProcessRecord) =>
   expect(stored.status).toBe(status);
 };
 
-it.effect("recovers a process with the exact durable identity", () =>
+it.scoped("recovers a process with the exact durable identity", () =>
   Effect.gen(function* () {
     const result = yield* runRecovery({
       inspect: () => Effect.succeed(ProcessObservation.Found({ identity })),
@@ -72,7 +84,7 @@ it.effect("recovers a process with the exact durable identity", () =>
   }),
 );
 
-it.effect("marks a missing process as exited while offline", () =>
+it.scoped("marks a missing process as exited while offline", () =>
   Effect.gen(function* () {
     const result = yield* runRecovery({
       inspect: (pid) => Effect.succeed(ProcessObservation.Missing({ pid })),
@@ -82,7 +94,7 @@ it.effect("marks a missing process as exited while offline", () =>
   }),
 );
 
-it.effect("records an identity mismatch without adopting the process", () =>
+it.scoped("records an identity mismatch without adopting the process", () =>
   Effect.gen(function* () {
     const actual = ProcessIdentity.make({ ...identity, processStartId: "a later process" });
     const result = yield* runRecovery({
@@ -93,7 +105,7 @@ it.effect("records an identity mismatch without adopting the process", () =>
   }),
 );
 
-it.effect("keeps the durable state recoverable when inspection fails", () =>
+it.scoped("keeps the durable state recoverable when inspection fails", () =>
   Effect.gen(function* () {
     const result = yield* runRecovery({
       inspect: (pid) =>
@@ -104,7 +116,18 @@ it.effect("keeps the durable state recoverable when inspection fails", () =>
   }),
 );
 
-it.effect("propagates a durable state update failure", () =>
+it.scoped("fails an interrupted launch without adopting its gated process", () =>
+  Effect.gen(function* () {
+    const result = yield* runRecovery(
+      { inspect: () => Effect.die("The abandoned process must not be inspected.") },
+      WorkflowJobStore.of({ ...jobs, failStarting: Effect.succeed([record.jobId]) }),
+    );
+    expect(result.results[0]).toHaveProperty("_tag", "ExitedWhileOffline");
+    expectStatus("ExitedWhileOffline")(result.stored);
+  }),
+);
+
+it.scoped("propagates a durable state update failure", () =>
   Effect.gen(function* () {
     const store = yield* makeStore();
     const failure = new JobProcessStoreError({ operation: "updateRecovery", cause: "disk full" });
@@ -120,6 +143,7 @@ it.effect("propagates a durable state update failure", () =>
           inspect: () => Effect.succeed(ProcessObservation.Found({ identity })),
         }),
       ),
+      Effect.provideService(WorkflowJobStore, jobs),
     );
 
     const error = yield* reconciler.reconcile.pipe(Effect.flip);

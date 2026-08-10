@@ -62,7 +62,7 @@ const listRecoverable = (sql: SqlClient.SqlClient) =>
         stdout_path AS stdoutPath, stderr_path AS stderrPath,
         status, recovery_detail AS recoveryDetail
       FROM job_processes
-      WHERE status IN ('Running', 'Stopping', 'Recovered')
+      WHERE status IN ('Running', 'Recovered')
       ORDER BY job_id
     `,
   });

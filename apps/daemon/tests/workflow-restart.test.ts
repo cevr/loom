@@ -1,4 +1,4 @@
-import { type WorkflowRunAddress, WorkflowSignalName, WorkspaceRoot } from "@cvr/loom-domain";
+import { WorkflowSignalName, WorkspaceRoot } from "@cvr/loom-domain";
 import { WorkflowRunState } from "@cvr/loom-protocol";
 import { WorkflowStepExecution, WorkflowStepError } from "@cvr/loom-runtime";
 import { expect } from "effect-bun-test";
@@ -9,7 +9,12 @@ import {
   compensationRestartRequest,
   signalRestartRequest,
 } from "./workflow-restart-fixtures.js";
-import { scopedLive, testCapabilities, withClient } from "./workflow-test-support.js";
+import {
+  scopedLive,
+  testCapabilities,
+  waitForSuspension,
+  withClient,
+} from "./workflow-test-support.js";
 const blockUntilRestart = (
   counter: Ref.Ref<number>,
   started: Deferred.Deferred<true>,
@@ -65,18 +70,6 @@ const makeSignalRestartHarness = Effect.gen(function* () {
   });
   return { capabilities, completed, resumed };
 });
-
-const waitForSuspension = (
-  workspaceRoot: WorkspaceRoot,
-  socketPath: string,
-  address: WorkflowRunAddress,
-) =>
-  withClient(workspaceRoot, socketPath, (client) => client.inspectWorkflow(address)).pipe(
-    Effect.repeat({
-      while: WorkflowRunState.guards.Pending,
-      schedule: Schedule.spaced("10 millis"),
-    }),
-  );
 
 interface CompensationRestartState {
   readonly blocked: Ref.Ref<number>;
