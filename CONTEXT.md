@@ -80,6 +80,22 @@ _Avoid_: Blob, attachment
 A versioned module that adds a declared Loom capability.
 _Avoid_: Extension, hook bundle
 
+**Plugin Component**:
+One scoped part of a Plugin that runs in one Loom host.
+_Avoid_: Entrypoint, runtime half
+
+**Plugin Contribution**:
+A typed tool, command, Workflow capability, or event consumer that a Plugin Component gives to its host.
+_Avoid_: Hook, callback registration
+
+**Plugin Grant**:
+A limited Loom service that a host gives to one Plugin Component.
+_Avoid_: Runtime context, dependency bag
+
+**Plugin Host**:
+A Loom process that validates, starts, supervises, and stops Plugin Components.
+_Avoid_: Plugin manager, loader
+
 **Client Adapter**:
 A module that connects a user interface or agent client to Loom.
 _Avoid_: Frontend, transport

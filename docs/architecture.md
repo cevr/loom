@@ -165,6 +165,7 @@ One store owns each fact.
 | Session transcript              | Client transcript store       |
 | Cell journal                    | Loom SQLite store             |
 | Job state and process identity  | Loom SQLite store             |
+| Plugin state                    | Loom SQLite store             |
 | Complete job output             | Log files                     |
 | Large cell and workflow results | Artifact files                |
 
@@ -188,20 +189,27 @@ Cluster transport remains an internal runtime detail.
 
 ## Plugin model
 
-Plugins declare an API version and capabilities.
-Plugins register typed tools, commands, workflow steps, or event consumers.
-Plugins use narrow Effect service interfaces.
-Plugins do not receive the full daemon runtime by default.
+A Plugin has one manifest and one Component for each supported host.
+Each Component declares its Plugin Grants and Plugin Contributions.
+The first hosts are the daemon and a Client Adapter process.
 
-Plugin order is explicit.
-Plugin lifecycle belongs to an Effect Scope.
-A plugin failure does not corrupt kernel state.
+The Plugin Host validates the complete set before it starts a Component.
+It builds each Component as an Effect Layer in a private Scope.
+It publishes Contributions only after all validation and startup work succeeds.
+It supervises Event Consumer fibers with bounded restart policy.
+
+Plugins can contribute typed tools, commands, Workflow capabilities, and event consumers.
+Plugins use narrow Effect services.
+They do not receive raw stores, Code Kernel processes, or the full daemon Context.
+A Plugin failure does not change actor-owned state.
 
 The Herdr Plugin consumes the latest actor-state projection for one Session.
 It maps Agent, Job, and Workflow Run activity into Herdr pane state.
 It uses a sliding latest-value buffer.
 It releases its Herdr agent when the Plugin Scope closes.
 See [Herdr Plugin](./herdr-plugin.md).
+See [Plugin Contract](./plugin-contract.md).
+See [Capability-based Plugin Components](./adr/0010-use-capability-based-plugin-components.md).
 
 ## Package direction
 

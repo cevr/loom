@@ -11,8 +11,11 @@ Pi `0.84.1` inserts a new line for Shift+Enter.
 Pi also supports Ctrl+J as a newline alias.
 Loom does not replace the Pi editor.
 
-Pi and user extensions own commands such as `/btw` and `/goal`.
-Loom adds only Loom commands and tools.
+The Pi Client Adapter maps Loom Client Contributions to Pi commands and tools.
+Pi keeps input parsing, completion, and display ownership.
+Loom can supply `/btw`, `/goal`, and similar features as scoped Client Components.
+These Components use narrow Client Adapter grants.
+They do not receive the full Pi extension API.
 
 ## Session lifecycle
 
