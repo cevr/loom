@@ -5,12 +5,13 @@ import { SqlClient } from "effect/unstable/sql";
 const createKernelSchema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    CREATE TABLE IF NOT EXISTS cell_journal (
-      journal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    CREATE TABLE IF NOT EXISTS cell_ledger (
       session_id TEXT NOT NULL,
       agent_id TEXT NOT NULL,
       cell_id TEXT NOT NULL,
-      source TEXT NOT NULL
+      source TEXT NOT NULL,
+      state_json TEXT NOT NULL,
+      PRIMARY KEY (session_id, agent_id, cell_id)
     )
   `;
   yield* sql`

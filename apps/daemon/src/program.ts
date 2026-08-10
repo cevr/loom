@@ -9,11 +9,12 @@ import {
   layerSqliteJobStore,
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
-  layerSqliteCellJournal,
+  layerSqliteCellLedger,
   prepareDaemonSocket,
 } from "@cvr/loom-platform-bun";
 import {
   JobRuntime,
+  CellLedger,
   WorkflowArtifactStore,
   WorkflowCapabilityExecutor,
   layerActorStateHub,
@@ -30,7 +31,9 @@ const codeKernelEntry = new URL("../../code-kernel/src/main.ts", import.meta.url
 const makeAgentLayer = (config: DaemonConfig) =>
   layerAgentActor.pipe(
     Layer.provide([
-      layerSqliteCellJournal,
+      layerSqliteCellLedger.pipe(
+        Layer.tap((services) => Context.get(services, CellLedger).reconcile),
+      ),
       layerCodeKernelFactory({
         entryPath: codeKernelEntry,
         diagnosticsDirectory: `${config.workspaceRoot}/.loom/diagnostics/code-kernels`,

@@ -58,7 +58,7 @@ The contract defines these first grants:
 | `AgentTurnControl` | Queue a typed follow-up turn and read completed turn usage.               |
 
 A Plugin does not receive a raw SQLite connection.
-A Plugin does not receive `JobStore` or `CellJournal`.
+A Plugin does not receive `JobStore` or `CellLedger`.
 A Plugin does not receive the full daemon Context.
 A Plugin does not receive direct access to a Code Kernel process.
 A Plugin does not receive Bun APIs through a grant.

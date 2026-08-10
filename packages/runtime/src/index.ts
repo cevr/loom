@@ -13,8 +13,13 @@ export {
   layerConnectionHandshake,
   makeConnectionHandshake,
 } from "./internal/connection-handshake.js";
-export { CellJournalStoreError } from "./internal/cell-journal-store-error.js";
-export { CellJournal, type CellJournalShape } from "./internal/cell-journal.js";
+export { CellLedgerStoreError } from "./internal/cell-ledger-store-error.js";
+export {
+  CellLedger,
+  CellLedgerClaim,
+  type CellLedgerShape,
+  type CellTerminalOutcome,
+} from "./internal/cell-ledger.js";
 export { CodeKernelFactory, type CodeKernelFactoryShape } from "./internal/code-kernel-factory.js";
 export {
   CodeKernel,

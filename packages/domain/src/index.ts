@@ -14,14 +14,6 @@ export type AgentId = typeof AgentId.Type;
 export const CellId = identifier("@cvr/loom/CellId");
 export type CellId = typeof CellId.Type;
 
-export const CellJournalEntry = Schema.Struct({
-  sessionId: SessionId,
-  agentId: AgentId,
-  cellId: CellId,
-  source: Schema.String,
-});
-export type CellJournalEntry = typeof CellJournalEntry.Type;
-
 export const JobId = identifier("@cvr/loom/JobId");
 export type JobId = typeof JobId.Type;
 

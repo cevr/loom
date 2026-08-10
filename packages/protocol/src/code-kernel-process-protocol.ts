@@ -1,7 +1,7 @@
 import { CellId } from "@cvr/loom-domain";
 import { Schema } from "effect";
 import { CellEvaluation } from "./cell-evaluation.js";
-import { CellEvaluationError } from "./cell-evaluation-error.js";
+import { CellKernelError } from "./cell-evaluation-error.js";
 
 export const CodeKernelProcessRequest = Schema.TaggedUnion({
   Evaluate: {
@@ -23,7 +23,7 @@ export const CodeKernelProcessResponse = Schema.TaggedUnion({
   },
   EvaluationFailed: {
     requestId: Schema.Natural,
-    error: CellEvaluationError,
+    error: CellKernelError,
   },
   ResetSucceeded: {
     requestId: Schema.Natural,

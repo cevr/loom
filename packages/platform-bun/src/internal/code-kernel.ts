@@ -3,7 +3,7 @@ import { CellId } from "@cvr/loom-domain";
 import {
   CellCompilationError,
   CellEvaluation,
-  type CellEvaluationError,
+  type CellKernelError,
   CellExecutionError,
   maximumCellBindings,
   maximumCellDisplayLength,
@@ -17,9 +17,7 @@ export interface EvaluateCellInput {
 }
 
 export interface InProcessCodeKernelShape {
-  readonly evaluate: (
-    input: EvaluateCellInput,
-  ) => Effect.Effect<CellEvaluation, CellEvaluationError>;
+  readonly evaluate: (input: EvaluateCellInput) => Effect.Effect<CellEvaluation, CellKernelError>;
   readonly reset: Effect.Effect<void>;
 }
 
@@ -75,7 +73,7 @@ const evaluateSource = (
   transpiler: Bun.Transpiler,
   context: NodeVm.Context,
   input: EvaluateCellInput,
-): Effect.Effect<unknown, CellEvaluationError> =>
+): Effect.Effect<unknown, CellKernelError> =>
   Effect.gen(function* () {
     const source = yield* Effect.try({
       try: () => transpiler.transformSync(input.source),
@@ -104,7 +102,7 @@ export const makeInProcessCodeKernel: Effect.Effect<InProcessCodeKernelShape> = 
 
     const evaluateInContext = (
       input: EvaluateCellInput,
-    ): Effect.Effect<CellEvaluation, CellEvaluationError> =>
+    ): Effect.Effect<CellEvaluation, CellKernelError> =>
       Effect.gen(function* () {
         const evaluation = yield* evaluateSource(transpiler, context, input);
         const value = valueFromEvaluation(evaluation);

@@ -1,8 +1,10 @@
 export { CellEvaluation } from "./cell-evaluation.js";
 export { CellCompilationError } from "./cell-compilation-error.js";
-export { CellEvaluationError } from "./cell-evaluation-error.js";
+export { CellEvaluationError, CellKernelError } from "./cell-evaluation-error.js";
 export { CellExecutionError } from "./cell-execution-error.js";
 export { CellInterruptedError } from "./cell-interrupted-error.js";
+export { CellIdentityConflictError } from "./cell-identity-conflict-error.js";
+export { CellLedgerEntry, CellLedgerState } from "./cell-ledger-entry.js";
 export { CloseSessionError } from "./close-session-error.js";
 export { CloseSession } from "./close-session.js";
 export { CodeKernelDiagnostic } from "./code-kernel-diagnostic.js";

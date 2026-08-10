@@ -12,6 +12,8 @@ export class CellInterruptedError extends Schema.TaggedError<CellInterruptedErro
       "ProtocolFailure",
       "TimedOut",
       "CrashLoop",
+      "DaemonRestart",
+      "EvaluationInProgress",
     ]),
     message: Schema.String,
     diagnostic: Schema.optional(CodeKernelDiagnostic),

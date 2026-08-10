@@ -1,4 +1,4 @@
-import type { CellEvaluation, CellEvaluationError } from "@cvr/loom-protocol";
+import type { CellEvaluation, CellKernelError } from "@cvr/loom-protocol";
 import { Context, type Effect } from "effect";
 
 export interface EvaluateCellInput {
@@ -7,9 +7,7 @@ export interface EvaluateCellInput {
 }
 
 export interface CodeKernelShape {
-  readonly evaluate: (
-    input: EvaluateCellInput,
-  ) => Effect.Effect<CellEvaluation, CellEvaluationError>;
+  readonly evaluate: (input: EvaluateCellInput) => Effect.Effect<CellEvaluation, CellKernelError>;
   readonly reset: Effect.Effect<void>;
   readonly close: Effect.Effect<void>;
 }

@@ -33,7 +33,6 @@ Workflow child Agent ownership is durable because a replayed Activity must find 
 
 ## Cell Ledger
 
-The current append-only source record must become a Cell Ledger before the first beta.
 The ledger stores the request source, state, terminal result, and terminal error.
 It has one unique key for Session ID, Agent ID, and Cell ID.
 
@@ -42,10 +41,10 @@ The Cell states are `Accepted`, `Evaluating`, `Succeeded`, `Failed`, and `Interr
 The daemon accepts a new Cell as `Accepted` before evaluation.
 The daemon rejects the same Cell ID when the stored source differs.
 A retry of `Succeeded`, `Failed`, or `Interrupted` returns the stored outcome.
-A retry of `Accepted` before a restart can start evaluation for the same stored request.
 The daemon changes `Accepted` to `Evaluating` before it sends work to a Code Kernel.
 A duplicate request never starts a second evaluation.
 It waits for the owned evaluation when that evaluation is active in the current daemon.
+If no owned evaluation is active, it returns the stored interruption state after reconciliation.
 
 Daemon startup changes each `Accepted` or `Evaluating` Cell to `Interrupted` with reason `DaemonRestart`.
 It never replays that Cell.
@@ -160,9 +159,7 @@ The daemon rebuilds it from actor-owned state after startup.
 
 ## Required implementation work
 
-- [Replace the append-only source record with the durable Cell Ledger](https://github.com/cevr/loom/issues/32).
 - [Reconcile orphan Code Kernel processes before the daemon becomes ready](https://github.com/cevr/loom/issues/33).
-- [Mint a new Workflow Incarnation ID for each new acceptance](https://github.com/cevr/loom/issues/35).
 - [Store one Workflow State Lease deadline for each terminal Workflow Run](https://github.com/cevr/loom/issues/28).
 - [Publish Workflow Artifacts with a temporary file and atomic rename](https://github.com/cevr/loom/issues/30).
 - [Stop and delete Workflow child Agent ownership during terminal Workflow retirement](https://github.com/cevr/loom/issues/29).
