@@ -85,7 +85,6 @@ export {
   type WorkflowRuntimeInspectError,
   type WorkflowRuntimeError,
   type WorkflowRuntimeReadError,
-  type WorkflowRuntimeResumeError,
   type WorkflowRuntimeShape,
   type WorkflowRuntimeSignalError,
   type WorkflowRuntimeState,

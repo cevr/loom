@@ -1,9 +1,14 @@
-import { WorkspaceRoot } from "@cvr/loom-domain";
+import { type WorkflowRunAddress, WorkflowSignalName, WorkspaceRoot } from "@cvr/loom-domain";
+import { WorkflowRunState } from "@cvr/loom-protocol";
 import { WorkflowStepExecution, WorkflowStepError } from "@cvr/loom-runtime";
 import { expect } from "effect-bun-test";
-import { Deferred, Effect, Fiber, FileSystem, Ref } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Ref, Schedule } from "effect";
 import { runLoomDaemon } from "../src/program.js";
-import { activityRestartRequest, compensationRestartRequest } from "./workflow-restart-fixtures.js";
+import {
+  activityRestartRequest,
+  compensationRestartRequest,
+  signalRestartRequest,
+} from "./workflow-restart-fixtures.js";
 import { scopedLive, testCapabilities, withClient } from "./workflow-test-support.js";
 const blockUntilRestart = (
   counter: Ref.Ref<number>,
@@ -39,6 +44,39 @@ const makeRestartHarness = Effect.gen(function* () {
   });
   return { activityStarted, blocked, capabilities, completed, releaseActivity };
 });
+
+const makeSignalRestartHarness = Effect.gen(function* () {
+  const completed = yield* Ref.make(0);
+  const resumed = yield* Ref.make(0);
+  const capabilities = testCapabilities({
+    supports: () => true,
+    execute: (call) => {
+      const result = WorkflowStepExecution.make({
+        value: call.input,
+        tokenCount: 0,
+        agentRuns: 0,
+      });
+      if (call.stepId === "completed") {
+        return Ref.update(completed, (count) => count + 1).pipe(Effect.as(result));
+      }
+      return Ref.update(resumed, (count) => count + 1).pipe(Effect.as(result));
+    },
+    compensate: () => Effect.void,
+  });
+  return { capabilities, completed, resumed };
+});
+
+const waitForSuspension = (
+  workspaceRoot: WorkspaceRoot,
+  socketPath: string,
+  address: WorkflowRunAddress,
+) =>
+  withClient(workspaceRoot, socketPath, (client) => client.inspectWorkflow(address)).pipe(
+    Effect.repeat({
+      while: WorkflowRunState.guards.Pending,
+      schedule: Schedule.spaced("10 millis"),
+    }),
+  );
 
 interface CompensationRestartState {
   readonly blocked: Ref.Ref<number>;
@@ -143,6 +181,61 @@ scopedLive(
       expect(result).toEqual({ completed: "completed", resumed: "resumed" });
       expect(yield* Ref.get(completed)).toBe(1);
       expect(yield* Ref.get(blocked)).toBe(2);
+      yield* Fiber.interrupt(secondDaemon);
+    }),
+  30_000,
+);
+
+scopedLive(
+  "wakes a signal-waiting Workflow in a fresh VM pass after daemon restart",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-daemon-resume-" });
+      const workspaceRoot = WorkspaceRoot.make(directory);
+      const socketPath = `${directory}/daemon.sock`;
+      const config = {
+        workspaceRoot,
+        socketPath,
+        databasePath: `${directory}/loom.sqlite`,
+      };
+      const { capabilities, completed, resumed } = yield* makeSignalRestartHarness;
+
+      const firstDaemon = yield* runLoomDaemon(config, capabilities).pipe(Effect.forkScoped);
+      const handle = yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.startWorkflow(signalRestartRequest),
+      );
+      const address = { sessionId: signalRestartRequest.sessionId, ...handle };
+      yield* Ref.get(completed).pipe(
+        Effect.repeat({
+          while: (count) => count !== 1,
+          schedule: Schedule.spaced("10 millis"),
+        }),
+      );
+      expect(yield* waitForSuspension(workspaceRoot, socketPath, address)).toEqual(
+        WorkflowRunState.cases.Suspended.make({}),
+      );
+      yield* Fiber.interrupt(firstDaemon);
+
+      const secondDaemon = yield* runLoomDaemon(config, capabilities).pipe(Effect.forkScoped);
+      const waiting = yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.inspectWorkflow(address),
+      );
+      expect(waiting).toEqual(WorkflowRunState.cases.Suspended.make({}));
+
+      yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.signalWorkflow({
+          address: { ...address, name: WorkflowSignalName.make("continue") },
+          value: "continued",
+        }),
+      );
+      const result = yield* withClient(workspaceRoot, socketPath, (client) =>
+        client.executeWorkflow(signalRestartRequest),
+      );
+
+      expect(result).toEqual({ completed: "completed", signal: "continued", resumed: "continued" });
+      expect(yield* Ref.get(completed)).toBe(1);
+      expect(yield* Ref.get(resumed)).toBe(1);
       yield* Fiber.interrupt(secondDaemon);
     }),
   30_000,

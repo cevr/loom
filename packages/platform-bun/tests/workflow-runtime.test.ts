@@ -274,10 +274,6 @@ scopedLive("exposes the Workflow Run lifecycle through one runtime service", () 
       expect(terminal).toHaveProperty("_tag", "Success");
       expect(yield* runtime.inspect(address)).toHaveProperty("_tag", "Success");
       yield* runtime.interrupt(address);
-      expect(yield* runtime.resume(address).pipe(Effect.flip)).toHaveProperty(
-        "_tag",
-        "WorkflowRunNotSuspendedError",
-      );
       expect(yield* runtime.execute(request)).toEqual(request.input);
       const inflightId = yield* runtime.send(signalRequest);
       const inflight = { sessionId: signalRequest.sessionId, workflowRunId: inflightId };

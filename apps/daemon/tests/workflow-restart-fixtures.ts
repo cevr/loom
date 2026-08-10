@@ -6,6 +6,7 @@ import {
   WorkflowKey,
   WorkflowName,
   WorkflowRunRequest,
+  WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
 import { Option } from "effect";
@@ -69,4 +70,28 @@ export const compensationRestartRequest = WorkflowRunRequest.make({
     `,
   }),
   budget: WorkflowBudget.make({ ...activityRestartRequest.budget, maxSteps: 3 }),
+});
+
+export const signalRestartRequest = WorkflowRunRequest.make({
+  ...activityRestartRequest,
+  key: WorkflowKey.make("signal-restart"),
+  definition: WorkflowDefinition.make({
+    ...activityRestartRequest.definition,
+    name: WorkflowName.make("signal-restart"),
+    source: `
+      const completed = await step.run({
+        stepId: "completed",
+        capability: "test",
+        input: "completed",
+      })
+      const received = await signal.wait("continue")
+      const resumed = await step.run({
+        stepId: "resumed",
+        capability: "test",
+        input: received,
+      })
+      return { completed, signal: received, resumed }
+    `,
+    signals: [WorkflowSignalName.make("continue")],
+  }),
 });

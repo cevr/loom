@@ -12,7 +12,6 @@ import {
   type WorkflowRunError,
   WorkflowRunState,
   type WorkflowRunNotFoundError,
-  WorkflowRunNotSuspendedError,
 } from "@cvr/loom-protocol";
 import { Context, Effect, Layer, Schema, Stream, type Duration } from "effect";
 import { WorkflowEngine } from "effect/unstable/workflow";
@@ -29,7 +28,6 @@ export type WorkflowRuntimeReadError = WorkflowIdentityConflictError | WorkflowR
 export type WorkflowRuntimeSignalError = SignalWorkflowError;
 export type WorkflowRuntimeState = PeekResult<Schema.Json, WorkflowRunError>;
 export type WorkflowRuntimeInspectError = WorkflowRunNotFoundError | WorkflowRunAcceptanceError;
-export type WorkflowRuntimeResumeError = WorkflowRuntimeInspectError | WorkflowRunNotSuspendedError;
 export type WorkflowRuntimeCompensationError = DecideWorkflowCompensationError;
 
 export interface WorkflowRuntimeShape {
@@ -58,7 +56,6 @@ export interface WorkflowRuntimeShape {
   readonly interrupt: (
     address: WorkflowRunAddress,
   ) => Effect.Effect<void, WorkflowRuntimeInspectError>;
-  readonly resume: (address: WorkflowRunAddress) => Effect.Effect<void, WorkflowRuntimeResumeError>;
   readonly decideCompensation: (
     request: DecideWorkflowCompensationRequest,
   ) => Effect.Effect<void, WorkflowRuntimeCompensationError>;
@@ -106,28 +103,12 @@ const makeSignalWorkflow =
       Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
     );
 
-const makeRequireSuspended = (
-  acceptance: WorkflowRunAcceptance["Service"],
-  engine: WorkflowEngine.WorkflowEngine["Service"],
-) =>
-  Effect.fn("WorkflowRuntime.requireSuspended")(function* (address: WorkflowRunAddress) {
-    yield* acceptance.authorize(address);
-    const state = yield* LoomDynamicWorkflow.peekAt(address.workflowRunId).pipe(
-      Effect.map(toWorkflowRunState),
-      Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
-    );
-    if (!WorkflowRunState.guards.Suspended(state)) {
-      return yield* new WorkflowRunNotSuspendedError({ address, state });
-    }
-  });
-
 const makeControlWorkflow = (
   acceptance: WorkflowRunAcceptance["Service"],
   engine: WorkflowEngine.WorkflowEngine["Service"],
   publisher: WorkflowRunStatePublisher["Service"],
 ) => {
   const provideEngine = Effect.provideService(WorkflowEngine.WorkflowEngine, engine);
-  const requireSuspended = makeRequireSuspended(acceptance, engine);
   const inspect = Effect.fn("WorkflowRuntime.inspect")(function* (address: WorkflowRunAddress) {
     yield* acceptance.authorize(address);
     yield* publisher.watch(address);
@@ -141,12 +122,6 @@ const makeControlWorkflow = (
     interrupt: (address: WorkflowRunAddress) =>
       acceptance.authorize(address).pipe(
         Effect.andThen(LoomDynamicWorkflow.interrupt(address.workflowRunId)),
-        Effect.tap(() => publisher.watch(address)),
-        provideEngine,
-      ),
-    resume: (address: WorkflowRunAddress) =>
-      requireSuspended(address).pipe(
-        Effect.andThen(LoomDynamicWorkflow.resume(address.workflowRunId)),
         Effect.tap(() => publisher.watch(address)),
         provideEngine,
       ),

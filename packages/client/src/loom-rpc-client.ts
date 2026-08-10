@@ -140,13 +140,6 @@ const makeWorkflowControls = (
     runHandshake,
     rpc["Workflow.Interrupt"],
   ),
-  resumeWorkflow: makeDaemonRequest(
-    "LoomRpcClient.resumeWorkflow",
-    "resumeWorkflow",
-    config,
-    runHandshake,
-    rpc["Workflow.Resume"],
-  ),
   decideWorkflowCompensation: makeDaemonRequest(
     "LoomRpcClient.decideWorkflowCompensation",
     "decideWorkflowCompensation",

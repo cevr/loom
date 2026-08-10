@@ -17,13 +17,7 @@ export { Handshake, HandshakeError } from "./handshake.js";
 export { HandshakeRequest } from "./handshake-request.js";
 export { HandshakeSuccess } from "./handshake-success.js";
 export { IncompatibleProtocolError } from "./incompatible-protocol-error.js";
-export {
-  InspectWorkflow,
-  InspectWorkflowError,
-  InterruptWorkflow,
-  ResumeWorkflow,
-  ResumeWorkflowError,
-} from "./workflow-control.js";
+export { InspectWorkflow, InspectWorkflowError, InterruptWorkflow } from "./workflow-control.js";
 export {
   DecideWorkflowCompensation,
   DecideWorkflowCompensationError,
@@ -59,7 +53,6 @@ export { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
 export { WorkflowRunError } from "./workflow-run-error.js";
 export { WorkflowRunState } from "./workflow-run-state.js";
 export { WorkflowRunNotFoundError } from "./workflow-run-not-found-error.js";
-export { WorkflowRunNotSuspendedError } from "./workflow-run-not-suspended-error.js";
 export { WorkflowCompensationNotPendingError } from "./workflow-compensation-not-pending-error.js";
 export { WorkflowCompensationDecisionConflictError } from "./workflow-compensation-decision-conflict-error.js";
 export { WorkflowCompensationDecisionTimeoutError } from "./workflow-compensation-decision-timeout-error.js";

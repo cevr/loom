@@ -197,12 +197,17 @@ it.effect("reports source and interpreter version failures", () =>
     const sourceFailure = yield* interpretWorkflow(request("return ("), interpreterHost).pipe(
       Effect.flip,
     );
+    const asyncSourceFailure = yield* interpretWorkflow(
+      request(`throw new Error("source failed")`),
+      interpreterHost,
+    ).pipe(Effect.flip);
     const versionFailure = yield* interpretWorkflow(
       request("return null", ["echo"], budget, 2),
       interpreterHost,
     ).pipe(Effect.flip);
 
     expect(sourceFailure).toBeInstanceOf(WorkflowSourceError);
+    expect(asyncSourceFailure).toHaveProperty("message", "source failed");
     expect(versionFailure).toBeInstanceOf(WorkflowInterpreterVersionMismatchError);
   }),
 );

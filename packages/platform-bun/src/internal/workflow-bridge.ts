@@ -17,8 +17,15 @@ import {
   Scope,
 } from "effect";
 
+const decodeSourceError = Schema.decodeUnknownOption(Schema.Struct({ message: Schema.String }));
+
 export const workflowSourceError = (cause: unknown): WorkflowSourceError =>
-  new WorkflowSourceError({ message: Inspectable.toStringUnknown(cause) });
+  new WorkflowSourceError({
+    message: Option.match(decodeSourceError(cause), {
+      onNone: () => Inspectable.toStringUnknown(cause),
+      onSome: ({ message }) => message,
+    }),
+  });
 
 export interface WorkflowBridge {
   readonly fatal: Effect.Effect<never, WorkflowRunError>;

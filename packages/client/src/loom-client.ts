@@ -13,7 +13,6 @@ import type {
   SignalWorkflowRequest,
   StartWorkflowError,
   InspectWorkflowError,
-  ResumeWorkflowError,
   WorkflowRunHandle,
   WorkflowRunState,
 } from "@cvr/loom-protocol";
@@ -56,9 +55,6 @@ export interface LoomClientShape {
   readonly interruptWorkflow: (
     request: WorkflowRunAddress,
   ) => Effect.Effect<void, InspectWorkflowError | HandshakeError | DaemonUnavailableError>;
-  readonly resumeWorkflow: (
-    request: WorkflowRunAddress,
-  ) => Effect.Effect<void, ResumeWorkflowError | HandshakeError | DaemonUnavailableError>;
   readonly decideWorkflowCompensation: (
     request: DecideWorkflowCompensationRequest,
   ) => Effect.Effect<

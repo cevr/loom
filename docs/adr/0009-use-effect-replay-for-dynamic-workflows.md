@@ -111,6 +111,8 @@ SQLite stores only the public Workflow Run ID and declared name.
 The daemon rejects an undeclared signal name.
 An unknown Workflow Run and an undeclared name return the same typed error.
 Effect Durable Deferred owns signal storage and wake-up.
+A signal delivery resumes its suspended Workflow Run.
+Loom does not expose a manual resume operation.
 
 ## Child Agents
 

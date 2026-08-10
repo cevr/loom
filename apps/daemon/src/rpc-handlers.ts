@@ -32,7 +32,6 @@ export const layerLoomRpcHandlers = LoomRpcs.toLayer(
       "Workflow.Signal": workflows.signal,
       "Workflow.Inspect": workflows.inspect,
       "Workflow.Interrupt": workflows.interrupt,
-      "Workflow.Resume": workflows.resume,
       "Workflow.DecideCompensation": workflows.decideCompensation,
     });
   }),

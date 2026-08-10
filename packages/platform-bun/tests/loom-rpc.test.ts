@@ -85,7 +85,6 @@ const layerHandlers = (
         "Workflow.Inspect": () =>
           Effect.succeed(WorkflowRunState.cases.Success.make({ value: workflow.input })),
         "Workflow.Interrupt": () => Effect.void,
-        "Workflow.Resume": () => Effect.void,
         "Workflow.DecideCompensation": decideCompensation,
       });
     }),
@@ -128,7 +127,6 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
       const workflowAddress = { sessionId: owner.sessionId, ...workflowHandle };
       const workflowState = yield* client.inspectWorkflow(workflowAddress);
       yield* client.interruptWorkflow(workflowAddress);
-      yield* client.resumeWorkflow(workflowAddress);
       yield* client.decideWorkflowCompensation({
         address: workflowAddress,
         decision: "Retry",
