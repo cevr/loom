@@ -1,11 +1,13 @@
+import type { AgentOwner, WorkflowRunRequest } from "@cvr/loom-domain";
 import type {
   CellEvaluation,
   CellEvaluationError,
   EvaluateCellRequest,
+  ExecuteWorkflowError,
   HandshakeError,
   HandshakeSuccess,
 } from "@cvr/loom-protocol";
-import { Context, type Effect } from "effect";
+import { Context, type Effect, type Schema } from "effect";
 import type { DaemonUnavailableError } from "./daemon-unavailable-error.js";
 import type { MessageTooLargeError } from "./message-too-large-error.js";
 
@@ -20,9 +22,11 @@ export interface LoomClientShape {
   readonly resetCodeKernel: (
     owner: AgentOwner,
   ) => Effect.Effect<void, HandshakeError | DaemonUnavailableError>;
+  readonly executeWorkflow: (
+    request: WorkflowRunRequest,
+  ) => Effect.Effect<Schema.Json, ExecuteWorkflowError | HandshakeError | DaemonUnavailableError>;
 }
 
 export class LoomClient extends Context.Service<LoomClient, LoomClientShape>()(
   "@cvr/loom-client/LoomClient",
 ) {}
-import type { AgentOwner } from "@cvr/loom-domain";

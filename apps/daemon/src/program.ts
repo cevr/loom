@@ -1,8 +1,10 @@
 import {
   layerBunLoomServer,
   layerCodeKernelFactory,
+  layerEmptyWorkflowHost,
   layerJobRecovery,
   layerLoomSqlite,
+  layerLoomWorkflowRuntime,
   layerSqliteCellJournal,
   prepareDaemonSocket,
 } from "@cvr/loom-platform-bun";
@@ -32,9 +34,10 @@ export const program = Effect.gen(function* () {
   return yield* Effect.gen(function* () {
     yield* reconcileJobs();
     const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
+    const cluster = SingleRunner.layer({ runnerStorage: "memory" });
     const agents = layerAgentActor.pipe(
       Layer.provide([
-        SingleRunner.layer({ runnerStorage: "memory" }),
+        cluster,
         layerSqliteCellJournal,
         layerCodeKernelFactory({
           entryPath: codeKernelEntry,
@@ -42,8 +45,11 @@ export const program = Effect.gen(function* () {
         }),
       ]),
     );
+    const workflows = layerLoomWorkflowRuntime.pipe(
+      Layer.provide([cluster, layerEmptyWorkflowHost]),
+    );
     const handlers = layerLoomRpcHandlers.pipe(
-      Layer.provide(agents),
+      Layer.provide([agents, workflows]),
       Layer.provide(
         layerConnectionHandshake({
           workspaceRoot: config.workspaceRoot,

@@ -3,7 +3,7 @@ import { BunServices } from "@effect/platform-bun";
 import { JobId, JobProcessRecord, ProcessIdentity, SessionId } from "@cvr/loom-domain";
 import { JobProcessStore, ProcessObservation } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, FileSystem, Layer, Option } from "effect";
 import {
   layerLoomSqlite,
   layerSqliteJobProcessStore,
@@ -21,7 +21,7 @@ const record = JobProcessRecord.make({
   stdoutPath: "/tmp/job-persistent.stdout",
   stderrPath: "/tmp/job-persistent.stderr",
   status: "Running",
-  recoveryDetail: null,
+  recoveryDetail: Option.none(),
 });
 const scopedLive = it.scopedLive.layer(BunServices.layer);
 const live = it.live.layer(BunServices.layer);

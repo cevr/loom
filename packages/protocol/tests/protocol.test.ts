@@ -67,6 +67,7 @@ describe("Loom RPC protocol", () => {
         "Connection.Handshake",
         "CodeKernel.EvaluateCell",
         "CodeKernel.Reset",
+        "Workflow.Execute",
       ]);
     }),
   );
@@ -100,7 +101,6 @@ describe("Code Kernel diagnostics", () => {
           cellId: CellId.make("cell-1"),
           reason: "ProcessExited",
           message: "Code Kernel process did not start.",
-          diagnostic: undefined,
         }),
       );
       const decoded = yield* Schema.decodeEffect(codec)(encoded);

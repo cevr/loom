@@ -3,7 +3,7 @@ import { Schema } from "effect";
 export const ProtocolVersion = Schema.Int.check(Schema.isGreaterThan(0));
 export type ProtocolVersion = typeof ProtocolVersion.Type;
 
-export const currentProtocolVersion = 2;
+export const currentProtocolVersion = 3;
 export const minimumProtocolVersion = currentProtocolVersion;
 export const maximumProtocolVersion = currentProtocolVersion;
 export const maximumFrameSize = 1024 * 1024;

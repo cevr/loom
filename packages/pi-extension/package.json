@@ -13,7 +13,9 @@
   "dependencies": {
     "@cvr/loom-client": "workspace:*",
     "@cvr/loom-domain": "workspace:*",
-    "@cvr/loom-platform-node": "workspace:*"
+    "@cvr/loom-platform-node": "workspace:*",
+    "@cvr/loom-protocol": "workspace:*",
+    "@earendil-works/pi-ai": "catalog:"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",

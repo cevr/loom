@@ -10,7 +10,8 @@ import {
   WorkflowVersion,
 } from "@cvr/loom-domain";
 import { WorkflowArtifactReference, WorkflowStepExecution } from "@cvr/loom-runtime";
-import { Effect } from "effect";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
+import { Effect, Option } from "effect";
 import type { WorkflowInterpreterHost } from "../src/index.js";
 
 export const budget = WorkflowBudget.make({
@@ -18,15 +19,15 @@ export const budget = WorkflowBudget.make({
   maxAgentRuns: 4,
   maxParallelism: 2,
   maxInlineStepResultBytes: 1_024,
-  maxTokens: 1_000,
-  maxDurationMillis: null,
+  maxTokens: Option.some(1_000),
+  maxDurationMillis: Option.none(),
 });
 
 export const request = (
   source: string,
   capabilities: ReadonlyArray<string> = ["echo"],
   acceptedBudget: WorkflowBudget = budget,
-  interpreterVersion = 1,
+  interpreterVersion = workflowInterpreterVersion,
 ): WorkflowRunRequest =>
   WorkflowRunRequest.make({
     sessionId: SessionId.make("session-1"),
@@ -50,6 +51,7 @@ export const host = (
   execute: WorkflowInterpreterHost<never>["execute"],
 ): WorkflowInterpreterHost<never> => ({
   activity: (_stepId, effect) => effect,
+  supports: () => true,
   execute,
   storeArtifact: ({ stepId }) =>
     Effect.succeed(
@@ -57,5 +59,5 @@ export const host = (
         artifactId: ArtifactId.make(`artifact-${stepId}`),
       }),
     ),
-  durationLimit: () => Effect.never,
+  withDurationLimit: (_milliseconds, evaluation) => evaluation,
 });

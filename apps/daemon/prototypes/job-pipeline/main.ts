@@ -1,6 +1,17 @@
 /* oxlint-disable effect/noGlobals, effect/noNodeBuiltinImport, eslint/max-lines-per-function, eslint/no-underscore-dangle -- PROTOTYPE: this Bun platform probe must inspect process-group liveness and print its full state. */
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, FileSystem, Ref, Stream } from "effect";
+import {
+  Cause,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Inspectable,
+  Ref,
+  Stream,
+} from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 type Channel = "stdout" | "stderr";
@@ -53,7 +64,7 @@ const printState = Effect.fn("JobPipelinePrototype.printState")(function* (
   label: string,
   value: unknown,
 ) {
-  yield* Effect.log(`\n${label}\n${JSON.stringify(value, undefined, 2)}`);
+  yield* Effect.log(`\n${label}\n${Inspectable.toStringUnknown(value)}`);
 });
 
 const requireCondition = Effect.fn("JobPipelinePrototype.requireCondition")(function* (

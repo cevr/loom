@@ -1,9 +1,10 @@
-/* oxlint-disable effect/noGlobals, effect/noNewPromise, effect/noNodeBuiltinImport -- This adapter owns the unmatched VM and Promise bridge. */
+/* oxlint-disable effect/noGlobals, effect/noNodeBuiltinImport -- This adapter owns the unmatched VM APIs. */
 import { WorkflowCapability, type WorkflowRunRequest, type WorkflowStepId } from "@cvr/loom-domain";
 import {
   WorkflowArtifactWrite,
   WorkflowBudgetExceededError,
   WorkflowCapabilityDeniedError,
+  WorkflowDuplicateStepError,
   WorkflowInterpreterVersionMismatchError,
   WorkflowRunError,
   WorkflowSourceError,
@@ -11,22 +12,10 @@ import {
   WorkflowStepExecution,
   type WorkflowArtifactReference,
 } from "@cvr/loom-runtime";
-import {
-  Cause,
-  Deferred,
-  Effect,
-  Exit,
-  FiberSet,
-  Inspectable,
-  Option,
-  Predicate,
-  Schema,
-  Scope,
-  Semaphore,
-} from "effect";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
+import { Effect, Option, Predicate, Schema, Scope, Semaphore } from "effect";
 import * as NodeVm from "node:vm";
-
-export const workflowInterpreterVersion = 1;
+import { makeWorkflowBridge, type WorkflowBridge, workflowSourceError } from "./workflow-bridge.js";
 
 export interface WorkflowInterpreterHost<R> {
   readonly activity: (
@@ -36,12 +25,14 @@ export interface WorkflowInterpreterHost<R> {
   readonly execute: (
     call: WorkflowStepCall,
   ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>;
+  readonly supports: (capability: WorkflowCapability) => boolean;
   readonly storeArtifact: (
     write: WorkflowArtifactWrite,
   ) => Effect.Effect<WorkflowArtifactReference, WorkflowRunError, R>;
-  readonly durationLimit: (
+  readonly withDurationLimit: (
     milliseconds: number,
-  ) => Effect.Effect<never, WorkflowBudgetExceededError, R>;
+    evaluation: Effect.Effect<Schema.Json, WorkflowRunError, R>,
+  ) => Effect.Effect<Schema.Json, WorkflowRunError, R>;
 }
 
 const decodeCall = Schema.decodeUnknownEffect(WorkflowStepCall);
@@ -49,9 +40,7 @@ const decodeResult = Schema.decodeUnknownEffect(Schema.Json);
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Json));
 const textEncoder = new TextEncoder();
 
-const sourceError = (cause: unknown): WorkflowSourceError =>
-  new WorkflowSourceError({ message: Inspectable.toStringUnknown(cause) });
-
+/* oxlint-disable effect/noNullish -- The VM sandbox requires a null prototype and explicit undefined globals. */
 const deterministicMath = (): object => {
   const target = Object.create(null);
   for (const key of Reflect.ownKeys(Math)) {
@@ -83,6 +72,7 @@ const makeContext = (
       codeGeneration: { strings: false, wasm: false },
     },
   );
+/* oxlint-enable effect/noNullish */
 
 const evaluateSource = (
   request: WorkflowRunRequest,
@@ -96,23 +86,24 @@ const evaluateSource = (
         const script = new NodeVm.Script(source, {
           filename: `${request.definition.name}@${request.definition.version}.workflow.js`,
         });
-        if (request.budget.maxDurationMillis === null) return script.runInContext(context);
-        return script.runInContext(context, { timeout: request.budget.maxDurationMillis });
+        return Option.match(request.budget.maxDurationMillis, {
+          onNone: () => script.runInContext(context),
+          onSome: (milliseconds) => script.runInContext(context, { timeout: milliseconds }),
+        });
       },
-      catch: (cause) => {
-        if (
-          request.budget.maxDurationMillis !== null &&
-          Predicate.hasProperty(cause, "code") &&
-          cause.code === "ERR_SCRIPT_EXECUTION_TIMEOUT"
-        ) {
-          return budgetError(
-            "Duration",
-            request.budget.maxDurationMillis,
-            request.budget.maxDurationMillis,
-          );
-        }
-        return sourceError(cause);
-      },
+      catch: (cause) =>
+        Option.match(request.budget.maxDurationMillis, {
+          onNone: () => workflowSourceError(cause),
+          onSome: (milliseconds) => {
+            if (
+              Predicate.hasProperty(cause, "code") &&
+              cause.code === "ERR_SCRIPT_EXECUTION_TIMEOUT"
+            ) {
+              return budgetError("Duration", milliseconds, milliseconds);
+            }
+            return workflowSourceError(cause);
+          },
+        }),
     });
     if (!Predicate.isPromiseLike(raw)) {
       return yield* new WorkflowSourceError({
@@ -123,7 +114,7 @@ const evaluateSource = (
       try: () => raw,
       catch: bridge.sourceError,
     });
-    return yield* decodeResult(value).pipe(Effect.mapError(sourceError));
+    return yield* decodeResult(value).pipe(Effect.mapError(workflowSourceError));
   });
 
 const budgetError = (
@@ -169,15 +160,15 @@ const makeRunStep = <R>(
   state: WorkflowPassState,
 ) =>
   Effect.fn("WorkflowInterpreter.runStep")(function* (received: unknown) {
-    const call = yield* decodeCall(received).pipe(Effect.mapError(sourceError));
+    const call = yield* decodeCall(received).pipe(Effect.mapError(workflowSourceError));
     if (state.seenStepIds.has(call.stepId)) {
-      return yield* Effect.die(`Duplicate Workflow Step ID: ${call.stepId}`);
+      return yield* new WorkflowDuplicateStepError({ stepId: call.stepId });
     }
     state.seenStepIds.add(call.stepId);
     if (state.seenStepIds.size > request.budget.maxSteps) {
       return yield* budgetError("Steps", request.budget.maxSteps, state.seenStepIds.size);
     }
-    if (!state.declaredCapabilities.has(call.capability)) {
+    if (!state.declaredCapabilities.has(call.capability) || !host.supports(call.capability)) {
       return yield* new WorkflowCapabilityDeniedError({ capability: call.capability });
     }
 
@@ -190,64 +181,14 @@ const makeRunStep = <R>(
     if (state.usage.agentRuns > request.budget.maxAgentRuns) {
       return yield* budgetError("Agents", request.budget.maxAgentRuns, state.usage.agentRuns);
     }
-    if (request.budget.maxTokens !== null && state.usage.tokens > request.budget.maxTokens) {
-      return yield* budgetError("Tokens", request.budget.maxTokens, state.usage.tokens);
+    const exceededTokenBudget = Option.filter(
+      request.budget.maxTokens,
+      (maximum) => state.usage.tokens > maximum,
+    );
+    if (Option.isSome(exceededTokenBudget)) {
+      return yield* budgetError("Tokens", exceededTokenBudget.value, state.usage.tokens);
     }
     return result;
-  });
-
-interface WorkflowBridge {
-  readonly fatal: Effect.Effect<never, WorkflowRunError>;
-  readonly run: (received: unknown) => Promise<unknown>;
-  readonly sourceError: (cause: unknown) => WorkflowRunError;
-  readonly deactivate: Effect.Effect<void>;
-}
-
-const makeBridge = <R>(
-  runStep: (received: unknown) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
-): Effect.Effect<WorkflowBridge, never, R | Scope.Scope> =>
-  Effect.gen(function* () {
-    const fibers = yield* FiberSet.make<WorkflowStepExecution, WorkflowRunError>();
-    const fatal = yield* Deferred.make<never, WorkflowRunError>();
-    const runFork = yield* FiberSet.runtime(fibers)<R>();
-    const failures = new WeakMap<object, WorkflowRunError>();
-    let active = true;
-    const run = (received: unknown): Promise<unknown> =>
-      new Promise((resolve, reject) => {
-        if (!active) return;
-        runFork(runStep(received)).addObserver((exit) => {
-          if (Exit.isSuccess(exit)) {
-            resolve(exit.value.value);
-            return;
-          }
-          const error = Cause.findErrorOption(exit.cause);
-          if (
-            Option.isSome(error) &&
-            !Cause.hasDies(exit.cause) &&
-            !Cause.hasInterrupts(exit.cause)
-          ) {
-            const failure = Object.freeze({});
-            failures.set(failure, error.value);
-            reject(failure);
-            return;
-          }
-          Deferred.doneUnsafe(fatal, Effect.failCause(exit.cause));
-        });
-      });
-    return {
-      fatal: Deferred.await(fatal),
-      run,
-      sourceError: (cause) => {
-        if (Predicate.isObject(cause)) {
-          const error = failures.get(cause);
-          if (error !== undefined) return error;
-        }
-        return sourceError(cause);
-      },
-      deactivate: Effect.sync(() => {
-        active = false;
-      }),
-    };
   });
 
 const evaluatePass = <R>(
@@ -261,15 +202,13 @@ const evaluatePass = <R>(
       semaphore: yield* Semaphore.make(request.budget.maxParallelism),
       usage: { agentRuns: 0, tokens: 0 },
     };
-    const bridge = yield* makeBridge(makeRunStep(request, host, state));
+    const bridge = yield* makeWorkflowBridge(makeRunStep(request, host, state));
     const evaluation = Effect.raceFirst(evaluateSource(request, bridge), bridge.fatal);
-    if (request.budget.maxDurationMillis === null) {
-      return yield* evaluation.pipe(Effect.ensuring(bridge.deactivate));
-    }
-    return yield* Effect.raceFirst(
-      evaluation,
-      host.durationLimit(request.budget.maxDurationMillis),
-    ).pipe(Effect.ensuring(bridge.deactivate));
+    const evaluated = Option.match(request.budget.maxDurationMillis, {
+      onNone: () => evaluation,
+      onSome: (milliseconds) => host.withDurationLimit(milliseconds, evaluation),
+    });
+    return yield* evaluated.pipe(Effect.ensuring(bridge.deactivate));
   });
 
 export const interpretWorkflow = <R>(

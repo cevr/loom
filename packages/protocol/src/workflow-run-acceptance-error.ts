@@ -4,6 +4,6 @@ export class WorkflowRunAcceptanceError extends Schema.TaggedError<WorkflowRunAc
   "WorkflowRunAcceptanceError",
   {
     operation: Schema.Literals(["claim", "digest"]),
-    cause: Schema.Defect(),
+    message: Schema.String,
   },
 ) {}

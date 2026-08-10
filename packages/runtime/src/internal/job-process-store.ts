@@ -1,5 +1,5 @@
 import { type JobId, type JobProcessRecord, type JobProcessStatus } from "@cvr/loom-domain";
-import { Context, type Effect } from "effect";
+import { Context, type Effect, type Option } from "effect";
 import type { JobProcessStoreError } from "./job-process-store-error.js";
 
 export interface JobProcessStoreShape {
@@ -8,7 +8,7 @@ export interface JobProcessStoreShape {
   readonly updateRecovery: (
     jobId: JobId,
     status: JobProcessStatus,
-    detail: string | null,
+    detail: Option.Option<string>,
   ) => Effect.Effect<void, JobProcessStoreError>;
 }
 

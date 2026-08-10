@@ -5,7 +5,7 @@ import {
   ProcessObservation,
   type ProcessInspectorShape,
 } from "@cvr/loom-runtime";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 const processLine = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/u;
@@ -18,13 +18,15 @@ const parseProcessTable = Effect.fn("BunProcessInspector.parseProcessTable")(fun
   for (const line of output.split("\n")) {
     const match = processLine.exec(line);
     if (match?.[1] !== String(pid)) continue;
-    return yield* decodeIdentity({
-      pid,
-      processGroupId: Number(match[2]),
-      processStartId: match[3],
-    });
+    return Option.some(
+      yield* decodeIdentity({
+        pid,
+        processGroupId: Number(match[2]),
+        processStartId: match[3],
+      }),
+    );
   }
-  return null;
+  return Option.none<ProcessIdentity>();
 });
 
 export const makeBunProcessInspector: Effect.Effect<
@@ -43,8 +45,10 @@ export const makeBunProcessInspector: Effect.Effect<
     function* (pid: number) {
       const output = yield* spawner.string(command);
       const identity = yield* parseProcessTable(output, pid);
-      if (identity === null) return ProcessObservation.Missing({ pid });
-      return ProcessObservation.Found({ identity });
+      return Option.match(identity, {
+        onNone: () => ProcessObservation.Missing({ pid }),
+        onSome: (foundIdentity) => ProcessObservation.Found({ identity: foundIdentity }),
+      });
     },
     (effect, pid) =>
       effect.pipe(Effect.mapError((cause) => new ProcessInspectionError({ pid, cause }))),

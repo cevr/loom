@@ -39,5 +39,10 @@ export {
 export {
   interpretWorkflow,
   type WorkflowInterpreterHost,
-  workflowInterpreterVersion,
 } from "./internal/workflow-interpreter.js";
+export { workflowInterpreterVersion } from "@cvr/loom-protocol";
+export {
+  layerLoomDynamicWorkflow,
+  layerLoomWorkflowRuntime,
+} from "./internal/loom-dynamic-workflow.js";
+export { layerEmptyWorkflowHost } from "./internal/empty-workflow-host.js";

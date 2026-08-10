@@ -10,6 +10,7 @@ export {
 } from "./code-kernel-process-protocol.js";
 export { EvaluateCell } from "./evaluate-cell.js";
 export { EvaluateCellRequest } from "./evaluate-cell-request.js";
+export { ExecuteWorkflow, ExecuteWorkflowError } from "./execute-workflow.js";
 export { Handshake, HandshakeError } from "./handshake.js";
 export { HandshakeRequest } from "./handshake-request.js";
 export { HandshakeSuccess } from "./handshake-success.js";
@@ -27,4 +28,16 @@ export {
 } from "./protocol-version.js";
 export { ResetCodeKernel } from "./reset-code-kernel.js";
 export { WorkflowIdentityConflictError } from "./workflow-identity-conflict-error.js";
+export {
+  WorkflowBudgetExceededError,
+  WorkflowBudgetName,
+} from "./workflow-budget-exceeded-error.js";
+export { WorkflowCapabilityDeniedError } from "./workflow-capability-denied-error.js";
+export { WorkflowDuplicateStepError } from "./workflow-duplicate-step-error.js";
+export { WorkflowInterpreterVersionMismatchError } from "./workflow-interpreter-version-mismatch-error.js";
+export { workflowInterpreterVersion } from "./workflow-interpreter-version.js";
+export { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
+export { WorkflowRunError } from "./workflow-run-error.js";
+export { WorkflowSourceError } from "./workflow-source-error.js";
+export { WorkflowStepError } from "./workflow-step-error.js";
 export { WorkspaceMismatchError } from "./workspace-mismatch-error.js";

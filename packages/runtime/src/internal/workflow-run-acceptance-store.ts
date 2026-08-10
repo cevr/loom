@@ -1,6 +1,6 @@
 import type { WorkflowIdentity, WorkflowRequestDigest } from "@cvr/loom-domain";
 import { Context, type Effect } from "effect";
-import type { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
+import type { WorkflowRunAcceptanceError } from "@cvr/loom-protocol";
 
 export interface WorkflowRunAcceptanceStoreShape {
   readonly claim: (

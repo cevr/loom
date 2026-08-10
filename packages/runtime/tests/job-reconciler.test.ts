@@ -6,7 +6,7 @@ import {
   SessionId,
 } from "@cvr/loom-domain";
 import { expect, it } from "effect-bun-test";
-import { Effect, Ref } from "effect";
+import { Effect, Option, Ref } from "effect";
 import {
   JobProcessStore,
   JobProcessStoreError,
@@ -30,7 +30,7 @@ const record = JobProcessRecord.make({
   stdoutPath: "/tmp/job-1.stdout",
   stderrPath: "/tmp/job-1.stderr",
   status: "Running",
-  recoveryDetail: null,
+  recoveryDetail: Option.none(),
 });
 
 const makeStore = Effect.fn("JobReconcilerTest.makeStore")(function* () {

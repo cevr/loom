@@ -1,10 +1,21 @@
 import { BunServices } from "@effect/platform-bun";
 import { LoomClient, MessageTooLargeError } from "@cvr/loom-client";
-import { AgentId, CellId, SessionId, WorkspaceRoot } from "@cvr/loom-domain";
+import {
+  AgentId,
+  CellId,
+  SessionId,
+  WorkflowBudget,
+  WorkflowDefinition,
+  WorkflowKey,
+  WorkflowName,
+  WorkflowRunRequest,
+  WorkflowVersion,
+  WorkspaceRoot,
+} from "@cvr/loom-domain";
 import { LoomRpcs, maximumCellSourceLength, maximumFrameSize } from "@cvr/loom-protocol";
 import { makeConnectionHandshake } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, Exit, FileSystem, Layer, Scope } from "effect";
+import { Effect, Exit, FileSystem, Layer, Option, Scope } from "effect";
 import {
   layerBunLoomClient,
   layerBunLoomServer,
@@ -17,6 +28,27 @@ const owner = {
   sessionId: SessionId.make("session-1"),
   agentId: AgentId.make("agent-1"),
 };
+const workflow = WorkflowRunRequest.make({
+  sessionId: owner.sessionId,
+  key: WorkflowKey.make("rpc"),
+  definition: WorkflowDefinition.make({
+    name: WorkflowName.make("rpc"),
+    version: WorkflowVersion.make("1"),
+    interpreterVersion: 1,
+    source: "return input",
+    capabilities: [],
+    signals: [],
+  }),
+  input: { value: 42 },
+  budget: WorkflowBudget.make({
+    maxSteps: 1,
+    maxAgentRuns: 1,
+    maxParallelism: 1,
+    maxInlineStepResultBytes: 1_024,
+    maxTokens: Option.none(),
+    maxDurationMillis: Option.none(),
+  }),
+});
 const scoped = it.scoped.layer(BunServices.layer);
 const scopedLive = it.scopedLive.layer(BunServices.layer);
 
@@ -33,6 +65,7 @@ const layerHandlers = (daemonStartedAtMillis: number, expectedRoot = workspaceRo
         "CodeKernel.EvaluateCell": (request) =>
           kernel.evaluate({ cellId: request.cellId, source: request.source }),
         "CodeKernel.Reset": () => kernel.reset,
+        "Workflow.Execute": (request) => Effect.succeed(request.input),
       });
     }),
   );
@@ -47,7 +80,7 @@ const layerClient = (socketPath: string, root = workspaceRoot) =>
     connectionTimeout: "2 seconds",
   });
 
-scoped("connects and evaluates a Cell through the real Unix socket", () =>
+scoped("calls typed daemon procedures through the real Unix socket", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-rpc-" });
@@ -62,9 +95,11 @@ scoped("connects and evaluates a Cell through the real Unix socket", () =>
         cellId: CellId.make("cell-1"),
         source: "40 + 2",
       });
+      const workflowResult = yield* client.executeWorkflow(workflow);
 
       expect(handshake.maximumFrameSize).toBe(maximumFrameSize);
       expect(cell.display).toBe("42");
+      expect(workflowResult).toEqual(workflow.input);
     }).pipe(Effect.provide(live));
   }),
 );

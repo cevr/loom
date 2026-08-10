@@ -9,7 +9,7 @@ import {
   JobProcessStoreError,
   type JobProcessStoreShape,
 } from "@cvr/loom-runtime";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 
 const PersistedJobProcess = Schema.Struct({
@@ -33,7 +33,8 @@ const makeUpsert = (sql: SqlClient.SqlClient) =>
       ) VALUES (
         ${record.jobId}, ${record.sessionId}, ${record.identity.pid},
         ${record.identity.processGroupId}, ${record.identity.processStartId},
-        ${record.stdoutPath}, ${record.stderrPath}, ${record.status}, ${record.recoveryDetail}
+        ${record.stdoutPath}, ${record.stderrPath}, ${record.status},
+        ${Option.getOrNull(record.recoveryDetail)}
       )
       ON CONFLICT(job_id) DO UPDATE SET
         session_id = excluded.session_id,
@@ -70,11 +71,11 @@ const makeUpdateRecovery = (sql: SqlClient.SqlClient) =>
   Effect.fn("SqliteJobProcessStore.updateRecovery")(function* (
     jobId: JobId,
     status: JobProcessStatus,
-    detail: string | null,
+    detail: Option.Option<string>,
   ) {
     yield* sql`
       UPDATE job_processes
-      SET status = ${status}, recovery_detail = ${detail}
+      SET status = ${status}, recovery_detail = ${Option.getOrNull(detail)}
       WHERE job_id = ${jobId}
     `.pipe(
       Effect.asVoid,

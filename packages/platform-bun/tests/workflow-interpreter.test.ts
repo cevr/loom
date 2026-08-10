@@ -1,6 +1,7 @@
 import { WorkflowCapability } from "@cvr/loom-domain";
 import {
   WorkflowCapabilityDeniedError,
+  WorkflowDuplicateStepError,
   WorkflowSourceError,
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
@@ -49,7 +50,7 @@ it.effect("rejects a duplicate Step ID before a second operation runs", () =>
         }
         return "continued"
       `);
-    const result = yield* interpretWorkflow(
+    const error = yield* interpretWorkflow(
       workflow,
       host((call) =>
         Effect.sync(() => {
@@ -57,11 +58,10 @@ it.effect("rejects a duplicate Step ID before a second operation runs", () =>
           return execution(call.input);
         }),
       ),
-    ).pipe(Effect.exit);
+    ).pipe(Effect.flip);
 
     expect(calls).toHaveLength(1);
-    expect(Exit.isFailure(result)).toBe(true);
-    if (Exit.isFailure(result)) expect(Cause.hasDies(result.cause)).toBe(true);
+    expect(error).toBeInstanceOf(WorkflowDuplicateStepError);
   }),
 );
 
@@ -82,7 +82,7 @@ it.effect("does not let source catch Workflow suspension", () =>
         Effect.gen(function* () {
           calls.push(call);
           if (call.stepId === "suspend") return yield* Effect.interrupt;
-          return execution(null);
+          return execution(0);
         }),
       ),
     ).pipe(Effect.exit);

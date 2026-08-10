@@ -1,14 +1,9 @@
-import {
-  AcceptedWorkflowRun,
-  WorkflowIdentity,
-  WorkflowRequestDigest,
-  WorkflowRunRequest,
-} from "@cvr/loom-domain";
-import { WorkflowIdentityConflictError } from "@cvr/loom-protocol";
-import { Context, Crypto, Effect, Layer, Schema } from "effect";
+import { AcceptedWorkflowRun, WorkflowRequestDigest, WorkflowRunRequest } from "@cvr/loom-domain";
+import { WorkflowIdentityConflictError, WorkflowRunAcceptanceError } from "@cvr/loom-protocol";
+import { Context, Crypto, Effect, Inspectable, Layer, Schema } from "effect";
 import { canonicalJsonSha256 } from "effect-encore";
-import { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
 import { WorkflowRunAcceptanceStore } from "./workflow-run-acceptance-store.js";
+import { workflowIdentityFromRequest } from "./workflow-identity.js";
 
 export interface WorkflowRunAcceptanceShape {
   readonly accept: (
@@ -39,14 +34,6 @@ const normalizeRequest = (request: WorkflowRunRequest): WorkflowRunRequest =>
     },
   });
 
-const identityOf = (request: WorkflowRunRequest): WorkflowIdentity =>
-  WorkflowIdentity.make({
-    sessionId: request.sessionId,
-    name: request.definition.name,
-    version: request.definition.version,
-    key: request.key,
-  });
-
 export const makeWorkflowRunAcceptance: Effect.Effect<
   WorkflowRunAcceptanceShape,
   never,
@@ -63,14 +50,21 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
       );
       return WorkflowRequestDigest.make(`sha256:${digest}`);
     },
-    Effect.mapError((cause) => new WorkflowRunAcceptanceError({ operation: "digest", cause })),
+    Effect.tapError((cause) => Effect.logError("Workflow request digest failed.", cause)),
+    Effect.mapError(
+      (cause) =>
+        new WorkflowRunAcceptanceError({
+          operation: "digest",
+          message: Inspectable.toStringUnknown(cause),
+        }),
+    ),
   );
 
   const accept = Effect.fn("WorkflowRunAcceptance.accept")(function* (
     received: WorkflowRunRequest,
   ) {
     const request = normalizeRequest(received);
-    const identity = identityOf(request);
+    const identity = workflowIdentityFromRequest(request);
     const digest = yield* digestRequest(request);
     const acceptedDigest = yield* store.claim(identity, digest);
     if (acceptedDigest !== digest) {

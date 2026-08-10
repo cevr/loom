@@ -9,7 +9,7 @@ import {
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Deferred, Effect, Fiber, Latch, Ref } from "effect";
+import { Deferred, Effect, Fiber, Latch, Option, Ref } from "effect";
 import { interpretWorkflow } from "../src/index.js";
 import { budget, execution, host, request } from "./workflow-interpreter-fixtures.js";
 
@@ -45,13 +45,13 @@ it.effect("enforces Agent and token spend from Step results", () =>
     const agentError = yield* interpretWorkflow(
       request(workflow, ["agent"], WorkflowBudget.make({ ...budget, maxAgentRuns: 1 })),
       host(() =>
-        Effect.succeed(WorkflowStepExecution.make({ value: null, tokenCount: 0, agentRuns: 2 })),
+        Effect.succeed(WorkflowStepExecution.make({ value: 0, tokenCount: 0, agentRuns: 2 })),
       ),
     ).pipe(Effect.flip);
     const tokenError = yield* interpretWorkflow(
-      request(workflow, ["agent"], WorkflowBudget.make({ ...budget, maxTokens: 4 })),
+      request(workflow, ["agent"], WorkflowBudget.make({ ...budget, maxTokens: Option.some(4) })),
       host(() =>
-        Effect.succeed(WorkflowStepExecution.make({ value: null, tokenCount: 5, agentRuns: 1 })),
+        Effect.succeed(WorkflowStepExecution.make({ value: 0, tokenCount: 5, agentRuns: 1 })),
       ),
     ).pipe(Effect.flip);
 
@@ -64,18 +64,18 @@ it.effect("bounds parallel Step work with an Effect Semaphore", () =>
   Effect.gen(function* () {
     const active = yield* Ref.make(0);
     const maximum = yield* Ref.make(0);
-    const twoStarted = yield* Deferred.make<void>();
+    const twoStarted = yield* Deferred.make<boolean>();
     const release = yield* Latch.make();
     const execute = () =>
       Effect.acquireUseRelease(
         Ref.updateAndGet(active, (count) => count + 1).pipe(
           Effect.tap((count) => Ref.update(maximum, (current) => Math.max(current, count))),
           Effect.tap((count) => {
-            if (count === 2) return Deferred.succeed(twoStarted, undefined);
+            if (count === 2) return Deferred.succeed(twoStarted, true);
             return Effect.void;
           }),
         ),
-        () => release.await.pipe(Effect.as(execution(null))),
+        () => release.await.pipe(Effect.as(execution(0))),
         () => Ref.update(active, (count) => count - 1),
       );
     const workflow = request(`
@@ -140,7 +140,7 @@ it.effect("fails a large inline result when Artifact is not declared", () =>
 
 it.effect("uses the host duration limit without exposing a clock to source", () =>
   Effect.gen(function* () {
-    const limited = WorkflowBudget.make({ ...budget, maxDurationMillis: 5 });
+    const limited = WorkflowBudget.make({ ...budget, maxDurationMillis: Option.some(5) });
     const interpreterHost = host(() => Effect.never);
     const error = yield* interpretWorkflow(
       request(
@@ -150,7 +150,7 @@ it.effect("uses the host duration limit without exposing a clock to source", () 
       ),
       {
         ...interpreterHost,
-        durationLimit: (milliseconds) =>
+        withDurationLimit: (milliseconds) =>
           new WorkflowBudgetExceededError({
             budget: "Duration",
             limit: milliseconds,
@@ -165,7 +165,7 @@ it.effect("uses the host duration limit without exposing a clock to source", () 
 
 it.effect("stops synchronous source at the duration limit", () =>
   Effect.gen(function* () {
-    const limited = WorkflowBudget.make({ ...budget, maxDurationMillis: 10 });
+    const limited = WorkflowBudget.make({ ...budget, maxDurationMillis: Option.some(10) });
     const error = yield* interpretWorkflow(
       request("while (true) {}", ["echo"], limited),
       host((call) => Effect.succeed(execution(call.input))),

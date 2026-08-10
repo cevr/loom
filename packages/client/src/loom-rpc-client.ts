@@ -1,4 +1,4 @@
-import type { AgentOwner, WorkspaceRoot } from "@cvr/loom-domain";
+import type { AgentOwner, WorkflowRunRequest, WorkspaceRoot } from "@cvr/loom-domain";
 import {
   currentProtocolVersion,
   LoomRpcs,
@@ -104,6 +104,24 @@ const makeResetCodeKernel = (
     );
   });
 
+const makeExecuteWorkflow = (
+  config: LoomRpcClientConfig,
+  rpc: RpcClientShape,
+  runHandshake: LoomClientShape["handshake"],
+) =>
+  Effect.fn("LoomRpcClient.executeWorkflow")(function* (request: WorkflowRunRequest) {
+    return yield* withTimeout(
+      config,
+      "executeWorkflow",
+      runHandshake.pipe(
+        Effect.flatMap(() => rpc["Workflow.Execute"](request)),
+        Effect.catchTag("RpcClientError", (cause) =>
+          Effect.fail(unavailable(config, "executeWorkflow", cause)),
+        ),
+      ),
+    );
+  });
+
 const makeLoomRpcClient = (
   config: LoomRpcClientConfig,
 ): Effect.Effect<LoomClientShape, never, RpcClient.Protocol | Scope.Scope> =>
@@ -114,6 +132,7 @@ const makeLoomRpcClient = (
       handshake: runHandshake,
       evaluateCell: makeEvaluateCell(config, rpc, runHandshake),
       resetCodeKernel: makeResetCodeKernel(config, rpc, runHandshake),
+      executeWorkflow: makeExecuteWorkflow(config, rpc, runHandshake),
     });
   });
 

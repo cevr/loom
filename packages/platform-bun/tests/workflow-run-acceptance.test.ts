@@ -13,7 +13,7 @@ import {
 import { WorkflowIdentityConflictError } from "@cvr/loom-protocol";
 import { WorkflowRunAcceptance, layerWorkflowRunAcceptance } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { layerLoomSqlite, layerSqliteWorkflowRunAcceptanceStore } from "../src/index.js";
 
@@ -31,8 +31,8 @@ const budget = WorkflowBudget.make({
   maxAgentRuns: 2,
   maxParallelism: 3,
   maxInlineStepResultBytes: 4096,
-  maxTokens: 10_000,
-  maxDurationMillis: 60_000,
+  maxTokens: Option.some(10_000),
+  maxDurationMillis: Option.some(60_000),
 });
 
 const request = WorkflowRunRequest.make({

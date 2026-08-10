@@ -4,7 +4,7 @@ import {
   WorkflowRunAcceptanceStore,
   type WorkflowRunAcceptanceStoreShape,
 } from "@cvr/loom-runtime";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Inspectable, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 
 const Claim = Schema.Struct({
@@ -47,7 +47,14 @@ export const makeSqliteWorkflowRunAcceptanceStore: Effect.Effect<
           NoSuchElementError: Effect.die,
           SchemaError: Effect.die,
         }),
-        Effect.mapError((cause) => new WorkflowRunAcceptanceError({ operation: "claim", cause })),
+        Effect.tapError((cause) => Effect.logError("Workflow acceptance claim failed.", cause)),
+        Effect.mapError(
+          (cause) =>
+            new WorkflowRunAcceptanceError({
+              operation: "claim",
+              message: Inspectable.toStringUnknown(cause),
+            }),
+        ),
       ),
   });
 });

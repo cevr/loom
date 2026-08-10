@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect";
 import {
   WorkflowBudgetExceededError,
   WorkflowCapabilityDeniedError,
+  WorkflowDuplicateStepError,
   WorkflowInterpreterVersionMismatchError,
   WorkflowRunError,
   WorkflowSourceError,
@@ -21,6 +22,7 @@ it.effect("round-trips every durable Workflow failure", () =>
       }),
       new WorkflowBudgetExceededError({ budget: "Tokens", limit: 10, actual: 11 }),
       new WorkflowCapabilityDeniedError({ capability: WorkflowCapability.make("job") }),
+      new WorkflowDuplicateStepError({ stepId: WorkflowStepId.make("duplicate") }),
       new WorkflowInterpreterVersionMismatchError({ supported: 1, received: 2 }),
     ];
     const codec = Schema.fromJsonString(WorkflowRunError);

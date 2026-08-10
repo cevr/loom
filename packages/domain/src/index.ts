@@ -90,8 +90,8 @@ export const WorkflowBudget = Schema.Struct({
   maxAgentRuns: positiveInteger,
   maxParallelism: positiveInteger,
   maxInlineStepResultBytes: positiveInteger,
-  maxTokens: Schema.NullOr(positiveInteger),
-  maxDurationMillis: Schema.NullOr(positiveInteger),
+  maxTokens: Schema.OptionFromNullOr(positiveInteger),
+  maxDurationMillis: Schema.OptionFromNullOr(positiveInteger),
 });
 export type WorkflowBudget = typeof WorkflowBudget.Type;
 
@@ -182,6 +182,6 @@ export const JobProcessRecord = Schema.Struct({
   stdoutPath: Schema.NonEmptyString,
   stderrPath: Schema.NonEmptyString,
   status: JobProcessStatus,
-  recoveryDetail: Schema.NullOr(Schema.String),
+  recoveryDetail: Schema.OptionFromNullOr(Schema.String),
 });
 export type JobProcessRecord = typeof JobProcessRecord.Type;

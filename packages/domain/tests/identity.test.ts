@@ -48,7 +48,7 @@ describe("Workflow identity", () => {
           maxParallelism: 4,
           maxInlineStepResultBytes: 65_536,
           maxTokens: 100_000,
-          maxDurationMillis: null,
+          maxDurationMillis: 300_000,
         },
       });
 

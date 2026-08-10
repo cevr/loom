@@ -1,5 +1,5 @@
 import { type JobId, type JobProcessRecord, type ProcessIdentity } from "@cvr/loom-domain";
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Data, Effect, Layer, Option } from "effect";
 import type { JobProcessStoreError } from "./job-process-store-error.js";
 import { JobProcessStore, type JobProcessStoreShape } from "./job-process-store.js";
 import { ProcessInspector, ProcessObservation } from "./process-inspector.js";
@@ -33,7 +33,11 @@ export class JobReconciler extends Context.Service<JobReconciler, JobReconcilerS
 
 const markMissing = (store: JobProcessStoreShape, record: JobProcessRecord) =>
   store
-    .updateRecovery(record.jobId, "ExitedWhileOffline", "The recorded process no longer exists.")
+    .updateRecovery(
+      record.jobId,
+      "ExitedWhileOffline",
+      Option.some("The recorded process no longer exists."),
+    )
     .pipe(Effect.as(JobRecoveryResult.ExitedWhileOffline({ jobId: record.jobId })));
 
 const identitiesMatch = (expected: ProcessIdentity, actual: ProcessIdentity): boolean =>
@@ -52,11 +56,15 @@ const markFound = (
 ) => {
   if (identitiesMatch(record.identity, identity)) {
     return store
-      .updateRecovery(record.jobId, "Recovered", null)
+      .updateRecovery(record.jobId, "Recovered", Option.none())
       .pipe(Effect.as(JobRecoveryResult.Recovered({ jobId: record.jobId, identity })));
   }
   return store
-    .updateRecovery(record.jobId, "IdentityMismatch", mismatchDetail(record.identity, identity))
+    .updateRecovery(
+      record.jobId,
+      "IdentityMismatch",
+      Option.some(mismatchDetail(record.identity, identity)),
+    )
     .pipe(
       Effect.as(
         JobRecoveryResult.IdentityMismatch({

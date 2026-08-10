@@ -23,7 +23,17 @@ export {
 } from "./internal/code-kernel.js";
 export { JobProcessStoreError } from "./internal/job-process-store-error.js";
 export { JobProcessStore, type JobProcessStoreShape } from "./internal/job-process-store.js";
-export { WorkflowRunAcceptanceError } from "./internal/workflow-run-acceptance-error.js";
+export {
+  WorkflowBudgetExceededError,
+  WorkflowBudgetName,
+  WorkflowCapabilityDeniedError,
+  WorkflowDuplicateStepError,
+  WorkflowInterpreterVersionMismatchError,
+  WorkflowRunAcceptanceError,
+  WorkflowRunError,
+  WorkflowSourceError,
+  WorkflowStepError,
+} from "@cvr/loom-protocol";
 export {
   WorkflowRunAcceptanceStore,
   type WorkflowRunAcceptanceStoreShape,
@@ -41,14 +51,28 @@ export {
   WorkflowStepExecution,
 } from "./internal/workflow-interpreter-model.js";
 export {
-  WorkflowBudgetExceededError,
-  WorkflowBudgetName,
-} from "./internal/workflow-budget-exceeded-error.js";
-export { WorkflowCapabilityDeniedError } from "./internal/workflow-capability-denied-error.js";
-export { WorkflowInterpreterVersionMismatchError } from "./internal/workflow-interpreter-version-mismatch-error.js";
-export { WorkflowRunError } from "./internal/workflow-run-error.js";
-export { WorkflowSourceError } from "./internal/workflow-source-error.js";
-export { WorkflowStepError } from "./internal/workflow-step-error.js";
+  WorkflowCapabilityExecutor,
+  type WorkflowCapabilityExecutorShape,
+} from "./internal/workflow-capability-executor.js";
+export {
+  WorkflowArtifactStore,
+  type WorkflowArtifactStoreShape,
+} from "./internal/workflow-artifact-store.js";
+export { LoomDynamicWorkflow } from "./internal/loom-dynamic-workflow.js";
+export {
+  WorkflowRuntime,
+  type WorkflowRuntimeAcceptanceError,
+  type WorkflowRuntimeError,
+  type WorkflowRuntimeExecutionId,
+  type WorkflowRuntimeShape,
+  type WorkflowRuntimeState,
+  layerWorkflowRuntime,
+  makeWorkflowRuntime,
+} from "./internal/workflow-runtime.js";
+export {
+  encodeWorkflowIdentity,
+  workflowIdentityFromRequest,
+} from "./internal/workflow-identity.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";
 export {
   JobReconciler,

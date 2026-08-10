@@ -1,7 +1,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { JobId, JobProcessRecord, SessionId } from "@cvr/loom-domain";
 import { JobProcessStore, ProcessInspector, ProcessObservation } from "@cvr/loom-runtime";
-import { Config, Effect, Layer, Schema } from "effect";
+import { Config, Effect, Layer, Option, Schema } from "effect";
 import {
   layerBunProcessInspector,
   layerLoomSqlite,
@@ -35,7 +35,7 @@ const program = Effect.gen(function* () {
       stdoutPath: "/tmp/loom-pi-live.stdout",
       stderrPath: "/tmp/loom-pi-live.stderr",
       status: "Running",
-      recoveryDetail: null,
+      recoveryDetail: Option.none(),
     });
     yield* store.upsert(record);
     yield* Effect.log(encodeRecord(record));
