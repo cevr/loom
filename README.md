@@ -15,7 +15,8 @@ Loom uses Effect for actors, durable workflows, resource ownership, and typed pr
 
 ## Status
 
-Loom is in its first architecture and scaffold phase.
+Loom is building its first local beta.
+See [the first release boundary](docs/first-release.md).
 
 Loom currently targets Bun `1.4.0-canary.1`.
 

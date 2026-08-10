@@ -206,24 +206,15 @@ See [Herdr Plugin](./herdr-plugin.md).
 ## Package direction
 
 ```text
-@cvr/loom-domain
-        ^
-        |
-@cvr/loom-protocol
-        ^
-        |
-@cvr/loom-runtime      @cvr/loom-platform-bun
-        ^                         ^
-        |                         |
-        +-----------+-------------+
-                    |
-              @cvr/loom-daemon
-
-@cvr/loom-pi-extension -> @cvr/loom-platform-node -> @cvr/loom-client
-
-@cvr/loom-platform-node -> @cvr/loom-protocol
-
-@cvr/loom-plugin-herdr -> @cvr/loom-runtime
+protocol     -> domain
+client       -> domain + protocol
+runtime      -> domain + protocol
+platform-node -> client + domain + protocol
+platform-bun -> client + domain + protocol + runtime
+pi-extension -> client + domain + platform-node + protocol
+plugin-herdr -> domain + runtime
+code-kernel  -> platform-bun
+daemon       -> client + domain + platform-bun + protocol + runtime
 ```
 
 Imports flow from definitions to implementations.
@@ -238,6 +229,8 @@ Client adapters depend on the shared client contract.
 Create each package only when its first working boundary exists.
 
 ## Delivery order
+
+See [the first release boundary](./first-release.md) for the exact beta scope and release gates.
 
 1. Establish the domain package and daemon composition root.
 2. Upgrade `effect-encore` to the pinned Effect version.
