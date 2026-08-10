@@ -28,6 +28,12 @@ it("registers the Loom development command", () => {
     new Set([
       "loom_cell",
       "loom_cell_reset",
+      "loom_job_start",
+      "loom_job_inspect",
+      "loom_job_output",
+      "loom_job_await",
+      "loom_job_cancel",
+      "loom_job_detach",
       "loom_workflow_start",
       "loom_workflow_inspect",
       "loom_workflow_signal",

@@ -1,4 +1,9 @@
-import type { AgentOwner, WorkflowRunAddress, WorkflowRunRequest } from "@cvr/loom-domain";
+import type {
+  AgentOwner,
+  JobAddress,
+  WorkflowRunAddress,
+  WorkflowRunRequest,
+} from "@cvr/loom-domain";
 import type {
   CellEvaluation,
   CellEvaluationError,
@@ -9,12 +14,18 @@ import type {
   ExecuteWorkflowError,
   HandshakeError,
   HandshakeSuccess,
+  JobOutputChunk,
+  JobRpcError,
+  JobState,
+  ReadJobOutputRequest,
   SignalWorkflowError,
   SignalWorkflowRequest,
   StartWorkflowError,
+  StartJobRequest,
   InspectWorkflowError,
   WorkflowRunHandle,
   WorkflowRunState,
+  WaitForJobRequest,
 } from "@cvr/loom-protocol";
 import { Context, type Effect, type Schema } from "effect";
 import type { DaemonUnavailableError } from "./daemon-unavailable-error.js";
@@ -34,6 +45,24 @@ export interface LoomClientShape {
   readonly closeSession: (
     sessionId: AgentOwner["sessionId"],
   ) => Effect.Effect<void, CloseSessionError | HandshakeError | DaemonUnavailableError>;
+  readonly startJob: (
+    request: StartJobRequest,
+  ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;
+  readonly inspectJob: (
+    address: JobAddress,
+  ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;
+  readonly readJobOutput: (
+    request: ReadJobOutputRequest,
+  ) => Effect.Effect<JobOutputChunk, JobRpcError | HandshakeError | DaemonUnavailableError>;
+  readonly awaitJob: (
+    request: WaitForJobRequest,
+  ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;
+  readonly cancelJob: (
+    address: JobAddress,
+  ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;
+  readonly detachJob: (
+    address: JobAddress,
+  ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;
   readonly executeWorkflow: (
     request: WorkflowRunRequest,
   ) => Effect.Effect<Schema.Json, ExecuteWorkflowError | HandshakeError | DaemonUnavailableError>;

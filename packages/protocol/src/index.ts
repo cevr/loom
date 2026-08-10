@@ -17,6 +17,24 @@ export { Handshake, HandshakeError } from "./handshake.js";
 export { HandshakeRequest } from "./handshake-request.js";
 export { HandshakeSuccess } from "./handshake-success.js";
 export { IncompatibleProtocolError } from "./incompatible-protocol-error.js";
+export {
+  CancelJob,
+  defaultForegroundLeaseMillis,
+  DetachJob,
+  InspectJob,
+  JobOperation,
+  JobOutputChunk,
+  JobOutputStream,
+  JobRpcError,
+  JobState,
+  maximumJobOutputBytes,
+  ReadJobOutput,
+  ReadJobOutputRequest,
+  StartJob,
+  StartJobRequest,
+  WaitForJob,
+  WaitForJobRequest,
+} from "./job-control.js";
 export { InspectWorkflow, InspectWorkflowError, InterruptWorkflow } from "./workflow-control.js";
 export {
   DecideWorkflowCompensation,

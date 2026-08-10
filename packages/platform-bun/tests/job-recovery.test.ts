@@ -273,7 +273,7 @@ it.scopedLive.layer(BunServices.layer)("resumes cancellation after restart", () 
     const reconciled = yield* Effect.gen(function* () {
       const runtime = yield* JobRuntime;
       yield* runtime.reconcile;
-      return yield* runtime.inspect(address);
+      return Option.some(yield* waitForTerminal(runtime, address));
     }).pipe(Effect.provide(runtimeLayer(filename, workspaceRoot)), Effect.scoped);
 
     expect(status(reconciled)).toEqual(Option.some("Cancelled"));

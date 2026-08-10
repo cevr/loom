@@ -1,5 +1,5 @@
 import { JobOutcome, type JobRecord, type WorkspaceRoot } from "@cvr/loom-domain";
-import { Effect, FileSystem, Option, type PlatformError, Predicate, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/unstable/process";
 
 const ExitCodeFile = Schema.FiniteFromString.check(Schema.isInt());
@@ -45,8 +45,5 @@ export const readJobOutcome = (
     Effect.flatMap((contents) => decodeExitCode(contents.trim())),
     Effect.map(outcomeForExitCode),
     Effect.map(Option.some),
-    Effect.catchTag("PlatformError", (error) => {
-      if (Predicate.isTagged("NotFound")(error.reason)) return Effect.succeed(Option.none());
-      return Effect.fail(error);
-    }),
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(Option.none())),
   );

@@ -53,6 +53,7 @@ const makeDaemonRequest = <Request, Success, Error, Requirements>(
   send: (
     request: Request,
   ) => Effect.Effect<Success, Error | RpcClientError.RpcClientError, Requirements>,
+  timeoutFor?: (request: Request) => Duration.Input,
 ) =>
   Effect.fn(name)((request: Request) =>
     withTimeout(
@@ -65,7 +66,7 @@ const makeDaemonRequest = <Request, Success, Error, Requirements>(
           Effect.fail(unavailable(config, operation, "TransportFailure", Option.some(cause))),
         ),
       ),
-      config.requestTimeout ?? "10 seconds",
+      timeoutFor?.(request) ?? config.requestTimeout ?? "10 seconds",
     ),
   );
 
@@ -149,6 +150,79 @@ const makeWorkflowControls = (
   ),
 });
 
+const makeJobReadControls = (
+  config: LoomRpcClientConfig,
+  rpc: RpcClientShape,
+  runHandshake: LoomClientShape["handshake"],
+) => ({
+  inspectJob: makeDaemonRequest(
+    "LoomRpcClient.inspectJob",
+    "inspectJob",
+    config,
+    runHandshake,
+    rpc["Job.Inspect"],
+  ),
+  readJobOutput: makeDaemonRequest(
+    "LoomRpcClient.readJobOutput",
+    "readJobOutput",
+    config,
+    runHandshake,
+    rpc["Job.Output"],
+  ),
+});
+
+const makeJobLifecycleControls = (
+  config: LoomRpcClientConfig,
+  rpc: RpcClientShape,
+  runHandshake: LoomClientShape["handshake"],
+) => {
+  const leaseTimeout = (foregroundLeaseMillis: number) =>
+    Duration.millis(
+      foregroundLeaseMillis + Duration.toMillis(config.requestTimeout ?? "10 seconds"),
+    );
+  return {
+    startJob: makeDaemonRequest(
+      "LoomRpcClient.startJob",
+      "startJob",
+      config,
+      runHandshake,
+      rpc["Job.Start"],
+      (request) => leaseTimeout(request.foregroundLeaseMillis),
+    ),
+    awaitJob: makeDaemonRequest(
+      "LoomRpcClient.awaitJob",
+      "awaitJob",
+      config,
+      runHandshake,
+      rpc["Job.Await"],
+      (request) => leaseTimeout(request.foregroundLeaseMillis),
+    ),
+    cancelJob: makeDaemonRequest(
+      "LoomRpcClient.cancelJob",
+      "cancelJob",
+      config,
+      runHandshake,
+      rpc["Job.Cancel"],
+    ),
+    detachJob: makeDaemonRequest(
+      "LoomRpcClient.detachJob",
+      "detachJob",
+      config,
+      runHandshake,
+      rpc["Job.Detach"],
+    ),
+  };
+};
+
+const makeJobControls = (
+  config: LoomRpcClientConfig,
+  rpc: RpcClientShape,
+  runHandshake: LoomClientShape["handshake"],
+) => ({
+  ...makeJobLifecycleControls(config, rpc, runHandshake),
+  ...makeJobReadControls(config, rpc, runHandshake),
+});
+
 const makeLoomRpcClient = (
   config: LoomRpcClientConfig,
 ): Effect.Effect<LoomClientShape, never, RpcClient.Protocol | Scope.Scope> =>
@@ -156,6 +230,7 @@ const makeLoomRpcClient = (
     const rpc = yield* RpcClient.make(LoomRpcs);
     const runHandshake = makeRunHandshake(config, rpc);
     return LoomClient.of({
+      ...makeJobControls(config, rpc, runHandshake),
       ...makeWorkflowControls(config, rpc, runHandshake),
       handshake: runHandshake,
       closeSession: makeDaemonRequest(

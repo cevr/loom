@@ -24,7 +24,14 @@ export {
 export { JobStoreError } from "./internal/job-store-error.js";
 export { JobStore, type JobStoreShape } from "./internal/job-store.js";
 export { JobRuntimeError } from "./internal/job-runtime-error.js";
-export { JobRuntime, type JobRuntimeShape } from "./internal/job-runtime.js";
+export {
+  JobRuntime,
+  type JobOutputChunk,
+  type JobOutputRequest,
+  type JobOutputStream,
+  type JobRuntimeShape,
+  type JobWaitRequest,
+} from "./internal/job-runtime.js";
 export { ProcessControllerError } from "./internal/process-controller-error.js";
 export {
   ProcessController,

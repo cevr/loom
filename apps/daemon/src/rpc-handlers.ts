@@ -7,6 +7,7 @@ import {
   WorkflowRuntime,
 } from "@cvr/loom-runtime";
 import { Effect, Inspectable } from "effect";
+import { makeJobRpcHandlers } from "./job-rpc-handlers.js";
 
 export const layerLoomRpcHandlers = LoomRpcs.toLayer(
   Effect.gen(function* () {
@@ -15,6 +16,7 @@ export const layerLoomRpcHandlers = LoomRpcs.toLayer(
     const childAgents = yield* WorkflowChildAgentStore;
     const jobs = yield* JobRuntime;
     return LoomRpcs.of({
+      ...makeJobRpcHandlers(jobs),
       "Connection.Handshake": connection.handshake,
       "Session.Close": ({ sessionId }) =>
         Effect.all([childAgents.stopSession(sessionId), jobs.closeSession(sessionId)], {

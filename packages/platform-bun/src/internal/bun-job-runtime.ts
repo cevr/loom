@@ -20,6 +20,7 @@ import {
 } from "@cvr/loom-runtime";
 import { Duration, Effect, FiberMap, FileSystem, Layer, Option, Path, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import { detachJob, makeCancel, superviseCancellation } from "./bun-job-cancellation.js";
 import {
   completeJob,
   identitiesMatch,
@@ -29,7 +30,8 @@ import {
   publishJob,
   settleMissingJob,
 } from "./bun-job-runtime-state.js";
-import { cancelRunningJob, monitorJob, superviseJob } from "./bun-job-supervisor.js";
+import { makeAwait, makeReadOutput } from "./bun-job-io.js";
+import { monitorJob, superviseJob } from "./bun-job-supervisor.js";
 
 export interface BunJobRuntimeConfig {
   readonly workspaceRoot: WorkspaceRoot;
@@ -69,49 +71,40 @@ const makeStart = (
   config: BunJobRuntimeConfig,
   fibers: FiberMap.FiberMap<JobId>,
 ) =>
-  Effect.fn("BunJobRuntime.start")(function* (request: JobRequest) {
-    const submission = submissionFor(config.workspaceRoot, request);
-    const created = yield* services.jobs.create(submission).pipe(mapRuntimeError("start"));
-    let job: JobRecord;
-    if (created) {
-      job = acceptedRecord(submission);
-    } else {
-      job = yield* services.jobs.get(JobAddress.make(request)).pipe(
-        mapRuntimeError("start"),
-        Effect.flatMap(
-          Option.match({
-            onNone: () =>
-              Effect.fail(
-                new JobRuntimeError({ operation: "start", cause: "The Job record is missing." }),
-              ),
-            onSome: Effect.succeed,
-          }),
-        ),
-      );
-    }
-    if (!sameSubmission(job, submission)) {
-      return yield* new JobRuntimeError({
-        operation: "start",
-        cause: "The Job ID belongs to another request.",
-      });
-    }
-    yield* publishJob(services.actors, job);
-    if (job.status === "Accepted") {
-      yield* superviseJob(services, config.workspaceRoot, config.terminationGrace, fibers, job);
-    }
-    return job;
-  });
-
-const makeCancel = (services: JobRuntimeServices, grace: Duration.Input) =>
-  Effect.fn("BunJobRuntime.cancel")(function* (address: JobAddress) {
-    const job = yield* services.jobs.requestStop(address).pipe(mapRuntimeError("cancel"));
-    if (Option.isNone(job)) return job;
-    yield* publishJob(services.actors, job.value);
-    return yield* Option.match(job.value.identity, {
-      onNone: () => Effect.succeed(job),
-      onSome: (identity) => cancelRunningJob(services, grace, job.value, identity),
-    });
-  });
+  Effect.fn("BunJobRuntime.start")((request: JobRequest) =>
+    Effect.gen(function* () {
+      const submission = submissionFor(config.workspaceRoot, request);
+      const created = yield* services.jobs.create(submission).pipe(mapRuntimeError("start"));
+      let job: JobRecord;
+      if (created) {
+        job = acceptedRecord(submission);
+      } else {
+        job = yield* services.jobs.get(JobAddress.make(request)).pipe(
+          mapRuntimeError("start"),
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.fail(
+                  new JobRuntimeError({ operation: "start", cause: "The Job record is missing." }),
+                ),
+              onSome: Effect.succeed,
+            }),
+          ),
+        );
+      }
+      if (!sameSubmission(job, submission)) {
+        return yield* new JobRuntimeError({
+          operation: "start",
+          cause: "The Job ID belongs to another request.",
+        });
+      }
+      yield* publishJob(services.actors, job);
+      if (job.status === "Accepted") {
+        yield* superviseJob(services, config.workspaceRoot, config.terminationGrace, fibers, job);
+      }
+      return job;
+    }).pipe(Effect.uninterruptible),
+  );
 
 const makeCloseSession = (services: JobRuntimeServices, cancel: JobRuntimeShape["cancel"]) =>
   Effect.fn("BunJobRuntime.closeSession")(function* (sessionId: SessionId) {
@@ -149,6 +142,7 @@ const reconcileIdentity = (
   services: JobRuntimeServices,
   grace: Duration.Input,
   fibers: FiberMap.FiberMap<JobId>,
+  cancellationFibers: FiberMap.FiberMap<JobId>,
   job: JobRecord,
 ) =>
   Option.match(job.identity, {
@@ -165,13 +159,19 @@ const reconcileIdentity = (
         mapRuntimeError("reconcile"),
         Effect.flatMap((observation) =>
           ProcessObservation.$match(observation, {
-            Missing: () =>
-              settleMissingJob(services, job).pipe(Effect.map(Option.getOrElse(() => job))),
+            Missing: () => {
+              if (job.status === "Stopping") {
+                return superviseCancellation(services, grace, cancellationFibers, job).pipe(
+                  Effect.as(job),
+                );
+              }
+              return settleMissingJob(services, job).pipe(Effect.map(Option.getOrElse(() => job)));
+            },
             Found: ({ identity: actual }) => {
               if (identitiesMatch(identity, actual)) {
                 if (job.status === "Stopping") {
-                  return cancelRunningJob(services, grace, job, identity).pipe(
-                    Effect.map(Option.getOrElse(() => job)),
+                  return superviseCancellation(services, grace, cancellationFibers, job).pipe(
+                    Effect.as(job),
                   );
                 }
                 return monitorJob(services, fibers, job, identity).pipe(Effect.as(job));
@@ -193,6 +193,7 @@ const makeReconcile = (
   services: JobRuntimeServices,
   config: BunJobRuntimeConfig,
   fibers: FiberMap.FiberMap<JobId>,
+  cancellationFibers: FiberMap.FiberMap<JobId>,
 ) =>
   Effect.gen(function* () {
     const isolate = (effect: Effect.Effect<JobRecord, JobRuntimeError>, job: JobRecord) =>
@@ -207,7 +208,10 @@ const makeReconcile = (
     );
     const recoverable = yield* services.jobs.listRecoverable.pipe(mapRuntimeError("reconcile"));
     const second = yield* Effect.forEach(recoverable, (job) =>
-      isolate(reconcileIdentity(services, config.terminationGrace, fibers, job), job),
+      isolate(
+        reconcileIdentity(services, config.terminationGrace, fibers, cancellationFibers, job),
+        job,
+      ),
     );
     return [...first, ...second];
   });
@@ -237,15 +241,18 @@ export const makeBunJobRuntime = (
       spawner: yield* ChildProcessSpawner.ChildProcessSpawner,
     };
     const fibers = yield* FiberMap.make<JobId>();
+    const cancellationFibers = yield* FiberMap.make<JobId>();
     const start = makeStart(services, config, fibers);
-    const cancel = makeCancel(services, config.terminationGrace);
+    const cancel = makeCancel(services, config.terminationGrace, cancellationFibers);
     return JobRuntime.of({
       start,
       inspect: (address) => services.jobs.get(address).pipe(mapRuntimeError("inspect")),
+      await: makeAwait(services),
+      readOutput: makeReadOutput(services),
       cancel,
-      detach: (address) => services.jobs.detach(address).pipe(mapRuntimeError("detach")),
+      detach: (address) => detachJob(services, address),
       closeSession: makeCloseSession(services, cancel),
-      reconcile: makeReconcile(services, config, fibers),
+      reconcile: makeReconcile(services, config, fibers, cancellationFibers),
     });
   });
 

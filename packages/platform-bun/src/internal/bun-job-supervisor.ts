@@ -78,16 +78,13 @@ const settleLiveExit = Effect.fn("BunJobRuntime.settleLiveExit")(function* (
   const exit = yield* Effect.exit(child.exitCode);
   const current = yield* services.jobs.get(jobAddress(job)).pipe(mapRuntimeError("inspect"));
   if (Option.isNone(current)) return;
-  if (current.value.status === "Stopping") {
-    yield* completeJob(services, current.value, JobOutcome.cases.Cancelled.make({}));
-    return;
-  }
+  if (current.value.status === "Stopping") return;
   yield* completeJob(services, current.value, outcomeForExit(exit));
 });
 
 interface TerminationObservation {
   readonly groupAlive: boolean;
-  readonly process: ProcessObservation;
+  readonly process: Option.Option<ProcessObservation>;
 }
 
 const inspectTermination = (
@@ -96,14 +93,28 @@ const inspectTermination = (
 ): Effect.Effect<TerminationObservation, JobRuntimeError> =>
   Effect.all({
     groupAlive: services.controller.isGroupAlive(identity),
-    process: services.inspector.inspect(identity.pid).pipe(mapRuntimeError("cancel")),
+    process: services.inspector.inspect(identity.pid).pipe(
+      mapRuntimeError("cancel"),
+      Effect.matchEffect({
+        onFailure: (error) =>
+          Effect.logWarning("Job cancellation inspection failed.", error).pipe(
+            Effect.as(Option.none()),
+          ),
+        onSuccess: (observation) => Effect.succeed(Option.some(observation)),
+      }),
+    ),
   });
 
-const stillRunning = (identity: ProcessIdentity, observation: TerminationObservation): boolean =>
-  ProcessObservation.$match(observation.process, {
-    Missing: () => observation.groupAlive,
-    Found: ({ identity: actual }) => identitiesMatch(identity, actual),
+const stillRunning = (identity: ProcessIdentity, observation: TerminationObservation): boolean => {
+  if (!observation.groupAlive) return false;
+  return Option.match(observation.process, {
+    onNone: () => true,
+    onSome: ProcessObservation.$match({
+      Missing: () => true,
+      Found: ({ identity: actual }) => identitiesMatch(identity, actual),
+    }),
   });
+};
 
 const waitForTermination = (
   services: JobRuntimeServices,
@@ -144,9 +155,20 @@ export const cancelRunningJob = Effect.fn("BunJobRuntime.cancelRunning")(functio
   job: JobRecord,
   identity: ProcessIdentity,
 ) {
-  const before = yield* services.inspector.inspect(identity.pid).pipe(mapRuntimeError("cancel"));
-  if (ProcessObservation.$is("Missing")(before)) return yield* settleMissingJob(services, job);
-  if (!identitiesMatch(identity, before.identity)) {
+  const before = yield* inspectTermination(services, identity);
+  if (!before.groupAlive) return yield* settleMissingJob(services, job);
+  if (Option.exists(before.process, ProcessObservation.$is("Missing"))) {
+    yield* signalUnlessMissing(services, identity, "SIGKILL");
+    return yield* completeJob(services, job, JobOutcome.cases.Cancelled.make({}));
+  }
+  const changedBefore = Option.exists(
+    before.process,
+    ProcessObservation.$match({
+      Missing: () => false,
+      Found: ({ identity: actual }) => !identitiesMatch(identity, actual),
+    }),
+  );
+  if (changedBefore) {
     return yield* completeJob(
       services,
       job,
@@ -158,8 +180,9 @@ export const cancelRunningJob = Effect.fn("BunJobRuntime.cancelRunning")(functio
 
   yield* signalUnlessMissing(services, identity, "SIGTERM");
   const after = yield* waitForTermination(services, grace, identity);
-  if (ProcessObservation.$is("Found")(after.process)) {
-    if (identitiesMatch(identity, after.process.identity)) {
+  const found = Option.filter(after.process, ProcessObservation.$is("Found"));
+  if (Option.isSome(found)) {
+    if (identitiesMatch(identity, found.value.identity)) {
       yield* signalUnlessMissing(services, identity, "SIGKILL");
       return yield* completeJob(services, job, JobOutcome.cases.Cancelled.make({}));
     }

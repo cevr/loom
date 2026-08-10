@@ -204,3 +204,78 @@ it.scopedLive.layer(BunServices.layer)(
       }).pipe(Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, workspaceRoot)));
     }),
 );
+
+it.scopedLive.layer(BunServices.layer)("returns when the foreground lease ends", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-job-lease-" });
+    const workspaceRoot = WorkspaceRoot.make(directory);
+    const jobRequest = request("job-lease", "sleep 30");
+
+    yield* Effect.gen(function* () {
+      const runtime = yield* JobRuntime;
+      yield* runtime.start(jobRequest);
+      const leased = yield* runtime
+        .await({ ...JobAddress.make(jobRequest), foregroundLeaseMillis: 20 })
+        .pipe(Effect.timeout("1 second"));
+      expect(Option.map(leased, (job) => terminal(job.status))).toEqual(Option.some(false));
+      yield* runtime.cancel(JobAddress.make(jobRequest));
+    }).pipe(Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, workspaceRoot)));
+  }),
+);
+
+it.scopedLive.layer(BunServices.layer)("reads output with monotonic bounded sequences", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-job-output-" });
+    const workspaceRoot = WorkspaceRoot.make(directory);
+    const jobRequest = request("job-output", "printf 'abcdef'");
+    const address = JobAddress.make(jobRequest);
+
+    yield* Effect.gen(function* () {
+      const runtime = yield* JobRuntime;
+      yield* runtime.start(jobRequest);
+      yield* runtime.await({ ...address, foregroundLeaseMillis: 5_000 });
+      const first = yield* runtime.readOutput({
+        ...address,
+        stream: "stdout",
+        sequence: 0,
+        maximumBytes: 3,
+      });
+      const second = yield* runtime.readOutput({
+        ...address,
+        stream: "stdout",
+        sequence: first.nextSequence,
+        maximumBytes: 3,
+      });
+      expect(new TextDecoder().decode(first.data)).toBe("abc");
+      expect(first.sequence).toBe(0);
+      expect(first.nextSequence).toBe(3);
+      expect(first.complete).toBe(false);
+      expect(new TextDecoder().decode(second.data)).toBe("def");
+      expect(second.sequence).toBe(3);
+      expect(second.nextSequence).toBe(6);
+      expect(second.complete).toBe(true);
+    }).pipe(Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, workspaceRoot)));
+  }),
+);
+
+it.scopedLive.layer(BunServices.layer)("keeps terminal cancel and detach retries idempotent", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-job-idempotent-" });
+    const workspaceRoot = WorkspaceRoot.make(directory);
+    const jobRequest = request("job-idempotent", "exit 0");
+    const address = JobAddress.make(jobRequest);
+
+    yield* Effect.gen(function* () {
+      const runtime = yield* JobRuntime;
+      yield* runtime.start(jobRequest);
+      const completed = yield* waitForJob(runtime, address, terminal);
+      const cancelled = yield* runtime.cancel(address);
+      const detached = yield* runtime.detach(address);
+      expect(cancelled).toEqual(Option.some(completed));
+      expect(detached).toEqual(Option.some(completed));
+    }).pipe(Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, workspaceRoot)));
+  }),
+);

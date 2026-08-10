@@ -30,6 +30,7 @@ import {
   makeInProcessCodeKernel,
   prepareDaemonSocket,
 } from "../src/index.js";
+import { makeStubJobHandlers } from "./job-rpc-test-support.js";
 
 const workspaceRoot = WorkspaceRoot.make("/workspace");
 const owner = {
@@ -73,6 +74,7 @@ const layerHandlers = (
       });
       const kernel = yield* makeInProcessCodeKernel;
       return LoomRpcs.of({
+        ...makeStubJobHandlers(owner.sessionId),
         "Connection.Handshake": connection.handshake,
         "Session.Close": () => Effect.void,
         "CodeKernel.EvaluateCell": (request) =>
