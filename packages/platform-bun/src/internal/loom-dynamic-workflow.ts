@@ -2,6 +2,7 @@ import {
   LoomDynamicWorkflow,
   loomWorkflowSignal,
   WorkflowArtifactStore,
+  WorkflowActivityContext,
   WorkflowBudgetExceededError,
   WorkflowCapabilityExecutor,
   layerWorkflowRunAcceptance,
@@ -9,7 +10,7 @@ import {
   WorkflowRunError,
   WorkflowStepExecution,
 } from "@cvr/loom-runtime";
-import { WorkflowRunId } from "@cvr/loom-domain";
+import { WorkflowActivityKey, WorkflowRunId } from "@cvr/loom-domain";
 import { Effect, Layer, Schema } from "effect";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import type { WorkflowEngine, WorkflowInstance } from "effect/unstable/workflow/WorkflowEngine";
@@ -31,13 +32,22 @@ export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (requ
     const artifacts = yield* WorkflowArtifactStore;
     return yield* interpretWorkflow<WorkflowEngine | WorkflowInstance>(request, {
       workflowRunId: WorkflowRunId.make(step.executionId),
-      activity: (stepId, execute) =>
-        step.run(stepId, {
-          do: execute,
-          success: WorkflowStepExecution,
-          error: WorkflowRunError,
+      activity: (stepId, execute, compensate) =>
+        Effect.gen(function* () {
+          const context = WorkflowActivityContext.make({
+            activityKey: WorkflowActivityKey.make(yield* step.idempotencyKey(stepId)),
+            sessionId: request.sessionId,
+            workflowRunId: WorkflowRunId.make(step.executionId),
+          });
+          return yield* step.run(stepId, {
+            do: execute(context),
+            undo: () => compensate(context).pipe(Effect.orDie),
+            success: WorkflowStepExecution,
+            error: WorkflowRunError,
+          });
         }),
       execute: capabilities.execute,
+      compensate: capabilities.compensate,
       supports: capabilities.supports,
       storeArtifact: artifacts.store,
       awaitSignal: (name) => loomWorkflowSignal(name).await,

@@ -98,6 +98,7 @@ const workflowSupport = (filename: string, executions: Ref.Ref<number>) => {
             }),
           ),
         ),
+      compensate: () => Effect.void,
     }),
   );
   const artifacts = Layer.succeed(

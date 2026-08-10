@@ -43,6 +43,9 @@ export type WorkflowCapability = typeof WorkflowCapability.Type;
 export const WorkflowStepId = identifier("@cvr/loom/WorkflowStepId");
 export type WorkflowStepId = typeof WorkflowStepId.Type;
 
+export const WorkflowActivityKey = identifier("@cvr/loom/WorkflowActivityKey");
+export type WorkflowActivityKey = typeof WorkflowActivityKey.Type;
+
 export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
 export type WorkflowSignalName = typeof WorkflowSignalName.Type;
 
@@ -88,6 +91,30 @@ export const AgentParent = Schema.TaggedUnion({
   },
 });
 export type AgentParent = typeof AgentParent.Type;
+
+export const WorkflowChildAgentStatus = Schema.Literals(["Active", "Stopped"]);
+export type WorkflowChildAgentStatus = typeof WorkflowChildAgentStatus.Type;
+
+export const WorkflowChildAgent = Schema.Struct({
+  activityKey: WorkflowActivityKey,
+  agentId: AgentId,
+  parent: AgentParent,
+  status: WorkflowChildAgentStatus,
+});
+export type WorkflowChildAgent = typeof WorkflowChildAgent.Type;
+
+export const WorkflowJobStatus = Schema.Literals(["Accepted", "Starting", "Running", "Failed"]);
+export type WorkflowJobStatus = typeof WorkflowJobStatus.Type;
+
+export const WorkflowJob = Schema.Struct({
+  activityKey: WorkflowActivityKey,
+  jobId: JobId,
+  sessionId: SessionId,
+  workflowRunId: WorkflowRunId,
+  attached: Schema.Boolean,
+  status: WorkflowJobStatus,
+});
+export type WorkflowJob = typeof WorkflowJob.Type;
 
 const positiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 

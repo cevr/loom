@@ -4,10 +4,12 @@ import type {
   WorkflowArtifactReference,
   WorkflowArtifactWrite,
 } from "./workflow-interpreter-model.js";
+import type { WorkflowActivityContext } from "./workflow-capability-model.js";
 
 export interface WorkflowArtifactStoreShape {
   readonly store: (
     write: WorkflowArtifactWrite,
+    context: WorkflowActivityContext,
   ) => Effect.Effect<WorkflowArtifactReference, WorkflowRunError>;
 }
 

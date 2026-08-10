@@ -16,6 +16,7 @@ export const layerEmptyWorkflowHost = Layer.merge(
     WorkflowCapabilityExecutor.of({
       supports: () => false,
       execute: (call) => Effect.fail(unsupported(call.stepId, call.capability)),
+      compensate: () => Effect.void,
     }),
   ),
   Layer.succeed(

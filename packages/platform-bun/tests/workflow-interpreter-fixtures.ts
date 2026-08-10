@@ -6,6 +6,7 @@ import {
   WorkflowDefinition,
   WorkflowKey,
   WorkflowName,
+  WorkflowActivityKey,
   WorkflowRunId,
   WorkflowRunRequest,
   WorkflowVersion,
@@ -52,10 +53,16 @@ export const host = (
   execute: WorkflowInterpreterHost<never>["execute"],
 ): WorkflowInterpreterHost<never> => ({
   workflowRunId: WorkflowRunId.make("workflow-run-1"),
-  activity: (_stepId, effect) => effect,
+  activity: (_stepId, effect) =>
+    effect({
+      activityKey: WorkflowActivityKey.make("activity-1"),
+      sessionId: SessionId.make("session-1"),
+      workflowRunId: WorkflowRunId.make("workflow-run-1"),
+    }),
   awaitSignal: () => Effect.succeed({ received: true }),
   supports: () => true,
   execute,
+  compensate: () => Effect.void,
   storeArtifact: ({ stepId }) =>
     Effect.succeed(
       WorkflowArtifactReference.make({

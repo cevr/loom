@@ -9,6 +9,7 @@ import {
 } from "@cvr/loom-domain";
 import {
   WorkflowArtifactWrite,
+  type WorkflowActivityContext,
   WorkflowBudgetExceededError,
   WorkflowCapabilityDeniedError,
   WorkflowDuplicateStepError,
@@ -30,14 +31,23 @@ export interface WorkflowInterpreterHost<R> {
   readonly workflowRunId: WorkflowRunId;
   readonly activity: (
     stepId: WorkflowStepId,
-    execute: Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
+    execute: (
+      context: WorkflowActivityContext,
+    ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
+    compensate: (context: WorkflowActivityContext) => Effect.Effect<void, WorkflowRunError, R>,
   ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>;
   readonly execute: (
     call: WorkflowStepCall,
+    context: WorkflowActivityContext,
   ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>;
+  readonly compensate: (
+    call: WorkflowStepCall,
+    context: WorkflowActivityContext,
+  ) => Effect.Effect<void, WorkflowRunError, R>;
   readonly supports: (capability: WorkflowCapability) => boolean;
   readonly storeArtifact: (
     write: WorkflowArtifactWrite,
+    context: WorkflowActivityContext,
   ) => Effect.Effect<WorkflowArtifactReference, WorkflowRunError, R>;
   readonly awaitSignal: (
     name: WorkflowSignalName,
@@ -149,9 +159,10 @@ const completeStep = <R>(
   host: WorkflowInterpreterHost<R>,
   state: WorkflowPassState,
   call: WorkflowStepCall,
+  context: WorkflowActivityContext,
 ): Effect.Effect<WorkflowStepExecution, WorkflowRunError, R> =>
   Effect.gen(function* () {
-    const result = yield* host.execute(call);
+    const result = yield* host.execute(call, context);
     const encoded = yield* encodeJson(result.value).pipe(Effect.orDie);
     const bytes = textEncoder.encode(encoded).byteLength;
     if (bytes <= request.budget.maxInlineStepResultBytes) return result;
@@ -164,6 +175,7 @@ const completeStep = <R>(
     }
     const value = yield* host.storeArtifact(
       WorkflowArtifactWrite.make({ stepId: call.stepId, value: result.value }),
+      context,
     );
     return WorkflowStepExecution.make({ ...result, value });
   });
@@ -187,7 +199,11 @@ const makeRunStep = <R>(
 
     const result = yield* Semaphore.withPermit(
       state.semaphore,
-      host.activity(call.stepId, completeStep(request, host, state, call)),
+      host.activity(
+        call.stepId,
+        (context) => completeStep(request, host, state, call, context),
+        (context) => host.compensate(call, context),
+      ),
     );
     state.usage.agentRuns += result.agentRuns;
     state.usage.tokens += result.tokenCount;

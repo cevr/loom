@@ -58,6 +58,19 @@ export {
   type WorkflowCapabilityExecutorShape,
 } from "./internal/workflow-capability-executor.js";
 export {
+  WorkflowActivityContext,
+  WorkflowAgentHandle,
+  WorkflowAgentInput,
+  WorkflowJobHandle,
+  WorkflowJobInput,
+} from "./internal/workflow-capability-model.js";
+export { WorkflowCapabilityStoreError } from "./internal/workflow-capability-store-error.js";
+export {
+  WorkflowChildAgentStore,
+  type WorkflowChildAgentStoreShape,
+} from "./internal/workflow-child-agent-store.js";
+export { WorkflowJobStore, type WorkflowJobStoreShape } from "./internal/workflow-job-store.js";
+export {
   WorkflowArtifactStore,
   type WorkflowArtifactStoreShape,
 } from "./internal/workflow-artifact-store.js";
