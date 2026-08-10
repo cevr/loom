@@ -43,7 +43,7 @@ export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (requ
           });
           return yield* step.run(stepId, {
             do: execute(context),
-            undo: () => compensate(context).pipe(Effect.orDie),
+            undo: () => compensate(context),
             success: WorkflowStepExecution,
             error: WorkflowRunError,
           });
