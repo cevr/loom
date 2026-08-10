@@ -23,6 +23,8 @@ export {
 } from "./internal/code-kernel.js";
 export { JobProcessStoreError } from "./internal/job-process-store-error.js";
 export { JobProcessStore, type JobProcessStoreShape } from "./internal/job-process-store.js";
+export { JobStoreError } from "./internal/job-store-error.js";
+export { JobStore, type JobStoreShape } from "./internal/job-store.js";
 export {
   WorkflowBudgetExceededError,
   WorkflowBudgetName,

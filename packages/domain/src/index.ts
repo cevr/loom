@@ -216,6 +216,61 @@ export const ProcessIdentity = Schema.Struct({
 });
 export type ProcessIdentity = typeof ProcessIdentity.Type;
 
+export const JobActiveStatus = Schema.Literals(["Accepted", "Starting", "Running", "Stopping"]);
+export type JobActiveStatus = typeof JobActiveStatus.Type;
+
+export const JobStartedStatus = JobActiveStatus.pick(["Starting", "Running", "Stopping"]);
+export type JobStartedStatus = typeof JobStartedStatus.Type;
+
+export const JobTerminalStatus = Schema.Literals(["Succeeded", "Failed", "Cancelled", "Lost"]);
+export type JobTerminalStatus = typeof JobTerminalStatus.Type;
+
+export const JobStatus = Schema.Union([JobActiveStatus, JobTerminalStatus]);
+export type JobStatus = typeof JobStatus.Type;
+
+export const JobSubmission = Schema.Struct({
+  jobId: JobId,
+  sessionId: SessionId,
+  command: Schema.NonEmptyString,
+  attached: Schema.Boolean,
+  stdoutPath: Schema.NonEmptyString,
+  stderrPath: Schema.NonEmptyString,
+  resultPath: Schema.NonEmptyString,
+});
+export type JobSubmission = typeof JobSubmission.Type;
+
+export const JobOutcome = Schema.TaggedUnion({
+  Succeeded: { exitCode: Schema.Literal(0) },
+  Failed: {
+    exitCode: Schema.OptionFromNullOr(Schema.Int),
+    detail: Schema.OptionFromNullOr(Schema.String),
+  },
+  Cancelled: {},
+  Lost: { detail: Schema.OptionFromNullOr(Schema.String) },
+});
+export type JobOutcome = typeof JobOutcome.Type;
+
+export const JobRecord = Schema.Struct({
+  jobId: JobId,
+  sessionId: SessionId,
+  command: Schema.NonEmptyString,
+  attached: Schema.Boolean,
+  status: JobStatus,
+  stdoutPath: Schema.NonEmptyString,
+  stderrPath: Schema.NonEmptyString,
+  resultPath: Schema.NonEmptyString,
+  identity: Schema.OptionFromNullOr(ProcessIdentity),
+  exitCode: Schema.OptionFromNullOr(Schema.Int),
+  detail: Schema.OptionFromNullOr(Schema.String),
+});
+export type JobRecord = typeof JobRecord.Type;
+
+export const JobAddress = Schema.Struct({
+  sessionId: SessionId,
+  jobId: JobId,
+});
+export type JobAddress = typeof JobAddress.Type;
+
 export const JobProcessStatus = Schema.Literals([
   "Running",
   "Recovered",

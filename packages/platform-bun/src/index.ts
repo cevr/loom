@@ -29,6 +29,7 @@ export {
   layerSqliteJobProcessStore,
   makeSqliteJobProcessStore,
 } from "./internal/sqlite-job-process-store.js";
+export { layerSqliteJobStore, makeSqliteJobStore } from "./internal/sqlite-job-store.js";
 export { layerJobRecovery } from "./internal/job-recovery-layer.js";
 export { layerSqliteCellJournal, makeSqliteCellJournal } from "./internal/sqlite-cell-journal.js";
 export { type LoomSqliteConfig, layerLoomSqlite } from "./internal/loom-sqlite.js";

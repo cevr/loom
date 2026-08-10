@@ -39,6 +39,39 @@ const createKernelSchema = Effect.gen(function* () {
   `;
 });
 
+const createJobSchema = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    CREATE TABLE IF NOT EXISTS jobs (
+      job_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      command TEXT NOT NULL,
+      attached INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      stdout_path TEXT NOT NULL,
+      stderr_path TEXT NOT NULL,
+      result_path TEXT NOT NULL,
+      pid INTEGER,
+      process_group_id INTEGER,
+      process_start_id TEXT,
+      exit_code INTEGER,
+      detail TEXT,
+      CHECK (attached IN (0, 1)),
+      CHECK (
+        (pid IS NULL AND process_group_id IS NULL AND process_start_id IS NULL)
+        OR
+        (pid IS NOT NULL AND process_group_id IS NOT NULL AND process_start_id IS NOT NULL)
+      ),
+      CHECK (status <> 'Running' OR pid IS NOT NULL),
+      CHECK (status <> 'Succeeded' OR (exit_code IS NOT NULL AND exit_code = 0))
+    )
+  `;
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS jobs_session_active
+    ON jobs (session_id, attached, status)
+  `;
+});
+
 const createWorkflowSchema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
@@ -78,7 +111,7 @@ const createCapabilitySchema = Effect.gen(function* () {
 });
 
 const createSchema = Effect.all(
-  [createKernelSchema, createWorkflowSchema, createCapabilitySchema],
+  [createKernelSchema, createJobSchema, createWorkflowSchema, createCapabilitySchema],
   { discard: true },
 );
 
