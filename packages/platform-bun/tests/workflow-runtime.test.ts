@@ -1,90 +1,28 @@
-import { BunCrypto, BunServices } from "@effect/platform-bun";
-import {
-  ArtifactId,
-  WorkflowRunId,
-  WorkflowSignalAddress,
-  WorkflowSignalName,
-} from "@cvr/loom-domain";
+import { WorkflowRunId, WorkflowSignalAddress, WorkflowSignalName } from "@cvr/loom-domain";
 import {
   LoomDynamicWorkflow,
-  WorkflowArtifactReference,
-  WorkflowArtifactStore,
   ActorStateHub,
   type ActorStateHubShape,
-  WorkflowCapabilityExecutor,
   WorkflowRuntime,
-  layerActorStateHub,
-  WorkflowStepExecution,
 } from "@cvr/loom-runtime";
 import { WorkflowRunState } from "@cvr/loom-protocol";
-import { expect, it } from "effect-bun-test";
+import { expect } from "effect-bun-test";
 import { Effect, FileSystem, Layer, Ref, Schedule, Stream } from "effect";
-import { ClusterWorkflowEngine, SingleRunner } from "effect/unstable/cluster";
-import {
-  layerLoomDynamicWorkflow,
-  layerLoomSqlite,
-  layerLoomWorkflowRuntime,
-  layerLoomWorkflowRuntimeWith,
-} from "../src/index.js";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
+import { layerLoomDynamicWorkflow, layerLoomWorkflowRuntimeWith } from "../src/index.js";
 import {
   durationRequest,
   failureRequest,
   request,
   signalRequest,
 } from "./workflow-runtime-fixtures.js";
-const workflowSupport = (filename: string, executions: Ref.Ref<number>) => {
-  const foundation = Layer.merge(layerLoomSqlite({ filename }), BunCrypto.layer);
-  const capabilities = Layer.succeed(
-    WorkflowCapabilityExecutor,
-    WorkflowCapabilityExecutor.of({
-      supports: () => true,
-      execute: (call) =>
-        Ref.update(executions, (count) => count + 1).pipe(
-          Effect.as(
-            WorkflowStepExecution.make({
-              value: call.input,
-              tokenCount: 0,
-              agentRuns: 0,
-            }),
-          ),
-        ),
-      compensate: () => Effect.void,
-    }),
-  );
-  const artifacts = Layer.succeed(
-    WorkflowArtifactStore,
-    WorkflowArtifactStore.of({
-      store: ({ stepId }) =>
-        Effect.succeed(
-          WorkflowArtifactReference.make({
-            artifactId: ArtifactId.make(`artifact-${stepId}`),
-          }),
-        ),
-    }),
-  );
-  return Layer.mergeAll(
-    foundation,
-    SingleRunner.layer({ runnerStorage: "memory" }).pipe(Layer.provide(foundation)),
-    capabilities,
-    artifacts,
-  );
-};
+import { runtimeLayer, scopedLive, workflowSupport } from "./workflow-runtime-test-support.js";
 
 const workflowLayer = (filename: string, executions: Ref.Ref<number>) => {
   const support = workflowSupport(filename, executions);
   const engine = ClusterWorkflowEngine.layer.pipe(Layer.provide(support));
   const workflow = layerLoomDynamicWorkflow.pipe(Layer.provide([engine, support]));
   return Layer.merge(workflow, engine);
-};
-
-const runtimeLayer = (
-  filename: string,
-  executions: Ref.Ref<number>,
-  runtime = layerLoomWorkflowRuntime,
-) => {
-  const actors = layerActorStateHub;
-  const provided = runtime.pipe(Layer.provide([workflowSupport(filename, executions), actors]));
-  return Layer.merge(provided, actors);
 };
 
 const execute = (filename: string, executions: Ref.Ref<number>, acceptedRequest = request) =>
@@ -94,7 +32,6 @@ const execute = (filename: string, executions: Ref.Ref<number>, acceptedRequest 
     ),
   );
 
-const scopedLive = it.scopedLive.layer(BunServices.layer);
 const waitForActorCount = (actors: ActorStateHubShape, count: number) =>
   actors.snapshot.pipe(
     Effect.repeat({
@@ -232,7 +169,7 @@ scopedLive("clears a failed Workflow Run after its state lease", () =>
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-failure-" });
     const executions = yield* Ref.make(0);
-    const runtime = layerLoomWorkflowRuntimeWith({ failureLease: "25 millis" });
+    const runtime = layerLoomWorkflowRuntimeWith({ stateLease: "25 millis" });
 
     yield* Effect.gen(function* () {
       const workflows = yield* WorkflowRuntime;

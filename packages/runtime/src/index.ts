@@ -96,6 +96,11 @@ export {
   type WorkflowRunStatePublisherOptions,
 } from "./internal/workflow-run-state-publisher.js";
 export {
+  WorkflowRunRetention,
+  type WorkflowRunRetentionShape,
+} from "./internal/workflow-run-retention.js";
+export { WorkflowRunRetentionError } from "./internal/workflow-run-retention-error.js";
+export {
   encodeWorkflowIdentity,
   workflowIdentityFromRequest,
 } from "./internal/workflow-identity.js";

@@ -15,7 +15,7 @@ import {
 } from "@cvr/loom-protocol";
 import { Context, Effect, Layer, Schema, Stream, type Duration } from "effect";
 import { WorkflowEngine } from "effect/unstable/workflow";
-import type { PeekResult } from "effect-encore";
+import { Client, type PeekResult } from "effect-encore";
 import { LoomDynamicWorkflow, loomWorkflowSignal } from "./loom-dynamic-workflow.js";
 import { WorkflowRunAcceptance } from "./workflow-run-acceptance.js";
 import { WorkflowSignalDeclarations } from "./workflow-signal-declarations.js";
@@ -137,42 +137,47 @@ const makeExecuteWorkflow =
   (
     accept: AcceptWorkflow,
     declare: ReturnType<typeof makeDeclareWorkflow>,
-    client: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+    workflowClient: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+    storageClient: Client["Service"],
     publisher: WorkflowRunStatePublisher["Service"],
   ): WorkflowRuntimeShape["execute"] =>
   (request) =>
     accept(request).pipe(
       Effect.tap(declare),
       Effect.tap(({ request: accepted }) => LoomDynamicWorkflow.send(accepted)),
+      storageClient.withTransaction,
       Effect.tap(({ request: accepted, workflowRunId }) =>
         publisher.watch({ sessionId: accepted.sessionId, workflowRunId }),
       ),
       Effect.flatMap(({ request: accepted }) => LoomDynamicWorkflow.execute(accepted)),
-      Effect.provideService(LoomDynamicWorkflow.Context, client),
+      Effect.provideService(LoomDynamicWorkflow.Context, workflowClient),
     );
 
 const makeSendWorkflow =
   (
     accept: AcceptWorkflow,
     declare: ReturnType<typeof makeDeclareWorkflow>,
-    client: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+    workflowClient: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+    storageClient: Client["Service"],
     publisher: WorkflowRunStatePublisher["Service"],
   ): WorkflowRuntimeShape["send"] =>
   (request) =>
     accept(request).pipe(
       Effect.tap(declare),
       Effect.tap(({ request: accepted }) => LoomDynamicWorkflow.send(accepted)),
+      storageClient.withTransaction,
       Effect.tap(({ request: accepted, workflowRunId }) =>
         publisher.watch({ sessionId: accepted.sessionId, workflowRunId }),
       ),
       Effect.map(({ workflowRunId }) => workflowRunId),
-      Effect.provideService(LoomDynamicWorkflow.Context, client),
+      Effect.provideService(LoomDynamicWorkflow.Context, workflowClient),
     );
 
 const makeRuntime = (
   accept: AcceptWorkflow,
   acceptance: WorkflowRunAcceptance["Service"],
-  client: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+  workflowClient: Effect.Success<typeof LoomDynamicWorkflow.Context>,
+  storageClient: Client["Service"],
   engine: WorkflowEngine.WorkflowEngine["Service"],
   declarations: WorkflowSignalDeclarations["Service"],
   publisher: WorkflowRunStatePublisher["Service"],
@@ -180,8 +185,8 @@ const makeRuntime = (
   const provideEngine = Effect.provideService(WorkflowEngine.WorkflowEngine, engine);
   const declare = makeDeclareWorkflow(declarations);
   return {
-    execute: makeExecuteWorkflow(accept, declare, client, publisher),
-    send: makeSendWorkflow(accept, declare, client, publisher),
+    execute: makeExecuteWorkflow(accept, declare, workflowClient, storageClient, publisher),
+    send: makeSendWorkflow(accept, declare, workflowClient, storageClient, publisher),
     signal: makeSignalWorkflow(acceptance, declarations, engine, publisher),
     peek: (request) =>
       accept(request).pipe(
@@ -209,11 +214,12 @@ const makeRuntime = (
 
 export const makeWorkflowRuntime = Effect.gen(function* () {
   const acceptance = yield* WorkflowRunAcceptance;
-  const client = yield* LoomDynamicWorkflow.Context;
+  const workflowClient = yield* LoomDynamicWorkflow.Context;
+  const storageClient = yield* Client;
   const engine = yield* WorkflowEngine.WorkflowEngine;
   const declarations = yield* WorkflowSignalDeclarations;
   const publisher = yield* WorkflowRunStatePublisher;
-  yield* Effect.forEach(yield* acceptance.list, publisher.watch, {
+  yield* Effect.forEach(yield* acceptance.list, publisher.recover, {
     concurrency: "unbounded",
     discard: true,
   });
@@ -221,7 +227,8 @@ export const makeWorkflowRuntime = Effect.gen(function* () {
     makeRuntime(
       makeAcceptWorkflow(acceptance),
       acceptance,
-      client,
+      workflowClient,
+      storageClient,
       engine,
       declarations,
       publisher,

@@ -32,7 +32,8 @@ The request does not store a second source hash.
 
 The Loom SQLite store owns the accepted digest for each workflow identity.
 The daemon inserts the identity and digest before it calls the Effect workflow.
-The insert is atomic.
+The accepted request, signal declarations, and Effect workflow send use one storage transaction.
+This transaction serializes a new claim against terminal retirement for the same identity.
 The same identity and digest attach to the existing Workflow Run.
 The same identity and a different digest fail with `WorkflowIdentityConflictError`.
 The workflow body cannot make this check because Effect does not deliver a duplicate payload to a completed run.
@@ -115,6 +116,26 @@ An unknown Workflow Run and an undeclared name return the same typed error.
 Effect Durable Deferred owns signal storage and wake-up.
 A signal delivery resumes its suspended Workflow Run.
 Loom does not expose a manual resume operation.
+
+## Terminal retention
+
+The orchestrator owns one Workflow State Lease.
+The default lease is five minutes.
+The lease lets clients read a terminal result before cleanup.
+Failure and defect remain visible as failed actor state during the lease.
+Success and interruption remain available for inspection during the lease.
+
+After the lease, Loom removes the Effect Workflow messages, Durable Clock messages, signal declarations, and accepted request in one SQLite transaction.
+The transaction makes cleanup safe to retry after a daemon restart.
+It also prevents a new accepted request from sharing an identity with old Effect Cluster state.
+Suspended and compensating runs are not terminal retention candidates.
+
+Daemon startup reads accepted runs once.
+The daemon restart ends the prior public state lease.
+It removes old successful and interrupted runs before it starts state watchers.
+It starts watchers for active, suspended, compensating, failed, and defected runs.
+A restarted failed or defected run receives a new full state lease because Loom does not store lease timestamps.
+Audit records and artifacts have separate retention owners.
 
 ## Child Agents
 

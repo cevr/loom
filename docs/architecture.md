@@ -133,6 +133,7 @@ It uses one immutable accepted request.
 The request stores exact source, JSON input, version, capabilities, signals, budgets, and interpreter version.
 The daemon derives one digest from the complete request.
 It does not store a second source hash.
+The accepted request, signal declarations, and workflow send commit in one storage transaction.
 Each external Step becomes an Effect Workflow Activity.
 Every external Step requires an explicit and unique Step ID.
 
@@ -142,6 +143,15 @@ It does not receive wall-clock time or random values.
 Each replay pass uses a fresh VM context.
 Suspension discards the current VM context.
 See [Dynamic workflow replay](./adr/0009-use-effect-replay-for-dynamic-workflows.md).
+
+The orchestrator sets one Workflow State Lease.
+The default lease is five minutes.
+Success, interruption, failure, and defect remain public during this lease.
+Loom then removes the accepted request, signal declarations, and Effect Cluster messages in one SQLite transaction.
+Suspended and compensating runs remain recoverable.
+Daemon startup removes old successful and interrupted runs before it starts recovery watchers.
+The restart ends their prior public state lease.
+Audit records and artifacts do not belong to startup recovery.
 
 ## Storage ownership
 
@@ -256,3 +266,4 @@ Create each package only when its first working boundary exists.
 - A daemon restart during compensation must not repeat a completed compensation.
 - A failed compensation must wait for an operator decision before it continues.
 - Workflow suspension must discard the current VM pass.
+- Terminal Workflow storage must leave startup recovery after its Workflow State Lease.

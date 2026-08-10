@@ -21,11 +21,13 @@ import { WorkflowEngine } from "effect/unstable/workflow";
 import type { PeekResult } from "effect-encore";
 import { ActorStateHub, type ActorStateHubShape } from "./actor-state-hub.js";
 import { LoomDynamicWorkflow } from "./loom-dynamic-workflow.js";
+import { WorkflowRunRetention } from "./workflow-run-retention.js";
 
 type WorkflowEngineState = PeekResult<Schema.Json, WorkflowRunError>;
 
 export interface WorkflowRunStatePublisherShape {
   readonly watch: (address: WorkflowRunAddress) => Effect.Effect<void>;
+  readonly recover: (address: WorkflowRunAddress) => Effect.Effect<void>;
 }
 
 export class WorkflowRunStatePublisher extends Context.Service<
@@ -34,7 +36,7 @@ export class WorkflowRunStatePublisher extends Context.Service<
 >()("@cvr/loom-runtime/WorkflowRunStatePublisher") {}
 
 export interface WorkflowRunStatePublisherOptions {
-  readonly failureLease: Duration.Input;
+  readonly stateLease: Duration.Input;
 }
 
 export const toWorkflowRunState = (state: WorkflowEngineState): WorkflowRunState =>
@@ -88,24 +90,37 @@ const makePublishActivity = (
     );
   });
 
-const makeClearFailure = (options: WorkflowRunStatePublisherOptions, publish: PublishActivity) =>
-  Effect.fn("WorkflowRunStatePublisher.clearFailure")(function* (
+const makeCompleteActivity = (
+  options: WorkflowRunStatePublisherOptions,
+  publish: PublishActivity,
+  retention: WorkflowRunRetention["Service"],
+) =>
+  Effect.fn("WorkflowRunStatePublisher.completeActivity")(function* (
     address: WorkflowRunAddress,
     activity: ActorActivity,
   ) {
-    if (!ActorActivity.guards.Failed(activity)) return;
-    yield* Effect.sleep(options.failureLease);
-    yield* publish(address, ActorActivity.cases.Stopped.make({}));
+    if (ActorActivity.guards.Failed(activity)) {
+      yield* Effect.sleep(options.stateLease);
+      yield* publish(address, ActorActivity.cases.Stopped.make({}));
+    } else if (ActorActivity.guards.Stopped(activity)) {
+      yield* Effect.sleep(options.stateLease);
+    } else {
+      return;
+    }
+    yield* retention
+      .retire(address)
+      .pipe(Effect.catch((error) => Effect.logError("Workflow Run retention failed.", error)));
   });
 
 const makeWorkflowRunStatePublisher = (options: WorkflowRunStatePublisherOptions) =>
   Effect.gen(function* () {
     const hub = yield* ActorStateHub;
     const engine = yield* WorkflowEngine.WorkflowEngine;
+    const retention = yield* WorkflowRunRetention;
     const watchers = yield* FiberMap.make<string>();
     const revisions = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
     const publishActivity = makePublishActivity(hub, revisions);
-    const clearFailure = makeClearFailure(options, publishActivity);
+    const completeActivity = makeCompleteActivity(options, publishActivity, retention);
 
     const watch = Effect.fn("WorkflowRunStatePublisher.watch")(function* (
       address: WorkflowRunAddress,
@@ -114,16 +129,33 @@ const makeWorkflowRunStatePublisher = (options: WorkflowRunStatePublisherOptions
         Stream.map(toWorkflowRunState),
         Stream.map(toActorActivity),
         Stream.runForEach((activity) =>
-          publishActivity(address, activity).pipe(Effect.andThen(clearFailure(address, activity))),
+          publishActivity(address, activity).pipe(
+            Effect.andThen(completeActivity(address, activity)),
+          ),
         ),
         Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
         FiberMap.run(watchers, address.workflowRunId, { onlyIfMissing: true }),
       );
     });
 
-    return WorkflowRunStatePublisher.of({ watch });
+    const recover = Effect.fn("WorkflowRunStatePublisher.recover")(
+      function* (address: WorkflowRunAddress) {
+        const state = yield* LoomDynamicWorkflow.peekAt(address.workflowRunId).pipe(
+          Effect.map(toWorkflowRunState),
+          Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
+        );
+        if (WorkflowRunState.guards.Success(state) || WorkflowRunState.guards.Interrupted(state)) {
+          yield* retention.retire(address);
+          return;
+        }
+        yield* watch(address);
+      },
+      Effect.catch((error) => Effect.logError("Workflow Run recovery failed.", error)),
+    );
+
+    return WorkflowRunStatePublisher.of({ recover, watch });
   });
 
 export const layerWorkflowRunStatePublisher = (
-  options: WorkflowRunStatePublisherOptions = { failureLease: "5 minutes" },
+  options: WorkflowRunStatePublisherOptions = { stateLease: "5 minutes" },
 ) => Layer.effect(WorkflowRunStatePublisher, makeWorkflowRunStatePublisher(options));

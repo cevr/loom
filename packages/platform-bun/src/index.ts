@@ -41,6 +41,10 @@ export {
   makeSqliteWorkflowSignalDeclarations,
 } from "./internal/sqlite-workflow-signal-declarations.js";
 export {
+  layerSqliteWorkflowRunRetention,
+  makeSqliteWorkflowRunRetention,
+} from "./internal/sqlite-workflow-run-retention.js";
+export {
   layerSqliteWorkflowChildAgentStore,
   makeSqliteWorkflowChildAgentStore,
 } from "./internal/sqlite-workflow-child-agent-store.js";

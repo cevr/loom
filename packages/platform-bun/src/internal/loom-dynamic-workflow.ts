@@ -16,8 +16,9 @@ import { WorkflowActivityKey, WorkflowRunId } from "@cvr/loom-domain";
 import { Effect, Layer, Schema } from "effect";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import type { WorkflowEngine, WorkflowInstance } from "effect/unstable/workflow/WorkflowEngine";
-import { Actor } from "effect-encore";
+import { Actor, ClientLayer } from "effect-encore";
 import { layerSqliteWorkflowRunAcceptanceStore } from "./sqlite-workflow-run-acceptance-store.js";
+import { layerSqliteWorkflowRunRetention } from "./sqlite-workflow-run-retention.js";
 import { layerSqliteWorkflowSignalDeclarations } from "./sqlite-workflow-signal-declarations.js";
 import { interpretWorkflow } from "./workflow-interpreter.js";
 
@@ -83,15 +84,18 @@ export const layerLoomWorkflowRuntimeWith = (options: WorkflowRunStatePublisherO
   const acceptance = layerWorkflowRunAcceptance.pipe(
     Layer.provide(layerSqliteWorkflowRunAcceptanceStore),
   );
+  const retention = layerSqliteWorkflowRunRetention.pipe(
+    Layer.provideMerge(ClientLayer.fromSharding),
+  );
   const workflow = Layer.merge(
     layerLoomDynamicWorkflow,
     layerWorkflowRunStatePublisher(options),
-  ).pipe(Layer.provideMerge(engine));
+  ).pipe(Layer.provideMerge([engine, retention]));
   return layerWorkflowRuntime.pipe(
     Layer.provideMerge([workflow, acceptance, layerSqliteWorkflowSignalDeclarations]),
   );
 };
 
 export const layerLoomWorkflowRuntime = layerLoomWorkflowRuntimeWith({
-  failureLease: "5 minutes",
+  stateLease: "5 minutes",
 });
