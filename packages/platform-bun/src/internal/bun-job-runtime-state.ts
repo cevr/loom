@@ -8,6 +8,7 @@ import {
   JobOutcome,
   JobRecord,
   type JobId,
+  type JobTerminalRecord,
 } from "@cvr/loom-domain";
 import {
   JobRuntimeError,
@@ -22,7 +23,7 @@ import { readJobOutcome } from "./bun-job-command.js";
 
 export interface JobRuntimeServices {
   readonly actors: ActorStateHubShape;
-  readonly completions: Map<JobId, Deferred.Deferred<JobRecord>>;
+  readonly completions: Map<JobId, Deferred.Deferred<JobTerminalRecord>>;
   readonly controller: ProcessControllerShape;
   readonly fs: FileSystem.FileSystem;
   readonly inspector: ProcessInspectorShape;
@@ -93,7 +94,7 @@ export const jobCompletion = (services: JobRuntimeServices, jobId: JobId) =>
   Effect.sync(() => {
     const current = Option.fromNullishOr(services.completions.get(jobId));
     if (Option.isSome(current)) return current.value;
-    const created = Deferred.makeUnsafe<JobRecord>();
+    const created = Deferred.makeUnsafe<JobTerminalRecord>();
     services.completions.set(jobId, created);
     return created;
   });
@@ -101,13 +102,13 @@ export const jobCompletion = (services: JobRuntimeServices, jobId: JobId) =>
 export const removeJobCompletion = (
   services: JobRuntimeServices,
   jobId: JobId,
-  completion: Deferred.Deferred<JobRecord>,
+  completion: Deferred.Deferred<JobTerminalRecord>,
 ) =>
   Effect.sync(() => {
     if (services.completions.get(jobId) === completion) services.completions.delete(jobId);
   });
 
-const signalCompletion = (services: JobRuntimeServices, job: JobRecord) =>
+const signalCompletion = (services: JobRuntimeServices, job: JobTerminalRecord) =>
   Effect.sync(() => Option.fromNullishOr(services.completions.get(job.jobId))).pipe(
     Effect.flatMap(
       Option.match({

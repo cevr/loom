@@ -1,4 +1,10 @@
-import { type JobAddress, type JobRecord, type JobRequest, type SessionId } from "@cvr/loom-domain";
+import {
+  type JobAddress,
+  type JobRecord,
+  type JobRequest,
+  type JobTerminalRecord,
+  type SessionId,
+} from "@cvr/loom-domain";
 import { Context, type Effect, type Option } from "effect";
 import type { JobRuntimeError } from "./job-runtime-error.js";
 
@@ -32,7 +38,7 @@ export interface JobRuntimeShape {
   ) => Effect.Effect<Option.Option<JobRecord>, JobRuntimeError>;
   readonly awaitTerminal: (
     address: JobAddress,
-  ) => Effect.Effect<Option.Option<JobRecord>, JobRuntimeError>;
+  ) => Effect.Effect<Option.Option<JobTerminalRecord>, JobRuntimeError>;
   readonly readOutput: (
     request: JobOutputRequest,
   ) => Effect.Effect<JobOutputChunk, JobRuntimeError>;

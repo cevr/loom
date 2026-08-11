@@ -1,5 +1,10 @@
 import { BunServices } from "@effect/platform-bun";
-import { AgentParent, SessionId, WorkflowActivityKey, WorkflowRunId } from "@cvr/loom-domain";
+import {
+  SessionId,
+  WorkflowActivityKey,
+  WorkflowRunAddress,
+  WorkflowRunId,
+} from "@cvr/loom-domain";
 import { WorkflowActivityContext, WorkflowChildAgentStore } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, FileSystem, Layer } from "effect";
@@ -30,7 +35,7 @@ it.scopedLive.layer(BunServices.layer)("deduplicates Agent claims by Activity ke
 
       expect(claimedAgents[0]).toEqual(claimedAgents[1]);
       expect(claimedAgents[0].parent).toEqual(
-        AgentParent.cases.WorkflowRun.make({
+        WorkflowRunAddress.make({
           sessionId: context.sessionId,
           workflowRunId: context.workflowRunId,
         }),

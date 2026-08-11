@@ -50,6 +50,9 @@ export type ArtifactId = typeof ArtifactId.Type;
 export const workflowAgentId = (activityKey: WorkflowActivityKey): AgentId =>
   AgentId.make(`workflow-agent:${activityKey}`);
 
+export const workflowAgentJobId = (activityKey: WorkflowActivityKey): JobId =>
+  JobId.make(`workflow-agent-job:${activityKey}`);
+
 export const workflowJobId = (activityKey: WorkflowActivityKey): JobId =>
   JobId.make(`workflow-job:${activityKey}`);
 

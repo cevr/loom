@@ -1,7 +1,7 @@
 import {
-  AgentParent,
   WorkflowChildAgent,
   workflowAgentId,
+  workflowAgentJobId,
   type SessionId,
   type WorkflowActivityKey,
   WorkflowRunAddress,
@@ -17,8 +17,7 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 
 const PersistedChildAgent = Schema.Struct({
   activityKey: WorkflowChildAgent.fields.activityKey,
-  sessionId: WorkflowChildAgent.fields.parent.cases.WorkflowRun.fields.sessionId,
-  workflowRunId: WorkflowChildAgent.fields.parent.cases.WorkflowRun.fields.workflowRunId,
+  ...WorkflowChildAgent.fields.parent.fields,
   prompt: WorkflowChildAgent.fields.prompt,
   status: WorkflowChildAgent.fields.status,
 });
@@ -27,7 +26,8 @@ const toChildAgent = (row: typeof PersistedChildAgent.Type) =>
   WorkflowChildAgent.make({
     activityKey: row.activityKey,
     agentId: workflowAgentId(row.activityKey),
-    parent: AgentParent.cases.WorkflowRun.make({
+    jobId: workflowAgentJobId(row.activityKey),
+    parent: WorkflowRunAddress.make({
       sessionId: row.sessionId,
       workflowRunId: row.workflowRunId,
     }),

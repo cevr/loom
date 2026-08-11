@@ -41,6 +41,12 @@ export const AgentOwner = Schema.Struct({
 });
 export type AgentOwner = typeof AgentOwner.Type;
 
+export const WorkflowRunAddress = Schema.Struct({
+  sessionId: SessionId,
+  workflowRunId: WorkflowRunId,
+});
+export type WorkflowRunAddress = typeof WorkflowRunAddress.Type;
+
 export const AgentParent = Schema.TaggedUnion({
   Session: {
     sessionId: SessionId,
@@ -62,7 +68,8 @@ export type WorkflowChildAgentStatus = typeof WorkflowChildAgentStatus.Type;
 export const WorkflowChildAgent = Schema.Struct({
   activityKey: WorkflowActivityKey,
   agentId: AgentId,
-  parent: AgentParent,
+  jobId: JobId,
+  parent: WorkflowRunAddress,
   prompt: Schema.NonEmptyString,
   status: WorkflowChildAgentStatus,
 });
@@ -113,12 +120,6 @@ export const WorkflowRunRequest = Schema.Struct({
   budget: WorkflowBudget,
 });
 export type WorkflowRunRequest = typeof WorkflowRunRequest.Type;
-
-export const WorkflowRunAddress = Schema.Struct({
-  sessionId: SessionId,
-  workflowRunId: WorkflowRunId,
-});
-export type WorkflowRunAddress = typeof WorkflowRunAddress.Type;
 
 export const WorkflowRunExecution = Schema.Struct({
   incarnationId: WorkflowIncarnationId,
@@ -279,6 +280,7 @@ export type JobAcceptedRecord = Extract<JobRecord, { readonly status: "Accepted"
 export type JobStartingRecord = Extract<JobRecord, { readonly status: "Starting" }>;
 export type JobUncommittedRecord = Extract<JobRecord, { readonly status: "Accepted" | "Starting" }>;
 export type JobRecoverableRecord = Extract<JobRecord, { readonly status: "Running" | "Stopping" }>;
+export type JobTerminalRecord = Extract<JobRecord, { readonly status: JobTerminalStatus }>;
 
 export const JobAddress = Schema.Struct({
   sessionId: SessionId,

@@ -20,12 +20,13 @@ export const makeAwaitTerminal = (services: JobRuntimeServices) =>
     const job = yield* services.jobs.get(address).pipe(mapRuntimeError("await"));
     if (Option.isNone(job)) {
       yield* removeJobCompletion(services, address.jobId, completion);
-      return job;
+      return Option.none();
     }
     if (isJobTerminal(job.value)) {
-      yield* Deferred.succeed(completion, job.value);
+      const terminal = job.value;
+      yield* Deferred.succeed(completion, terminal);
       yield* removeJobCompletion(services, address.jobId, completion);
-      return job;
+      return Option.some(terminal);
     }
     return Option.some(yield* Deferred.await(completion));
   });
