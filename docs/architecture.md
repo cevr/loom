@@ -176,6 +176,7 @@ One store owns each fact.
 | Workflow state and replay                   | SQLite through Effect Cluster |
 | Workflow acceptance and retirement deadline | Loom SQLite store             |
 | Session transcript                          | Client transcript store       |
+| Session closure and retention deadline      | Loom SQLite store             |
 | Cell Ledger                                 | Loom SQLite store             |
 | Job state and process identity              | Loom SQLite store             |
 | Plugin state                                | Loom SQLite store             |

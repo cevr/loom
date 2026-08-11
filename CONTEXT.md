@@ -9,8 +9,14 @@ A user-visible conversation that owns agents, jobs, and workflow runs.
 _Avoid_: Thread, chat
 
 **Closing Session**:
-A Session whose close operation has started and which rejects new Session-owned work.
+A Session whose close operation has started and which rejects new Session-owned work during its Session Closure Lease.
 _Avoid_: Closed flag, teardown mode
+
+**Session Closure Lease**:
+The fixed period in which Loom keeps a Session closure fact and rejects late Session-owned work.
+The daemon sets this lease.
+The default is five minutes.
+_Avoid_: Tombstone TTL, closed Session cache
 
 **Workspace**:
 A directory tree that owns one Loom daemon, one local connection endpoint, and one orchestration store.

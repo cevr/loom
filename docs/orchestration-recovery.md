@@ -8,6 +8,7 @@ It never reconstructs orchestration state from logs, Artifacts, or live actor pr
 | Fact                                                                             | Owner                                                         | Durable identity                                              |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
 | Session namespace                                                                | Client transcript store and records that contain a Session ID | Session ID                                                    |
+| Session closure and fixed retention deadline                                     | Loom Orchestration Store                                      | Session ID                                                    |
 | Normal Agent namespace                                                           | Effect Cluster entity address                                 | Session ID and Agent ID                                       |
 | Cell request and outcome                                                         | Loom Orchestration Store                                      | Session ID, Agent ID, and Cell ID                             |
 | Code Kernel process identity                                                     | Loom Orchestration Store                                      | Session ID and Agent ID                                       |
@@ -21,11 +22,16 @@ It never reconstructs orchestration state from logs, Artifacts, or live actor pr
 | Large Cell and Workflow results                                                  | Artifact files                                                | Artifact ID                                                   |
 | Live actor state                                                                 | In-memory Actor State Hub projection                          | None. This state is derived.                                  |
 
-A Session does not need a separate row.
-Its ID is a namespace in owned records.
-Session close is idempotent cleanup.
-It is not a durable tombstone.
-A later client can use the same Session ID.
+A Session ID remains a namespace in owned records.
+Session close writes one durable closure fact before cleanup starts.
+The fact stores one fixed Session Closure Lease deadline.
+Repeated close does not extend this deadline.
+Loom rejects new Session-owned work while the fact remains active.
+The in-memory lifecycle map stores only active synchronization state.
+It removes that state after each operation releases it.
+Startup, later close operations, and the lease timer remove expired closure facts.
+A client can use the same Session ID after the lease ends.
+Clients must use unique Session IDs and must not retry Session-owned work after that lease.
 
 A normal Agent does not need a separate row.
 Its Effect Cluster address supplies its identity.
@@ -125,8 +131,12 @@ Success, interruption, failure, and defect use the same rule.
 
 Session close interrupts each active Workflow Run in that Session.
 It then stops attached Jobs and child Agents.
+It then removes Session Plugin State.
 The operation is idempotent.
 A Workflow Run cannot create new Session-owned work after close begins.
+Startup repeats this cleanup for every retained Session closure.
+This rule completes cleanup when a daemon stops after it writes the closure fact.
+Detached Jobs do not belong to Session cleanup.
 Effect-TS/effect#7183 blocks safe interruption while an active Activity settles.
 Loom does not override the Effect Workflow terminal state.
 
@@ -149,12 +159,14 @@ It is not permission to guess a result.
 The daemon uses this order:
 
 1. Open the Orchestration Store and create the current schema.
-2. Reconcile stored Code Kernel Process Identities.
-3. Interrupt stale `Accepted` and `Evaluating` Cells.
-4. Reconcile active Jobs.
-5. Resume Retiring Workflow Runs and begin retirement for expired terminal Workflow Runs.
-6. Start Workflow recovery and state watchers.
-7. Publish the connection endpoint as ready.
+2. Remove expired Session closure facts.
+3. Reconcile stored Code Kernel Process Identities.
+4. Interrupt stale `Accepted` and `Evaluating` Cells.
+5. Reconcile active Jobs.
+6. Repeat cleanup for retained Session closures.
+7. Resume Retiring Workflow Runs and begin retirement for expired terminal Workflow Runs.
+8. Start Workflow recovery and state watchers.
+9. Publish the connection endpoint as ready.
 
 Service Layer construction does not run recovery work.
 One daemon startup effect runs all recovery phases in this order.
