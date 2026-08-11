@@ -9,6 +9,7 @@ import {
   type WaitForJobRequest,
 } from "@cvr/loom-protocol";
 import { type JobRuntimeError, type JobRuntimeShape } from "@cvr/loom-runtime";
+import type { SessionLifecycleShape } from "@cvr/loom-runtime";
 import { Effect, Inspectable, Option } from "effect";
 
 const failure = (jobId: JobId, operation: JobOperation, error: unknown) =>
@@ -29,21 +30,27 @@ const requireJob = (
     ),
   );
 
-export const makeJobRpcHandlers = (jobs: JobRuntimeShape) => ({
+export const makeJobRpcHandlers = (jobs: JobRuntimeShape, sessions: SessionLifecycleShape) => ({
   "Job.Start": (request: StartJobRequest) =>
-    jobs.start(JobRequest.make(request)).pipe(
-      Effect.mapError((error) => failure(request.jobId, "start", error)),
-      Effect.flatMap(() =>
-        requireJob(
-          request.jobId,
-          "start",
-          jobs.await({
-            ...JobAddress.make(request),
-            foregroundLeaseMillis: request.foregroundLeaseMillis,
-          }),
+    sessions
+      .admit(
+        request.sessionId,
+        jobs
+          .start(JobRequest.make(request))
+          .pipe(Effect.mapError((error) => failure(request.jobId, "start", error))),
+      )
+      .pipe(
+        Effect.flatMap(() =>
+          requireJob(
+            request.jobId,
+            "start",
+            jobs.await({
+              ...JobAddress.make(request),
+              foregroundLeaseMillis: request.foregroundLeaseMillis,
+            }),
+          ),
         ),
       ),
-    ),
   "Job.Inspect": (address: JobAddress) =>
     requireJob(address.jobId, "inspect", jobs.inspect(address)),
   "Job.Output": (request: ReadJobOutputRequest) =>

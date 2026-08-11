@@ -33,6 +33,7 @@ export {
   ReadJobOutput,
   ReadJobOutputRequest,
   StartJob,
+  StartJobError,
   StartJobRequest,
   WaitForJob,
   WaitForJobRequest,
@@ -56,6 +57,7 @@ export {
   ProtocolVersion,
 } from "./protocol-version.js";
 export { ResetCodeKernel } from "./reset-code-kernel.js";
+export { SessionClosingError } from "./session-closing-error.js";
 export { WorkflowIdentityConflictError } from "./workflow-identity-conflict-error.js";
 export {
   WorkflowBudgetExceededError,

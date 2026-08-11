@@ -156,6 +156,12 @@ export {
 export { WorkflowRunRetentionError } from "./internal/workflow-run-retention-error.js";
 export { ProcessInspectionError } from "./internal/process-inspection-error.js";
 export {
+  layerSessionLifecycle,
+  makeSessionLifecycle,
+  SessionLifecycle,
+  type SessionLifecycleShape,
+} from "./internal/session-lifecycle.js";
+export {
   ProcessInspector,
   ProcessObservation,
   type ProcessInspectorShape,

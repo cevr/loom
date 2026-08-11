@@ -22,6 +22,7 @@ import {
   WorkflowArtifactStore,
   WorkflowCapabilityExecutor,
   WorkflowRunRecovery,
+  layerSessionLifecycle,
   layerActorStateHub,
   layerAgentActorWith,
   layerConnectionHandshake,
@@ -146,13 +147,15 @@ const launchDaemon = <E, R, E2>(
     const actors = layerActorStateHub;
     const jobs = makeJobLayer(config, actors);
     const childAgents = layerSqliteWorkflowChildAgentStore;
+    const orchestration = capabilities.pipe(Layer.provideMerge(layerSessionLifecycle));
     const workflows = layerLoomWorkflowRuntime.pipe(
-      Layer.provide([capabilities, actors, childAgents]),
+      Layer.provide([orchestration, actors, childAgents]),
     );
     const application = Layer.mergeAll(
       actors,
       makeAgentLayer(config, policy),
       childAgents,
+      orchestration,
       workflows,
     ).pipe(
       Layer.provideMerge(jobs),

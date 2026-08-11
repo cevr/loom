@@ -21,6 +21,7 @@ import type {
   ReadJobOutputRequest,
   SignalWorkflowError,
   SignalWorkflowRequest,
+  StartJobError,
   StartWorkflowError,
   StartJobRequest,
   InspectWorkflowError,
@@ -51,7 +52,7 @@ export interface LoomClientShape {
   ) => Stream.Stream<ReadonlyArray<ActorStateProjection>, HandshakeError | DaemonUnavailableError>;
   readonly startJob: (
     request: StartJobRequest,
-  ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;
+  ) => Effect.Effect<JobState, StartJobError | HandshakeError | DaemonUnavailableError>;
   readonly inspectJob: (
     address: JobAddress,
   ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;

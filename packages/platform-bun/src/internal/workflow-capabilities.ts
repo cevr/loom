@@ -1,6 +1,14 @@
-import { JobFailure, JobAddress, JobRequest, workflowJobId } from "@cvr/loom-domain";
+import {
+  JobFailure,
+  JobAddress,
+  JobRequest,
+  workflowJobId,
+  type JobRecord,
+} from "@cvr/loom-domain";
 import {
   JobRuntime,
+  SessionLifecycle,
+  type SessionLifecycleShape,
   WorkflowAgentHandle,
   WorkflowAgentInput,
   WorkflowCapabilityExecutor,
@@ -15,7 +23,7 @@ import {
   type WorkflowChildAgentStoreShape,
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
-import { WorkflowStepError } from "@cvr/loom-protocol";
+import { SessionClosingError, WorkflowStepError } from "@cvr/loom-protocol";
 import { Effect, Inspectable, Layer, Option, Schema } from "effect";
 import {
   layerBunWorkflowArtifactStore,
@@ -38,14 +46,18 @@ const decodeInput = <A>(
 ) => decode(call.input).pipe(Effect.mapError((cause) => stepError(call, cause.message)));
 
 const launchAgent = Effect.fn("WorkflowCapabilities.launchAgent")(function* (
+  sessions: SessionLifecycleShape,
   store: WorkflowChildAgentStoreShape,
   call: WorkflowStepCall,
   context: WorkflowActivityContext,
 ) {
   const input = yield* decodeInput(call, decodeAgentInput);
-  const agent = yield* store
-    .claim(context, input.prompt)
-    .pipe(Effect.mapError((error) => stepError(call, error.message)));
+  const agent = yield* sessions.admit(
+    context.sessionId,
+    store
+      .claim(context, input.prompt)
+      .pipe(Effect.mapError((error) => stepError(call, error.message))),
+  );
   return WorkflowStepExecution.make({
     value: WorkflowAgentHandle.make({ agentId: agent.agentId }),
     tokenCount: 0,
@@ -53,29 +65,14 @@ const launchAgent = Effect.fn("WorkflowCapabilities.launchAgent")(function* (
   });
 });
 
-const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
-  jobs: JobRuntime["Service"],
+const completeJob = Effect.fn("WorkflowCapabilities.completeJob")(function* (
+  sessions: SessionLifecycleShape,
   call: WorkflowStepCall,
   context: WorkflowActivityContext,
+  jobId: ReturnType<typeof workflowJobId>,
+  terminal: Option.Option<JobRecord>,
 ) {
-  const input = yield* decodeInput(call, decodeJobInput);
-  const jobId = workflowJobId(context.activityKey);
-  yield* jobs
-    .start(
-      JobRequest.make({
-        jobId,
-        sessionId: context.sessionId,
-        command: input.command,
-        attached: true,
-      }),
-    )
-    .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))));
-  const terminal = yield* jobs
-    .awaitTerminal(JobAddress.make({ jobId, sessionId: context.sessionId }))
-    .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))));
-  if (Option.isNone(terminal)) {
-    return yield* stepError(call, "The Job record is missing.");
-  }
+  if (Option.isNone(terminal)) return yield* stepError(call, "The Job record is missing.");
   const job = terminal.value;
   if (job.status === "Failed") {
     const message = JobFailure.match(job.failure, {
@@ -93,6 +90,10 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
     );
   }
   if (job.status === "Cancelled") {
+    // Issue 52 will replace this close-time classification with an Interrupted run state.
+    if (yield* sessions.isClosing(context.sessionId)) {
+      return yield* new SessionClosingError({ sessionId: context.sessionId });
+    }
     return yield* stepError(call, "The Job was cancelled.");
   }
   return WorkflowStepExecution.make({
@@ -100,6 +101,33 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
     tokenCount: 0,
     agentRuns: 0,
   });
+});
+
+const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
+  sessions: SessionLifecycleShape,
+  jobs: JobRuntime["Service"],
+  call: WorkflowStepCall,
+  context: WorkflowActivityContext,
+) {
+  const input = yield* decodeInput(call, decodeJobInput);
+  const jobId = workflowJobId(context.activityKey);
+  yield* sessions.admit(
+    context.sessionId,
+    jobs
+      .start(
+        JobRequest.make({
+          jobId,
+          sessionId: context.sessionId,
+          command: input.command,
+          attached: true,
+        }),
+      )
+      .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause)))),
+  );
+  const terminal = yield* jobs
+    .awaitTerminal(JobAddress.make({ jobId, sessionId: context.sessionId }))
+    .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))));
+  return yield* completeJob(sessions, call, context, jobId, terminal);
 });
 
 export type WorkflowCapabilitiesConfig = BunWorkflowArtifactStoreConfig;
@@ -111,14 +139,15 @@ export const layerWorkflowCapabilities = (config: WorkflowCapabilitiesConfig) =>
       Effect.gen(function* () {
         const childAgents = yield* WorkflowChildAgentStore;
         const jobs = yield* JobRuntime;
+        const sessions = yield* SessionLifecycle;
         return WorkflowCapabilityExecutor.of({
           supports: supportsBuiltInWorkflowCapability,
           execute: (call, context) => {
             if (call.capability === workflowAgentCapability) {
-              return launchAgent(childAgents, call, context);
+              return launchAgent(sessions, childAgents, call, context);
             }
             if (call.capability === workflowJobCapability) {
-              return launchJob(jobs, call, context);
+              return launchJob(sessions, jobs, call, context);
             }
             return Effect.fail(stepError(call, `No adapter is installed for ${call.capability}.`));
           },

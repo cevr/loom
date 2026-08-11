@@ -8,6 +8,10 @@ Loom coordinates coding agents, their execution environments, and their durable 
 A user-visible conversation that owns agents, jobs, and workflow runs.
 _Avoid_: Thread, chat
 
+**Closing Session**:
+A Session whose close operation has started and which rejects new Session-owned work.
+_Avoid_: Closed flag, teardown mode
+
 **Workspace**:
 A directory tree that owns one Loom daemon, one local connection endpoint, and one orchestration store.
 _Avoid_: Project, repository

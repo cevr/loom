@@ -1,6 +1,7 @@
 import { JobAddress, JobFailure, JobRequest } from "@cvr/loom-domain";
 import { Effect, Schema } from "effect";
 import { Rpc } from "effect/unstable/rpc";
+import { SessionClosingError } from "./session-closing-error.js";
 
 const defaultForegroundLeaseMillis = 5 * 60 * 1_000;
 const defaultJobOutputBytes = 16 * 1_024;
@@ -107,10 +108,13 @@ export class JobRpcError extends Schema.TaggedError<JobRpcError>()("JobRpcError"
   message: Schema.String,
 }) {}
 
+export const StartJobError = Schema.Union([JobRpcError, SessionClosingError]);
+export type StartJobError = typeof StartJobError.Type;
+
 export const StartJob = Rpc.make("Job.Start", {
   payload: StartJobRequest,
   success: JobState,
-  error: JobRpcError,
+  error: StartJobError,
 });
 
 export const InspectJob = Rpc.make("Job.Inspect", {

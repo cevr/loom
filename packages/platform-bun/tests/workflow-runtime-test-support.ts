@@ -13,6 +13,7 @@ import {
   WorkflowCapabilityExecutor,
   WorkflowChildAgentStore,
   layerActorStateHub,
+  layerSessionLifecycle,
   WorkflowStepExecution,
 } from "@cvr/loom-runtime";
 import { it } from "effect-bun-test";
@@ -27,7 +28,11 @@ import {
 } from "../src/index.js";
 
 export const workflowSupport = (filename: string, executions: Ref.Ref<number>) => {
-  const foundation = Layer.merge(layerLoomSqlite({ filename }), BunCrypto.layer);
+  const foundation = Layer.mergeAll(
+    layerLoomSqlite({ filename }),
+    BunCrypto.layer,
+    layerSessionLifecycle,
+  );
   const capabilities = Layer.succeed(
     WorkflowCapabilityExecutor,
     WorkflowCapabilityExecutor.of({

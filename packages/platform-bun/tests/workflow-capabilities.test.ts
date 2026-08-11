@@ -15,6 +15,7 @@ import {
 import {
   JobRuntime,
   JobStore,
+  SessionLifecycle,
   WorkflowActivityContext,
   WorkflowAgentHandle,
   WorkflowArtifactStore,
@@ -25,6 +26,7 @@ import {
   WorkflowStepError,
   WorkflowStepCall,
   layerActorStateHub,
+  layerSessionLifecycle,
 } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, Fiber, FileSystem, Layer, Option, Schedule, Schema } from "effect";
@@ -77,8 +79,9 @@ const capabilityLayer = (filename: string, workspaceRoot: WorkspaceRoot) => {
   );
   const capabilities = layerWorkflowCapabilities({ workspaceRoot }).pipe(
     Layer.provide([agents, jobs]),
+    Layer.provideMerge(layerSessionLifecycle),
   );
-  return Layer.mergeAll(database, agents, jobs, capabilities);
+  return Layer.mergeAll(database, agents, store, jobs, capabilities);
 };
 
 it.scopedLive.layer(BunServices.layer)("returns stable capability handles", () =>
@@ -221,5 +224,32 @@ it.scopedLive.layer(BunServices.layer)("rejects a Job process that exits with fa
 
     expect(error).toBeInstanceOf(WorkflowStepError);
     expect(error.message).toBe("The Job exited with code 7.");
+  }),
+);
+
+it.scopedLive.layer(BunServices.layer)("rejects Session-owned capabilities during close", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-capability-closing-" });
+    const workspaceRoot = WorkspaceRoot.make(directory);
+
+    yield* Effect.gen(function* () {
+      const executor = yield* WorkflowCapabilityExecutor;
+      const sessions = yield* SessionLifecycle;
+      const agents = yield* WorkflowChildAgentStore;
+      const jobs = yield* JobStore;
+
+      yield* sessions.close(agentContext.sessionId, Effect.void);
+      const agentError = yield* executor.execute(agentCall, agentContext).pipe(Effect.flip);
+      const jobError = yield* executor.execute(jobCall, jobContext).pipe(Effect.flip);
+
+      expect(agentError).toHaveProperty("_tag", "SessionClosingError");
+      expect(agentError.message).toBe("The Session is closing.");
+      expect(jobError).toHaveProperty("_tag", "SessionClosingError");
+      expect(jobError.message).toBe("The Session is closing.");
+      expect(yield* agents.listActiveBySession(agentContext.sessionId)).toEqual([]);
+      expect(yield* jobs.listUncommitted).toEqual([]);
+      expect(yield* jobs.listRecoverable).toEqual([]);
+    }).pipe(Effect.provide(capabilityLayer(`${directory}/loom.sqlite`, workspaceRoot)));
   }),
 );

@@ -1,7 +1,6 @@
 import {
-  type AcceptedWorkflowRun,
+  type SessionId,
   type WorkflowRunAddress,
-  WorkflowRunExecution,
   type WorkflowRunId,
   type WorkflowRunRequest,
 } from "@cvr/loom-domain";
@@ -14,24 +13,27 @@ import {
   type WorkflowRunAcceptanceError,
   WorkflowSignalNotDeclaredError,
   type SignalWorkflowRequest,
-  type WorkflowRunError,
   WorkflowRunState,
   type WorkflowRunNotFoundError,
 } from "@cvr/loom-protocol";
 import { Context, Effect, Layer, Schema, Stream, type Duration } from "effect";
 import { WorkflowEngine } from "effect/unstable/workflow";
-import { Client, type PeekResult } from "effect-encore";
 import { LoomDynamicWorkflow, loomWorkflowSignal } from "./loom-dynamic-workflow.js";
 import { WorkflowRunAcceptance } from "./workflow-run-acceptance.js";
 import { WorkflowSignalDeclarations } from "./workflow-signal-declarations.js";
 import { toWorkflowRunState, WorkflowRunStatePublisher } from "./workflow-run-state-publisher.js";
 import { makeDecideCompensation } from "./workflow-compensation-control.js";
+import {
+  makePrepareWorkflow,
+  type PrepareWorkflow,
+  toExecution,
+} from "./workflow-run-preparation.js";
 
 export type WorkflowRuntimeAcceptanceError = StartWorkflowError;
 export type WorkflowRuntimeError = ExecuteWorkflowError;
 export type WorkflowRuntimeReadError = WorkflowRunNotFoundError | WorkflowRunAcceptanceError;
 export type WorkflowRuntimeSignalError = SignalWorkflowError;
-export type WorkflowRuntimeState = PeekResult<Schema.Json, WorkflowRunError>;
+export type WorkflowRuntimeState = Effect.Success<ReturnType<typeof LoomDynamicWorkflow.peekAt>>;
 export type WorkflowRuntimeInspectError = WorkflowRunNotFoundError | WorkflowRunAcceptanceError;
 export type WorkflowRuntimeCompensationError = DecideWorkflowCompensationError;
 
@@ -61,21 +63,12 @@ export interface WorkflowRuntimeShape {
   readonly decideCompensation: (
     request: DecideWorkflowCompensationRequest,
   ) => Effect.Effect<void, WorkflowRuntimeCompensationError>;
+  readonly closeSession: (sessionId: SessionId) => Effect.Effect<void, WorkflowRunAcceptanceError>;
 }
 
 export class WorkflowRuntime extends Context.Service<WorkflowRuntime, WorkflowRuntimeShape>()(
   "@cvr/loom-runtime/WorkflowRuntime",
 ) {}
-
-type AcceptWorkflow = (
-  request: WorkflowRunRequest,
-) => Effect.Effect<AcceptedWorkflowRun, WorkflowRuntimeAcceptanceError>;
-
-const toExecution = (accepted: AcceptedWorkflowRun) =>
-  WorkflowRunExecution.make({
-    incarnationId: accepted.incarnationId,
-    request: accepted.request,
-  });
 
 const makeSignalWorkflow =
   (
@@ -124,33 +117,9 @@ const makeControlWorkflow = (
   };
 };
 
-const makeDeclareWorkflow =
-  (declarations: WorkflowSignalDeclarations["Service"]) => (accepted: AcceptedWorkflowRun) =>
-    declarations.declare(accepted.workflowRunId, accepted.request.definition.signals);
-
-const makePrepareWorkflow =
-  (
-    accept: AcceptWorkflow,
-    declare: ReturnType<typeof makeDeclareWorkflow>,
-    storageClient: Client["Service"],
-    publisher: WorkflowRunStatePublisher["Service"],
-  ) =>
-  (request: WorkflowRunRequest) =>
-    accept(request).pipe(
-      Effect.tap(declare),
-      Effect.tap((accepted) => LoomDynamicWorkflow.send(toExecution(accepted))),
-      storageClient.withTransaction,
-      Effect.tap((accepted) =>
-        publisher.watch({
-          sessionId: accepted.request.sessionId,
-          workflowRunId: accepted.workflowRunId,
-        }),
-      ),
-    );
-
 const makeExecuteWorkflow =
   (
-    prepare: ReturnType<typeof makePrepareWorkflow>,
+    prepare: PrepareWorkflow,
     workflowClient: Effect.Success<typeof LoomDynamicWorkflow.Context>,
   ): WorkflowRuntimeShape["execute"] =>
   (request) =>
@@ -161,7 +130,7 @@ const makeExecuteWorkflow =
 
 const makeSendWorkflow =
   (
-    prepare: ReturnType<typeof makePrepareWorkflow>,
+    prepare: PrepareWorkflow,
     workflowClient: Effect.Success<typeof LoomDynamicWorkflow.Context>,
   ): WorkflowRuntimeShape["send"] =>
   (request) =>
@@ -171,17 +140,14 @@ const makeSendWorkflow =
     );
 
 const makeRuntime = (
-  accept: AcceptWorkflow,
+  prepare: PrepareWorkflow,
   acceptance: WorkflowRunAcceptance["Service"],
   workflowClient: Effect.Success<typeof LoomDynamicWorkflow.Context>,
-  storageClient: Client["Service"],
   engine: WorkflowEngine.WorkflowEngine["Service"],
   declarations: WorkflowSignalDeclarations["Service"],
   publisher: WorkflowRunStatePublisher["Service"],
 ): WorkflowRuntimeShape => {
   const provideEngine = Effect.provideService(WorkflowEngine.WorkflowEngine, engine);
-  const declare = makeDeclareWorkflow(declarations);
-  const prepare = makePrepareWorkflow(accept, declare, storageClient, publisher);
   return {
     execute: makeExecuteWorkflow(prepare, workflowClient),
     send: makeSendWorkflow(prepare, workflowClient),
@@ -202,6 +168,17 @@ const makeRuntime = (
       acceptance
         .authorize(address)
         .pipe(Effect.andThen(LoomDynamicWorkflow.waitForAt(address.workflowRunId)), provideEngine),
+    closeSession: (sessionId) =>
+      acceptance.listActive.pipe(
+        Effect.flatMap((addresses) =>
+          Effect.forEach(
+            addresses.filter((address) => address.sessionId === sessionId),
+            (address) => LoomDynamicWorkflow.interrupt(address.workflowRunId),
+            { concurrency: "unbounded", discard: true },
+          ),
+        ),
+        provideEngine,
+      ),
     ...makeControlWorkflow(acceptance, engine, publisher),
   };
 };
@@ -209,20 +186,12 @@ const makeRuntime = (
 export const makeWorkflowRuntime = Effect.gen(function* () {
   const acceptance = yield* WorkflowRunAcceptance;
   const workflowClient = yield* LoomDynamicWorkflow.Context;
-  const storageClient = yield* Client;
   const engine = yield* WorkflowEngine.WorkflowEngine;
   const declarations = yield* WorkflowSignalDeclarations;
   const publisher = yield* WorkflowRunStatePublisher;
+  const prepare = yield* makePrepareWorkflow(acceptance.accept, publisher, declarations);
   return WorkflowRuntime.of(
-    makeRuntime(
-      acceptance.accept,
-      acceptance,
-      workflowClient,
-      storageClient,
-      engine,
-      declarations,
-      publisher,
-    ),
+    makeRuntime(prepare, acceptance, workflowClient, engine, declarations, publisher),
   );
 });
 
