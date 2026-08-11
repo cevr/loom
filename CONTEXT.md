@@ -145,6 +145,16 @@ _Avoid_: Runtime context, dependency bag
 A Loom process that validates, starts, supervises, and stops Plugin Components.
 _Avoid_: Plugin manager, loader
 
+**Plugin State**:
+Schema-checked state that Loom stores for one Plugin ID and one Workspace or Session scope.
+Each write uses a compare-and-set revision.
+Session close removes Session Plugin State.
+Workspace Plugin State stays until an operator removes it.
+
+**Plugin State Revision**:
+The positive integer that orders writes for one Plugin State key.
+A write succeeds only when its expected revision matches the stored revision.
+
 **Client Adapter**:
 A module that connects a user interface or agent client to Loom.
 _Avoid_: Frontend, transport

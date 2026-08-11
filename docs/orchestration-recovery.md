@@ -175,4 +175,6 @@ The daemon rebuilds it from actor-owned state after startup.
 - [Stop and delete Workflow child Agent ownership during terminal Workflow retirement](https://github.com/cevr/loom/issues/29).
 - [Interrupt active Workflow Runs during Session close](https://github.com/cevr/loom/issues/36).
 - [Complete the missing Job recovery outcomes and Job lifecycle model](https://github.com/cevr/loom/issues/31).
-- [Add Plugin State storage and RPC before the first stateful Plugin](https://github.com/cevr/loom/issues/34).
+- Plugin State uses typed RPCs and compare-and-set revisions.
+- Session close removes Session Plugin State.
+- Workspace Plugin State stays until an operator removes it.

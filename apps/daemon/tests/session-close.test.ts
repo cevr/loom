@@ -2,6 +2,10 @@ import { BunServices } from "@effect/platform-bun";
 import type { LoomClientShape } from "@cvr/loom-client";
 import {
   JobId,
+  PluginId,
+  PluginStateAddress,
+  PluginStateKey,
+  PluginStateScope,
   SessionId,
   WorkflowBudget,
   WorkflowCapability,
@@ -18,7 +22,12 @@ import {
   layerWorkflowCapabilities,
   defaultBunWorkflowAgentPolicy,
 } from "@cvr/loom-platform-bun";
-import { workflowInterpreterVersion, WorkflowRunState } from "@cvr/loom-protocol";
+import {
+  PluginStateReadResult,
+  PluginStateVersion,
+  workflowInterpreterVersion,
+  WorkflowRunState,
+} from "@cvr/loom-protocol";
 import { expect, it } from "effect-bun-test";
 import { Effect, Fiber, FileSystem, Layer, Option, Schedule } from "effect";
 import { runLoomDaemon } from "../src/program.js";
@@ -27,6 +36,18 @@ import { withClient } from "./workflow-test-support.js";
 const sessionId = SessionId.make("session-close");
 const attachedJobId = JobId.make("session-close-attached");
 const detachedJobId = JobId.make("session-close-detached");
+const pluginId = PluginId.make("session-close-test");
+const pluginStateKey = PluginStateKey.make("state");
+const sessionPluginState = PluginStateAddress.make({
+  pluginId,
+  scope: PluginStateScope.cases.Session.make({ sessionId }),
+  key: pluginStateKey,
+});
+const workspacePluginState = PluginStateAddress.make({
+  pluginId,
+  scope: PluginStateScope.cases.Workspace.make({}),
+  key: pluginStateKey,
+});
 
 const activeWorkflow = (key: string, command: string) =>
   WorkflowRunRequest.make({
@@ -63,11 +84,29 @@ const waitForFile = (path: string) =>
     Effect.timeout("5 seconds"),
   );
 
+const seedPluginState = (client: LoomClientShape) =>
+  Effect.all(
+    [
+      client.writePluginState({
+        address: sessionPluginState,
+        expected: PluginStateVersion.cases.Missing.make({}),
+        value: { owner: "session" },
+      }),
+      client.writePluginState({
+        address: workspacePluginState,
+        expected: PluginStateVersion.cases.Missing.make({}),
+        value: { owner: "workspace" },
+      }),
+    ],
+    { discard: true },
+  );
+
 const startSessionWork = Effect.fn("SessionCloseTest.startWork")(function* (
   client: LoomClientShape,
   request: WorkflowRunRequest,
   workflowStarted: string,
 ) {
+  yield* seedPluginState(client);
   const handle = yield* client.startWorkflow(request);
   yield* waitForFile(workflowStarted);
   yield* client.startJob({
@@ -105,6 +144,13 @@ const verifyClosedWork = Effect.fn("SessionCloseTest.verifyClosedWork")(function
   expect(terminal).toHaveProperty("error._tag", "SessionClosingError");
   expect((yield* client.inspectJob({ sessionId, jobId: attachedJobId })).status).toBe("Cancelled");
   expect((yield* client.inspectJob({ sessionId, jobId: detachedJobId })).status).toBe("Running");
+  expect(yield* client.readPluginState({ address: sessionPluginState })).toEqual(
+    PluginStateReadResult.cases.Missing.make({}),
+  );
+  expect(yield* client.readPluginState({ address: workspacePluginState })).toHaveProperty(
+    "_tag",
+    "Present",
+  );
 });
 
 const verifyLateWork = Effect.fn("SessionCloseTest.verifyLateWork")(function* (
@@ -122,8 +168,16 @@ const verifyLateWork = Effect.fn("SessionCloseTest.verifyLateWork")(function* (
   const workflowError = yield* client
     .startWorkflow(activeWorkflow("late", "true"))
     .pipe(Effect.flip);
+  const pluginStateError = yield* client
+    .writePluginState({
+      address: sessionPluginState,
+      expected: PluginStateVersion.cases.Missing.make({}),
+      value: { owner: "late" },
+    })
+    .pipe(Effect.flip);
   expect(jobError).toHaveProperty("_tag", "SessionClosingError");
   expect(workflowError).toHaveProperty("_tag", "SessionClosingError");
+  expect(pluginStateError).toHaveProperty("_tag", "SessionClosingError");
 });
 
 it.scopedLive.layer(BunServices.layer)(
