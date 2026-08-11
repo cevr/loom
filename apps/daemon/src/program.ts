@@ -8,6 +8,7 @@ import {
   layerLoomWorkflowRuntime,
   layerSqliteJobStore,
   layerSqlitePluginStateStore,
+  layerSqliteSessionClosureStore,
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
   layerSqliteCellLedger,
@@ -21,6 +22,7 @@ import {
   CodeKernelProcessStore,
   ProcessController,
   ProcessInspector,
+  SessionClosureStore,
   WorkflowArtifactStore,
   WorkflowCapabilityExecutor,
   WorkflowRunRecovery,
@@ -34,6 +36,7 @@ import { Clock, Context, type Duration, Effect, FileSystem, Layer, Path } from "
 import { SingleRunner } from "effect/unstable/cluster";
 import { type DaemonConfig, loadDaemonConfig } from "./daemon-config.js";
 import { layerLoomRpcHandlers } from "./rpc-handlers.js";
+import { layerSessionRecovery, SessionRecovery } from "./session-recovery.js";
 
 export type { DaemonConfig } from "./daemon-config.js";
 
@@ -42,39 +45,51 @@ const codeKernelEntry = new URL("../../code-kernel/src/main.ts", import.meta.url
 export interface DaemonPolicy {
   readonly codeKernelIdleLease: Duration.Input;
   readonly entityIdleLease: Duration.Input;
+  readonly sessionClosureLease: Duration.Input;
 }
 
 export const defaultDaemonPolicy = {
   codeKernelIdleLease: "5 minutes",
   entityIdleLease: "1 minute",
+  sessionClosureLease: "5 minutes",
 } satisfies DaemonPolicy;
 
-export interface DaemonRecoveryPhases<E1, E2, E3, E4, E5> {
-  readonly codeKernels: Effect.Effect<void, E1>;
-  readonly cells: Effect.Effect<void, E2>;
-  readonly jobs: Effect.Effect<void, E3>;
-  readonly workflowRetirement: Effect.Effect<void, E4>;
-  readonly workflows: Effect.Effect<void, E5>;
+export interface DaemonRecoveryPhases<E1, E2, E3, E4, E5, E6, E7> {
+  readonly sessionClosures: Effect.Effect<void, E1>;
+  readonly codeKernels: Effect.Effect<void, E2>;
+  readonly cells: Effect.Effect<void, E3>;
+  readonly jobs: Effect.Effect<void, E4>;
+  readonly closedSessions: Effect.Effect<void, E5>;
+  readonly workflowRetirement: Effect.Effect<void, E6>;
+  readonly workflows: Effect.Effect<void, E7>;
 }
 
-export const runRecoveryPhases = <E1, E2, E3, E4, E5>(
-  phases: DaemonRecoveryPhases<E1, E2, E3, E4, E5>,
+export const runRecoveryPhases = <E1, E2, E3, E4, E5, E6, E7>(
+  phases: DaemonRecoveryPhases<E1, E2, E3, E4, E5, E6, E7>,
 ) =>
-  phases.codeKernels.pipe(
+  phases.sessionClosures.pipe(
+    Effect.andThen(phases.codeKernels),
     Effect.andThen(phases.cells),
     Effect.andThen(phases.jobs),
+    Effect.andThen(phases.closedSessions),
     Effect.andThen(phases.workflowRetirement),
     Effect.andThen(phases.workflows),
   );
 
 export const recoverDaemon = Effect.gen(function* () {
+  const sessions = yield* SessionClosureStore;
   const store = yield* CodeKernelProcessStore;
   const inspector = yield* ProcessInspector;
   const controller = yield* ProcessController;
   const cells = yield* CellLedger;
   const jobs = yield* JobRuntime;
   const workflows = yield* WorkflowRunRecovery;
+  const sessionsToRecover = yield* SessionRecovery;
   return yield* runRecoveryPhases({
+    sessionClosures: sessions.prune.pipe(
+      Effect.tap((count) => Effect.logInfo("Session closure pruning completed.", { count })),
+      Effect.asVoid,
+    ),
     codeKernels: reconcileCodeKernelProcesses({ store, inspector, controller }),
     cells: cells.reconcile,
     jobs: jobs.reconcile.pipe(
@@ -83,6 +98,7 @@ export const recoverDaemon = Effect.gen(function* () {
       ),
       Effect.asVoid,
     ),
+    closedSessions: sessionsToRecover.recover,
     workflowRetirement: workflows.retire,
     workflows: workflows.recover,
   });
@@ -94,6 +110,8 @@ type RecoveryServices =
   | JobRuntime
   | ProcessController
   | ProcessInspector
+  | SessionClosureStore
+  | SessionRecovery
   | WorkflowRunRecovery;
 
 type DaemonRecovery<E> = (services: Context.Context<RecoveryServices>) => Effect.Effect<void, E>;
@@ -140,6 +158,11 @@ const makeClusterLayer = (policy: DaemonPolicy) =>
     },
   });
 
+const makeSessionLayer = (policy: DaemonPolicy) =>
+  layerSessionLifecycle({ closureLease: policy.sessionClosureLease }).pipe(
+    Layer.provideMerge(layerSqliteSessionClosureStore),
+  );
+
 const launchDaemon = <E, R, E2>(
   config: DaemonConfig,
   capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
@@ -152,22 +175,23 @@ const launchDaemon = <E, R, E2>(
     const actors = layerActorStateHub;
     const jobs = makeJobLayer(config, actors);
     const childAgents = layerSqliteWorkflowChildAgentStore;
-    const orchestration = capabilities.pipe(Layer.provideMerge(layerSessionLifecycle));
+    const sessions = makeSessionLayer(policy);
+    const orchestration = capabilities.pipe(Layer.provideMerge(sessions));
     const workflows = layerLoomWorkflowRuntime.pipe(
       Layer.provide([orchestration, actors, childAgents]),
     );
-    const application = Layer.mergeAll(
+    const baseApplication = Layer.mergeAll(
       actors,
       makeAgentLayer(config, policy),
       childAgents,
       layerSqlitePluginStateStore,
       orchestration,
       workflows,
-    ).pipe(
-      Layer.provideMerge(jobs),
-      Layer.provide(cluster),
-      Layer.tap((services) => recover(services)),
-    );
+    ).pipe(Layer.provideMerge(jobs), Layer.provide(cluster));
+    const application = Layer.merge(
+      baseApplication,
+      layerSessionRecovery.pipe(Layer.provide(baseApplication)),
+    ).pipe(Layer.tap((services) => recover(services)));
     const handlers = layerLoomRpcHandlers.pipe(
       Layer.provide(application),
       Layer.provide(

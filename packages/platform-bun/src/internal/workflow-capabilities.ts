@@ -191,10 +191,17 @@ const makeCapabilityExecutor = (config: WorkflowCapabilitiesConfig) =>
         if (call.capability === workflowAgentCapability) {
           return launchAgent(config, sessions, childAgents, jobs, call, context).pipe(
             Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.catchTag("SessionClosureStoreError", (error) =>
+              stepError(call, Inspectable.toStringUnknown(error.cause)),
+            ),
           );
         }
         if (call.capability === workflowJobCapability) {
-          return launchJob(sessions, jobs, call, context);
+          return launchJob(sessions, jobs, call, context).pipe(
+            Effect.catchTag("SessionClosureStoreError", (error) =>
+              stepError(call, Inspectable.toStringUnknown(error.cause)),
+            ),
+          );
         }
         return Effect.fail(stepError(call, `No adapter is installed for ${call.capability}.`));
       },

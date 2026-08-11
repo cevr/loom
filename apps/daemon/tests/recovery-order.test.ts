@@ -5,26 +5,51 @@ import {
   JobRuntime,
   ProcessController,
   ProcessInspector,
+  SessionClosureStore,
   WorkflowRunRecovery,
 } from "@cvr/loom-runtime";
 import { expect } from "effect-bun-test";
 import { Effect, Fiber, FileSystem, Layer, Queue, Ref } from "effect";
 import { recoverDaemon, runLoomDaemonWithRecovery, runRecoveryPhases } from "../src/program.js";
+import { SessionRecovery } from "../src/session-recovery.js";
 import { scopedLive, testCapabilities, withClient } from "./workflow-test-support.js";
 
-type RecoveryPhase = "code-kernels" | "cells" | "jobs" | "workflow-retirement" | "workflows";
+type RecoveryPhase =
+  | "session-closures"
+  | "code-kernels"
+  | "cells"
+  | "jobs"
+  | "closed-sessions"
+  | "workflow-retirement"
+  | "workflows";
 
 const phaseNames: ReadonlyArray<RecoveryPhase> = [
+  "session-closures",
   "code-kernels",
   "cells",
   "jobs",
+  "closed-sessions",
   "workflow-retirement",
   "workflows",
 ];
 
 const unused = Effect.die("Unused recovery service operation.");
 
-const recoveryServices = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =>
+const sessionRecoveryServices = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =>
+  Layer.merge(
+    Layer.succeed(SessionRecovery, SessionRecovery.of({ recover: phase("closed-sessions") })),
+    Layer.succeed(
+      SessionClosureStore,
+      SessionClosureStore.of({
+        close: () => unused,
+        contains: () => unused,
+        list: Effect.succeed([]),
+        prune: phase("session-closures").pipe(Effect.as(0)),
+      }),
+    ),
+  );
+
+const processRecoveryServices = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =>
   Layer.mergeAll(
     Layer.succeed(
       CodeKernelProcessStore,
@@ -39,29 +64,41 @@ const recoveryServices = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =
       ProcessController,
       ProcessController.of({ isGroupAlive: () => unused, signalGroup: () => unused }),
     ),
-    Layer.succeed(
-      CellLedger,
-      CellLedger.of({
-        claim: () => unused,
-        evaluating: () => unused,
-        complete: () => unused,
-        reconcile: phase("cells"),
-      }),
-    ),
-    Layer.succeed(
-      JobRuntime,
-      JobRuntime.of({
-        start: () => unused,
-        inspect: () => unused,
-        await: () => unused,
-        awaitTerminal: () => unused,
-        readOutput: () => unused,
-        cancel: () => unused,
-        detach: () => unused,
-        closeSession: () => unused,
-        reconcile: phase("jobs").pipe(Effect.as([])),
-      }),
-    ),
+  );
+
+const cellRecoveryService = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =>
+  Layer.succeed(
+    CellLedger,
+    CellLedger.of({
+      claim: () => unused,
+      evaluating: () => unused,
+      complete: () => unused,
+      reconcile: phase("cells"),
+    }),
+  );
+
+const jobRecoveryService = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =>
+  Layer.succeed(
+    JobRuntime,
+    JobRuntime.of({
+      start: () => unused,
+      inspect: () => unused,
+      await: () => unused,
+      awaitTerminal: () => unused,
+      readOutput: () => unused,
+      cancel: () => unused,
+      detach: () => unused,
+      closeSession: () => unused,
+      reconcile: phase("jobs").pipe(Effect.as([])),
+    }),
+  );
+
+const recoveryServices = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =>
+  Layer.mergeAll(
+    sessionRecoveryServices(phase),
+    processRecoveryServices(phase),
+    cellRecoveryService(phase),
+    jobRecoveryService(phase),
     Layer.succeed(
       WorkflowRunRecovery,
       WorkflowRunRecovery.of({
@@ -96,9 +133,11 @@ scopedLive("runs every recovery phase before the daemon accepts a client", () =>
         Effect.asVoid,
       );
     const recovery = runRecoveryPhases({
+      sessionClosures: phase("session-closures"),
       codeKernels: phase("code-kernels"),
       cells: phase("cells"),
       jobs: phase("jobs"),
+      closedSessions: phase("closed-sessions"),
       workflowRetirement: phase("workflow-retirement"),
       workflows: phase("workflows"),
     });

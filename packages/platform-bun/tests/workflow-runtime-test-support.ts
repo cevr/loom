@@ -25,15 +25,17 @@ import {
   layerLoomSqlite,
   layerLoomWorkflowRuntime,
   layerLoomWorkflowRuntimeWith,
+  layerSqliteSessionClosureStore,
   layerSqliteWorkflowChildAgentStore,
 } from "../src/index.js";
 
 export const workflowSupport = (filename: string, executions: Ref.Ref<number>) => {
-  const foundation = Layer.mergeAll(
-    layerLoomSqlite({ filename }),
-    BunCrypto.layer,
-    layerSessionLifecycle,
+  const database = layerLoomSqlite({ filename });
+  const closures = layerSqliteSessionClosureStore.pipe(Layer.provide(database));
+  const sessions = layerSessionLifecycle({ closureLease: "5 minutes" }).pipe(
+    Layer.provideMerge(closures),
   );
+  const foundation = Layer.mergeAll(database, BunCrypto.layer, sessions);
   const capabilities = Layer.succeed(
     WorkflowCapabilityExecutor,
     WorkflowCapabilityExecutor.of({

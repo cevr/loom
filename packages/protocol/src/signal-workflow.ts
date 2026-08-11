@@ -5,6 +5,7 @@ import { WorkflowSignalDeclarationsError } from "./workflow-signal-declarations-
 import { WorkflowSignalNotDeclaredError } from "./workflow-signal-not-declared-error.js";
 import { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
 import { WorkflowRunNotFoundError } from "./workflow-run-not-found-error.js";
+import { SessionClosingError } from "./session-closing-error.js";
 
 export const SignalWorkflowRequest = Schema.Struct({
   address: WorkflowSignalAddress,
@@ -17,6 +18,7 @@ export const SignalWorkflowError = Schema.Union([
   WorkflowSignalDeclarationsError,
   WorkflowRunAcceptanceError,
   WorkflowRunNotFoundError,
+  SessionClosingError,
 ]);
 export type SignalWorkflowError = typeof SignalWorkflowError.Type;
 

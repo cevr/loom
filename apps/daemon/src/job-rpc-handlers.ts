@@ -40,6 +40,9 @@ export const makeJobRpcHandlers = (jobs: JobRuntimeShape, sessions: SessionLifec
           .pipe(Effect.mapError((error) => failure(request.jobId, "start", error))),
       )
       .pipe(
+        Effect.catchTag("SessionClosureStoreError", (error) =>
+          failure(request.jobId, "start", error.cause),
+        ),
         Effect.flatMap(() =>
           requireJob(
             request.jobId,

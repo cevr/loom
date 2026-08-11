@@ -4,7 +4,6 @@ import {
   JobId,
   PluginId,
   PluginStateAddress,
-  PluginStateKey,
   PluginStateScope,
   SessionId,
   WorkflowBudget,
@@ -13,15 +12,20 @@ import {
   WorkflowKey,
   WorkflowName,
   type WorkflowRunAddress,
+  WorkflowRunId,
   WorkflowRunRequest,
+  WorkflowSignalName,
   WorkflowVersion,
   WorkspaceRoot,
 } from "@cvr/loom-domain";
 import {
+  layerLoomSqlite,
+  layerSqliteSessionClosureStore,
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
   defaultBunWorkflowAgentPolicy,
 } from "@cvr/loom-platform-bun";
+import { SessionClosureStore } from "@cvr/loom-runtime";
 import {
   PluginStateReadResult,
   PluginStateVersion,
@@ -37,17 +41,24 @@ const sessionId = SessionId.make("session-close");
 const attachedJobId = JobId.make("session-close-attached");
 const detachedJobId = JobId.make("session-close-detached");
 const pluginId = PluginId.make("session-close-test");
-const pluginStateKey = PluginStateKey.make("state");
+const lateWorkflowRunId = WorkflowRunId.make("session-close-late");
+const lateSignalName = WorkflowSignalName.make("continue");
 const sessionPluginState = PluginStateAddress.make({
   pluginId,
   scope: PluginStateScope.cases.Session.make({ sessionId }),
-  key: pluginStateKey,
+  key: PluginStateAddress.fields.key.make("state"),
 });
 const workspacePluginState = PluginStateAddress.make({
   pluginId,
   scope: PluginStateScope.cases.Workspace.make({}),
-  key: pluginStateKey,
+  key: PluginStateAddress.fields.key.make("state"),
 });
+
+const capabilitiesFor = (workspaceRoot: WorkspaceRoot) =>
+  layerWorkflowCapabilities({
+    workspaceRoot,
+    ...defaultBunWorkflowAgentPolicy,
+  }).pipe(Layer.provide(layerSqliteWorkflowChildAgentStore));
 
 const activeWorkflow = (key: string, command: string) =>
   WorkflowRunRequest.make({
@@ -175,9 +186,48 @@ const verifyLateWork = Effect.fn("SessionCloseTest.verifyLateWork")(function* (
       value: { owner: "late" },
     })
     .pipe(Effect.flip);
+  const signalError = yield* client
+    .signalWorkflow({
+      address: { sessionId, workflowRunId: lateWorkflowRunId, name: lateSignalName },
+      value: {},
+    })
+    .pipe(Effect.flip);
   expect(jobError).toHaveProperty("_tag", "SessionClosingError");
   expect(workflowError).toHaveProperty("_tag", "SessionClosingError");
   expect(pluginStateError).toHaveProperty("_tag", "SessionClosingError");
+  expect(signalError).toHaveProperty("_tag", "SessionClosingError");
+});
+
+const writeSessionClosure = (databasePath: string) => {
+  const database = layerLoomSqlite({ filename: databasePath });
+  return SessionClosureStore.pipe(
+    Effect.flatMap((closures) => closures.close(sessionId, "5 minutes")),
+    Effect.provide(layerSqliteSessionClosureStore.pipe(Layer.provide(database))),
+    Effect.scoped,
+  );
+};
+
+const seedCrashWork = (client: LoomClientShape) =>
+  seedPluginState(client).pipe(
+    Effect.andThen(
+      client.startJob({
+        sessionId,
+        jobId: attachedJobId,
+        command: "sleep 30",
+        attached: true,
+        foregroundLeaseMillis: 20,
+      }),
+    ),
+  );
+
+const verifyRecoveredClose = Effect.fn("SessionCloseTest.verifyRecoveredClose")(function* (
+  client: LoomClientShape,
+) {
+  expect((yield* client.inspectJob({ sessionId, jobId: attachedJobId })).status).toBe("Cancelled");
+  expect(yield* client.readPluginState({ address: sessionPluginState })).toEqual(
+    PluginStateReadResult.cases.Missing.make({}),
+  );
+  yield* verifyLateWork(client);
 });
 
 it.scopedLive.layer(BunServices.layer)(
@@ -188,13 +238,11 @@ it.scopedLive.layer(BunServices.layer)(
       const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-session-close-" });
       const workspaceRoot = WorkspaceRoot.make(directory);
       const socketPath = `${directory}/daemon.sock`;
+      const databasePath = `${directory}/loom.sqlite`;
       const workflowStarted = `${directory}/workflow-started`;
-      const capabilities = layerWorkflowCapabilities({
-        workspaceRoot,
-        ...defaultBunWorkflowAgentPolicy,
-      }).pipe(Layer.provide(layerSqliteWorkflowChildAgentStore));
+      const capabilities = capabilitiesFor(workspaceRoot);
       const daemon = yield* runLoomDaemon(
-        { workspaceRoot, socketPath, databasePath: `${directory}/loom.sqlite` },
+        { workspaceRoot, socketPath, databasePath },
         capabilities,
       ).pipe(Effect.forkScoped);
       const request = activeWorkflow(
@@ -211,6 +259,42 @@ it.scopedLive.layer(BunServices.layer)(
         }),
       );
       yield* Fiber.interrupt(daemon);
+
+      const restarted = yield* runLoomDaemon(
+        { workspaceRoot, socketPath, databasePath },
+        capabilities,
+      ).pipe(Effect.forkScoped);
+      yield* withClient(workspaceRoot, socketPath, verifyLateWork);
+      yield* Fiber.interrupt(restarted);
+    }),
+  30_000,
+);
+
+it.scopedLive.layer(BunServices.layer)(
+  "replays Session cleanup after a crash",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-session-recovery-" });
+      const workspaceRoot = WorkspaceRoot.make(directory);
+      const socketPath = `${directory}/daemon.sock`;
+      const databasePath = `${directory}/loom.sqlite`;
+      const capabilities = capabilitiesFor(workspaceRoot);
+      const daemon = yield* runLoomDaemon(
+        { workspaceRoot, socketPath, databasePath },
+        capabilities,
+      ).pipe(Effect.forkScoped);
+
+      yield* withClient(workspaceRoot, socketPath, seedCrashWork);
+      yield* writeSessionClosure(databasePath);
+      yield* Fiber.interrupt(daemon);
+
+      const restarted = yield* runLoomDaemon(
+        { workspaceRoot, socketPath, databasePath },
+        capabilities,
+      ).pipe(Effect.forkScoped);
+      yield* withClient(workspaceRoot, socketPath, verifyRecoveredClose);
+      yield* Fiber.interrupt(restarted);
     }),
   30_000,
 );

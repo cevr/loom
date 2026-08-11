@@ -36,6 +36,7 @@ import {
   layerBunProcessInspector,
   layerLoomSqlite,
   layerSqliteJobStore,
+  layerSqliteSessionClosureStore,
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
 } from "../src/index.js";
@@ -79,12 +80,16 @@ const capabilityLayer = (filename: string, workspaceRoot: WorkspaceRoot) => {
   const jobs = layerBunJobRuntime({ workspaceRoot, terminationGrace: "50 millis" }).pipe(
     Layer.provide([actors, layerBunProcessController, layerBunProcessInspector, store]),
   );
+  const sessions = layerSessionLifecycle({ closureLease: "5 minutes" }).pipe(
+    Layer.provideMerge(layerSqliteSessionClosureStore),
+    Layer.provide(database),
+  );
   const capabilities = layerWorkflowCapabilities({
     workspaceRoot,
     executable: "bun",
     arguments: ["run", workflowAgentFixture],
     maximumOutputBytes: 64 * 1_024,
-  }).pipe(Layer.provide([agents, jobs]), Layer.provideMerge(layerSessionLifecycle));
+  }).pipe(Layer.provide([agents, jobs]), Layer.provideMerge(sessions));
   return Layer.mergeAll(database, agents, store, jobs, capabilities);
 };
 

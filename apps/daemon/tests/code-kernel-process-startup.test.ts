@@ -106,7 +106,11 @@ scopedLive(
       };
       const daemon = yield* startDaemon(
         { workspaceRoot, socketPath, databasePath },
-        { codeKernelIdleLease: "100 millis", entityIdleLease: "100 millis" },
+        {
+          codeKernelIdleLease: "100 millis",
+          entityIdleLease: "100 millis",
+          sessionClosureLease: "5 minutes",
+        },
       );
 
       yield* withClient(workspaceRoot, socketPath, (client) =>
@@ -153,7 +157,11 @@ scopedLive(
       };
       const daemon = yield* startDaemon(
         { workspaceRoot, socketPath, databasePath },
-        { codeKernelIdleLease: "10 seconds", entityIdleLease: "100 millis" },
+        {
+          codeKernelIdleLease: "10 seconds",
+          entityIdleLease: "100 millis",
+          sessionClosureLease: "5 minutes",
+        },
       );
 
       yield* withClient(workspaceRoot, socketPath, (client) =>

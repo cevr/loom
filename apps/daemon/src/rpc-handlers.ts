@@ -1,7 +1,9 @@
 import {
   CloseSessionError,
   LoomRpcs,
+  PluginStateStoreError,
   type WritePluginStateRequest,
+  WorkflowRunAcceptanceError,
   WorkflowRunHandle,
 } from "@cvr/loom-protocol";
 import { PluginStateScope, type SessionId } from "@cvr/loom-domain";
@@ -23,7 +25,7 @@ import {
 import { Effect, Inspectable, Stream } from "effect";
 import { makeJobRpcHandlers } from "./job-rpc-handlers.js";
 
-const makeCloseSession =
+export const makeCloseSession =
   (
     workflows: WorkflowRuntimeShape,
     childAgents: WorkflowChildAgentStoreShape,
@@ -68,7 +70,16 @@ const writePluginState = (pluginState: PluginStateStoreShape, sessions: SessionL
   Effect.fn("LoomRpcHandlers.writePluginState")(function* (request: WritePluginStateRequest) {
     const write = pluginState.write(request.address, request.expected, request.value);
     if (PluginStateScope.guards.Workspace(request.address.scope)) return yield* write;
-    return yield* sessions.admit(request.address.scope.sessionId, write);
+    return yield* sessions.admit(request.address.scope.sessionId, write).pipe(
+      Effect.catchTag(
+        "SessionClosureStoreError",
+        (error) =>
+          new PluginStateStoreError({
+            operation: "write",
+            message: Inspectable.toStringUnknown(error.cause),
+          }),
+      ),
+    );
   });
 
 export const layerLoomRpcHandlers = LoomRpcs.toLayer(
@@ -101,7 +112,17 @@ export const layerLoomRpcHandlers = LoomRpcs.toLayer(
           .send(request)
           .pipe(Effect.map((workflowRunId) => WorkflowRunHandle.make({ workflowRunId }))),
       "Workflow.Execute": workflows.execute,
-      "Workflow.Signal": workflows.signal,
+      "Workflow.Signal": (request) =>
+        sessions.admit(request.address.sessionId, workflows.signal(request)).pipe(
+          Effect.catchTag(
+            "SessionClosureStoreError",
+            (error) =>
+              new WorkflowRunAcceptanceError({
+                operation: "lookup",
+                message: Inspectable.toStringUnknown(error.cause),
+              }),
+          ),
+        ),
       "Workflow.Inspect": workflows.inspect,
       "Workflow.Interrupt": workflows.interrupt,
       "Workflow.DecideCompensation": workflows.decideCompensation,

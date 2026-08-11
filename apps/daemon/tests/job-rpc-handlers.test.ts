@@ -6,6 +6,7 @@ import {
   layerBunProcessInspector,
   layerLoomSqlite,
   layerSqliteJobStore,
+  layerSqliteSessionClosureStore,
 } from "@cvr/loom-platform-bun";
 import { JobRuntime, layerActorStateHub, makeSessionLifecycle } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
@@ -15,11 +16,16 @@ import { makeJobRpcHandlers } from "../src/job-rpc-handlers.js";
 const sessionId = SessionId.make("job-rpc-session");
 
 const runtimeLayer = (filename: string, workspaceRoot: WorkspaceRoot) => {
-  const store = layerSqliteJobStore.pipe(Layer.provide(layerLoomSqlite({ filename })));
-  return layerBunJobRuntime({ workspaceRoot, terminationGrace: "50 millis" }).pipe(
+  const database = layerLoomSqlite({ filename });
+  const store = layerSqliteJobStore.pipe(Layer.provide(database));
+  const closures = layerSqliteSessionClosureStore.pipe(Layer.provide(database));
+  const runtime = layerBunJobRuntime({ workspaceRoot, terminationGrace: "50 millis" }).pipe(
     Layer.provide([layerActorStateHub, layerBunProcessController, layerBunProcessInspector, store]),
   );
+  return Layer.mergeAll(database, closures, runtime);
 };
+
+const makeSessions = makeSessionLifecycle({ closureLease: "5 minutes" });
 
 it.scopedLive.layer(BunServices.layer)("controls a durable Job through the RPC handlers", () =>
   Effect.gen(function* () {
@@ -29,7 +35,7 @@ it.scopedLive.layer(BunServices.layer)("controls a durable Job through the RPC h
 
     yield* Effect.gen(function* () {
       const runtime = yield* JobRuntime;
-      const handlers = makeJobRpcHandlers(runtime, yield* makeSessionLifecycle);
+      const handlers = makeJobRpcHandlers(runtime, yield* makeSessions);
       const jobId = JobId.make("job-rpc");
       const started = yield* handlers["Job.Start"]({
         sessionId,
@@ -88,12 +94,12 @@ it.scopedLive.layer(BunServices.layer)("reads Job output through RPC after resta
 
     yield* Effect.gen(function* () {
       const runtime = yield* JobRuntime;
-      yield* makeJobRpcHandlers(runtime, yield* makeSessionLifecycle)["Job.Start"](request);
+      yield* makeJobRpcHandlers(runtime, yield* makeSessions)["Job.Start"](request);
     }).pipe(Effect.provide(runtimeLayer(filename, workspaceRoot)), Effect.scoped);
 
     yield* Effect.gen(function* () {
       const runtime = yield* JobRuntime;
-      const handlers = makeJobRpcHandlers(runtime, yield* makeSessionLifecycle);
+      const handlers = makeJobRpcHandlers(runtime, yield* makeSessions);
       yield* runtime.reconcile;
       const output = yield* handlers["Job.Output"]({
         sessionId,
@@ -119,7 +125,7 @@ it.scopedLive.layer(BunServices.layer)("cancels a running Job through the RPC ha
 
     yield* Effect.gen(function* () {
       const runtime = yield* JobRuntime;
-      const handlers = makeJobRpcHandlers(runtime, yield* makeSessionLifecycle);
+      const handlers = makeJobRpcHandlers(runtime, yield* makeSessions);
       const jobId = JobId.make("job-rpc-cancel");
       yield* handlers["Job.Start"]({
         sessionId,

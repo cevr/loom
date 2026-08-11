@@ -3,8 +3,8 @@ import {
   WorkflowRunExecution,
   type WorkflowRunRequest,
 } from "@cvr/loom-domain";
-import type { StartWorkflowError } from "@cvr/loom-protocol";
-import { Effect } from "effect";
+import { type StartWorkflowError, WorkflowRunAcceptanceError } from "@cvr/loom-protocol";
+import { Effect, Inspectable } from "effect";
 import { Client } from "effect-encore";
 import { LoomDynamicWorkflow } from "./loom-dynamic-workflow.js";
 import { SessionLifecycle } from "./session-lifecycle.js";
@@ -30,23 +30,34 @@ export const makePrepareWorkflow = (
     const storageClient = yield* Client;
     const sessions = yield* SessionLifecycle;
     return (request: WorkflowRunRequest) =>
-      sessions.admit(
-        request.sessionId,
-        // The claim stays inside admission so close observes every accepted Workflow Run.
-        accept(request).pipe(
-          Effect.tap((accepted) =>
-            declarations.declare(accepted.workflowRunId, accepted.request.definition.signals),
+      sessions
+        .admit(
+          request.sessionId,
+          // The claim stays inside admission so close observes every accepted Workflow Run.
+          accept(request).pipe(
+            Effect.tap((accepted) =>
+              declarations.declare(accepted.workflowRunId, accepted.request.definition.signals),
+            ),
+            Effect.tap((accepted) => LoomDynamicWorkflow.send(toExecution(accepted))),
+            storageClient.withTransaction,
+            Effect.tap((accepted) =>
+              publisher.watch({
+                sessionId: accepted.request.sessionId,
+                workflowRunId: accepted.workflowRunId,
+              }),
+            ),
           ),
-          Effect.tap((accepted) => LoomDynamicWorkflow.send(toExecution(accepted))),
-          storageClient.withTransaction,
-          Effect.tap((accepted) =>
-            publisher.watch({
-              sessionId: accepted.request.sessionId,
-              workflowRunId: accepted.workflowRunId,
-            }),
+        )
+        .pipe(
+          Effect.catchTag(
+            "SessionClosureStoreError",
+            (error) =>
+              new WorkflowRunAcceptanceError({
+                operation: "lookup",
+                message: Inspectable.toStringUnknown(error.cause),
+              }),
           ),
-        ),
-      );
+        );
   });
 
 export type PrepareWorkflow = Effect.Success<ReturnType<typeof makePrepareWorkflow>>;
