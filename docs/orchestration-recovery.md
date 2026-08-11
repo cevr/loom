@@ -127,6 +127,8 @@ Session close interrupts each active Workflow Run in that Session.
 It then stops attached Jobs and child Agents.
 The operation is idempotent.
 A Workflow Run cannot create new Session-owned work after close begins.
+Effect-TS/effect#7183 blocks safe interruption while an active Activity settles.
+Loom does not override the Effect Workflow terminal state.
 
 ## Files
 

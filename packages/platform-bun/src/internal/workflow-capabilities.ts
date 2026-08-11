@@ -72,7 +72,7 @@ const launchAgent = Effect.fn("WorkflowCapabilities.launchAgent")(function* (
   const result = yield* awaitWorkflowAgent(config, jobs, agent).pipe(
     Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))),
   );
-  // Issue 52 will replace this close-time classification with an Interrupted run state.
+  // Effect-TS/effect#7183 blocks the correct safe-interrupt classification.
   if (
     JobOutcome.guards.Cancelled(result.outcome) &&
     (yield* sessions.isClosing(context.sessionId))
@@ -114,7 +114,7 @@ const completeJob = Effect.fn("WorkflowCapabilities.completeJob")(function* (
     );
   }
   if (job.status === "Cancelled") {
-    // Issue 52 will replace this close-time classification with an Interrupted run state.
+    // Effect-TS/effect#7183 blocks the correct safe-interrupt classification.
     if (yield* sessions.isClosing(context.sessionId)) {
       return yield* new SessionClosingError({ sessionId: context.sessionId });
     }
