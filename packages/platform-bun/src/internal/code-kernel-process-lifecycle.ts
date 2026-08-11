@@ -4,7 +4,7 @@ import {
   ProcessObservation,
   type ProcessInspectorShape,
 } from "@cvr/loom-runtime";
-import { Deferred, Effect, Option } from "effect";
+import { Cause, Deferred, Effect, Exit, Option, Scope } from "effect";
 import { CodeKernelProcessError } from "./code-kernel-process-error.js";
 
 export interface KernelProcessLifecycle {
@@ -50,6 +50,15 @@ export const releaseKernelProcess = (registration: KernelProcessRegistration) =>
         ),
       ),
   });
+
+export const closeKernelProcessScope = <E>(
+  registration: KernelProcessRegistration,
+  scope: Scope.Closeable,
+  cause: Cause.Cause<E>,
+) =>
+  Deferred.succeed(registration.identity, Option.none()).pipe(
+    Effect.andThen(Scope.close(scope, Exit.failCause(cause))),
+  );
 
 const inspectProcessIdentity = Effect.fn("CodeKernelProcess.inspectIdentity")(function* (
   inspector: ProcessInspectorShape,

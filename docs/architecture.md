@@ -82,7 +82,8 @@ One entity activation owns one scoped Code Kernel factory result.
 The entity mailbox serializes Cell and Code Kernel control operations.
 The Code Kernel starts when the first cell needs it.
 The Code Kernel remains active until the Agent ends or Effect Cluster passivates it.
-Effect Cluster passivates an idle Agent after one minute by default.
+The Loom orchestrator gives an idle Agent a five-minute lease by default.
+Other local entities retain Effect Cluster's one-minute idle policy.
 See [Agent actor ownership](./adr/0006-key-agent-actors-by-session-and-agent.md).
 
 ### Code Kernel

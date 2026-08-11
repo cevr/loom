@@ -34,7 +34,9 @@ A replacement worker starts again at request ID one.
 Effect Cluster passivation also resets the request sequence.
 The Agent activation owns the sequence state.
 Passivation drops that activation state.
-Effect Cluster passivates an idle Agent after one minute by default.
+The Loom orchestrator gives an idle Agent a five-minute lease by default.
+Effect Cluster entity termination timeout bounds Scope shutdown after passivation.
+It does not define the idle lease.
 
 The local Code Kernel is a trusted single-user recovery boundary.
 It is not a security boundary.

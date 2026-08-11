@@ -5,7 +5,13 @@ export {
   layerActorStateHub,
   makeActorStateHub,
 } from "./internal/actor-state-hub.js";
-export { AgentActor, agentEntityId, layerAgentActor } from "./internal/agent-actor.js";
+export {
+  type AgentActorPolicy,
+  AgentActor,
+  agentEntityId,
+  layerAgentActor,
+  layerAgentActorWith,
+} from "./internal/agent-actor.js";
 export {
   ConnectionHandshake,
   type ConnectionHandshakeConfig,

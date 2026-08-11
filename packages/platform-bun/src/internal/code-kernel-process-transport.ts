@@ -3,7 +3,6 @@ import {
   Cause,
   Duration,
   Effect,
-  Exit,
   Fiber,
   FileSystem,
   Option,
@@ -26,6 +25,7 @@ import {
 import type { KernelDiagnosticFile } from "./code-kernel-diagnostic-store.js";
 import { CodeKernelProcessError } from "./code-kernel-process-error.js";
 import {
+  closeKernelProcessScope,
   type KernelProcessLifecycle,
   type KernelProcessRegistration,
   makeKernelProcessRegistration,
@@ -180,6 +180,7 @@ export const spawnKernelChild = Effect.fn("CodeKernelProcess.spawn")(function* (
 ) {
   const scope = yield* Scope.fork(parentScope);
   const registration = yield* makeKernelProcessRegistration(lifecycle);
+  yield* Scope.addFinalizer(scope, releaseKernelProcess(registration));
   return yield* Effect.gen(function* () {
     const responses = yield* Queue.unbounded<CodeKernelProcessResponse, CodeKernelProcessError>();
     const stderrTail = yield* Ref.make("");
@@ -213,9 +214,8 @@ export const spawnKernelChild = Effect.fn("CodeKernelProcess.spawn")(function* (
     yield* Effect.forkIn(listenForResponses(child), scope);
     yield* waitForReady(config, child);
     yield* Effect.uninterruptible(registerKernelProcess(registration, handle.pid));
-    yield* Scope.addFinalizer(scope, releaseKernelProcess(registration));
     return child;
-  }).pipe(Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
+  }).pipe(Effect.onError((cause) => closeKernelProcessScope(registration, scope, cause)));
 });
 
 const writeRequest = Effect.fn("CodeKernelProcess.writeRequest")(function* (

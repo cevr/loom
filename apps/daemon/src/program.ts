@@ -23,16 +23,28 @@ import {
   WorkflowCapabilityExecutor,
   WorkflowRunRecovery,
   layerActorStateHub,
-  layerAgentActor,
+  layerAgentActorWith,
   layerConnectionHandshake,
   reconcileCodeKernelProcesses,
 } from "@cvr/loom-runtime";
-import { Clock, Context, Effect, FileSystem, Layer, Path } from "effect";
+import { Clock, Context, type Duration, Effect, FileSystem, Layer, Path } from "effect";
 import { SingleRunner } from "effect/unstable/cluster";
 import { type DaemonConfig, loadDaemonConfig } from "./daemon-config.js";
 import { layerLoomRpcHandlers } from "./rpc-handlers.js";
 
+export type { DaemonConfig } from "./daemon-config.js";
+
 const codeKernelEntry = new URL("../../code-kernel/src/main.ts", import.meta.url).pathname;
+
+export interface DaemonPolicy {
+  readonly codeKernelIdleLease: Duration.Input;
+  readonly entityIdleLease: Duration.Input;
+}
+
+export const defaultDaemonPolicy = {
+  codeKernelIdleLease: "5 minutes",
+  entityIdleLease: "1 minute",
+} satisfies DaemonPolicy;
 
 export interface DaemonRecoveryPhases<E1, E2, E3, E4, E5> {
   readonly codeKernels: Effect.Effect<void, E1>;
@@ -86,7 +98,7 @@ type DaemonRecovery<E> = (services: Context.Context<RecoveryServices>) => Effect
 const recoverApplication: DaemonRecovery<Effect.Error<typeof recoverDaemon>> = (services) =>
   recoverDaemon.pipe(Effect.provide(services));
 
-const makeAgentLayer = (config: DaemonConfig) => {
+const makeAgentLayer = (config: DaemonConfig, policy: DaemonPolicy) => {
   const processServices = Layer.mergeAll(
     layerSqliteCodeKernelProcessStore,
     layerBunProcessInspector,
@@ -97,7 +109,9 @@ const makeAgentLayer = (config: DaemonConfig) => {
     diagnosticsDirectory: `${config.workspaceRoot}/.loom/diagnostics/code-kernels`,
   }).pipe(Layer.provideMerge(processServices));
   const dependencies = Layer.merge(kernelFactory, layerSqliteCellLedger);
-  return layerAgentActor.pipe(Layer.provideMerge(dependencies));
+  return layerAgentActorWith({ idleLease: policy.codeKernelIdleLease }).pipe(
+    Layer.provideMerge(dependencies),
+  );
 };
 
 const makeJobLayer = (config: DaemonConfig, actors: typeof layerActorStateHub) =>
@@ -117,12 +131,14 @@ const launchDaemon = <E, R, E2>(
   config: DaemonConfig,
   capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
   recover: DaemonRecovery<E2>,
+  policy: DaemonPolicy,
 ) =>
   Effect.gen(function* () {
     const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
     const cluster = SingleRunner.layer({
       runnerStorage: "sql",
       shardingConfig: {
+        entityMaxIdleTime: policy.entityIdleLease,
         entityMessagePollInterval: "100 millis",
         entityTerminationTimeout: "1 second",
       },
@@ -132,7 +148,7 @@ const launchDaemon = <E, R, E2>(
     const workflows = layerLoomWorkflowRuntime.pipe(Layer.provide([capabilities, actors]));
     const application = Layer.mergeAll(
       actors,
-      makeAgentLayer(config),
+      makeAgentLayer(config, policy),
       layerSqliteWorkflowChildAgentStore,
       workflows,
     ).pipe(
@@ -157,13 +173,14 @@ export const runLoomDaemonWithRecovery = <E, R, E2>(
   config: DaemonConfig,
   capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
   recover: DaemonRecovery<E2>,
+  policy: DaemonPolicy = defaultDaemonPolicy,
 ) =>
   Effect.gen(function* () {
     yield* prepareDaemonSocket(config.socketPath);
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     yield* fs.makeDirectory(path.dirname(config.databasePath), { recursive: true });
-    return yield* launchDaemon(config, capabilities, recover).pipe(
+    return yield* launchDaemon(config, capabilities, recover, policy).pipe(
       Effect.provide(layerLoomSqlite({ filename: config.databasePath })),
     );
   });
@@ -171,7 +188,8 @@ export const runLoomDaemonWithRecovery = <E, R, E2>(
 export const runLoomDaemon = <E, R>(
   config: DaemonConfig,
   capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
-) => runLoomDaemonWithRecovery(config, capabilities, recoverApplication);
+  policy: DaemonPolicy = defaultDaemonPolicy,
+) => runLoomDaemonWithRecovery(config, capabilities, recoverApplication, policy);
 
 export const program = Effect.gen(function* () {
   const config = yield* loadDaemonConfig;

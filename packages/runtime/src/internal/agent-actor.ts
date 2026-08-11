@@ -8,7 +8,7 @@ import {
   CellInterruptedError,
   EvaluateCellRequest,
 } from "@cvr/loom-protocol";
-import { Effect, Schema } from "effect";
+import { type Duration, Effect, Schema } from "effect";
 import { Actor } from "effect-encore";
 import { CellLedger, CellLedgerClaim, type CellLedgerShape } from "./cell-ledger.js";
 import type { CodeKernelShape } from "./code-kernel.js";
@@ -123,20 +123,28 @@ const makeEvaluateCell = (ledger: CellLedgerShape, kernel: CodeKernelShape) =>
     );
   });
 
-export const layerAgentActor = Actor.toLayer(
-  AgentActor,
-  Effect.gen(function* () {
-    const factory = yield* CodeKernelFactory;
-    const address = yield* Actor.CurrentAddress;
-    const [sessionId, agentId] = yield* agentOwnerCodec.decode(address.entityId).pipe(Effect.orDie);
-    const kernel = yield* factory.spawn({ sessionId, agentId });
-    const ledger = yield* CellLedger;
+const agentHandlers = Effect.gen(function* () {
+  const factory = yield* CodeKernelFactory;
+  const address = yield* Actor.CurrentAddress;
+  const [sessionId, agentId] = yield* agentOwnerCodec.decode(address.entityId).pipe(Effect.orDie);
+  const kernel = yield* factory.spawn({ sessionId, agentId });
+  const ledger = yield* CellLedger;
 
-    return AgentActor.of({
-      EvaluateCell: ({ operation }) => makeEvaluateCell(ledger, kernel)(operation),
-      ResetCodeKernel: () => kernel.reset,
-      CloseCodeKernel: () => kernel.close,
-    });
-  }),
-  { concurrency: 1 },
-);
+  return AgentActor.of({
+    EvaluateCell: ({ operation }) => makeEvaluateCell(ledger, kernel)(operation),
+    ResetCodeKernel: () => kernel.reset,
+    CloseCodeKernel: () => kernel.close,
+  });
+});
+
+export interface AgentActorPolicy {
+  readonly idleLease: Duration.Input;
+}
+
+export const layerAgentActorWith = (policy: AgentActorPolicy) =>
+  Actor.toLayer(AgentActor, agentHandlers, {
+    concurrency: 1,
+    maxIdleTime: policy.idleLease,
+  });
+
+export const layerAgentActor = Actor.toLayer(AgentActor, agentHandlers, { concurrency: 1 });

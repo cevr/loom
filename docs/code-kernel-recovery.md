@@ -62,6 +62,11 @@ It stores the PID, process group ID, and process start ID after the ready frame.
 It stores this identity before the first Cell request.
 It removes the exact record after the process exits.
 
+The Loom orchestrator gives an idle Agent a five-minute lease by default.
+Each Agent message restarts the lease.
+The same scoped Code Kernel keeps its live bindings during this lease.
+Effect Cluster passivation closes the exact process after the lease ends.
+
 Daemon startup inspects every stored identity.
 It sends `SIGKILL` only when all identity fields match.
 It waits for that process group to stop before it removes the record.
