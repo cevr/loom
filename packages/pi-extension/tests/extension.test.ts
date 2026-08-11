@@ -1,6 +1,9 @@
 import type { ExtensionAPI, RegisteredCommand } from "@earendil-works/pi-coding-agent";
-import { defaultWorkflowBudget } from "@cvr/loom-domain";
+import { defaultWorkflowBudget, JobId, SessionId } from "@cvr/loom-domain";
 import {
+  ReadJobOutputRequest,
+  StartJobRequest,
+  WaitForJobRequest,
   workflowCapabilitiesGuide,
   workflowSignalsGuide,
   workflowSourceGuide,
@@ -8,6 +11,11 @@ import {
 import { expect, it } from "bun:test";
 import { Effect, Option } from "effect";
 import loomExtension, { shouldCloseSession } from "../src/index.js";
+import {
+  readJobOutputRequest,
+  startJobRequest,
+  waitForJobRequest,
+} from "../src/internal/job-tools.js";
 import { runTool } from "../src/internal/tool-result.js";
 import { workflowRequest } from "../src/internal/workflow-tools.js";
 
@@ -95,6 +103,32 @@ it("resolves a partial Workflow Budget through the domain schema", () =>
     maxSteps: 12,
     maxTokens: Option.some(1_000),
   }));
+
+it("uses the protocol Job request defaults", () =>
+  expect(
+    Effect.runPromise(
+      Effect.all([
+        startJobRequest("session-1", "job-1", { command: "true" }),
+        waitForJobRequest("session-1", { jobId: "job-1" }),
+        readJobOutputRequest("session-1", { jobId: "job-1", stream: "stdout" }),
+      ]),
+    ),
+  ).resolves.toEqual([
+    StartJobRequest.make({
+      sessionId: SessionId.make("session-1"),
+      jobId: JobId.make("job-1"),
+      command: "true",
+    }),
+    WaitForJobRequest.make({
+      sessionId: SessionId.make("session-1"),
+      jobId: JobId.make("job-1"),
+    }),
+    ReadJobOutputRequest.make({
+      sessionId: SessionId.make("session-1"),
+      jobId: JobId.make("job-1"),
+      stream: "stdout",
+    }),
+  ]));
 
 it("reports a typed Loom tool failure to Pi", () =>
   expect(

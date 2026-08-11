@@ -60,6 +60,10 @@ _Avoid_: Command, process, task
 The limited period in which a requester waits directly for a job.
 _Avoid_: Timeout
 
+**Job Request**:
+The resolved command, ownership, wait, and output limits that cross the Loom protocol boundary.
+_Avoid_: Client options, adapter defaults
+
 **Detached Job**:
 A job whose lifetime does not belong to its session.
 _Avoid_: Background process, orphan

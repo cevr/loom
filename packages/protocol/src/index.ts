@@ -21,7 +21,6 @@ export { HandshakeSuccess } from "./handshake-success.js";
 export { IncompatibleProtocolError } from "./incompatible-protocol-error.js";
 export {
   CancelJob,
-  defaultForegroundLeaseMillis,
   DetachJob,
   InspectJob,
   JobOperation,

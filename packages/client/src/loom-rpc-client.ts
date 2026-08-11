@@ -4,6 +4,8 @@ import {
   LoomRpcs,
   maximumCellSourceLength,
   minimumProtocolVersion,
+  StartJobRequest,
+  WaitForJobRequest,
   type EvaluateCellRequest,
 } from "@cvr/loom-protocol";
 import { Duration, Effect, Layer, Option, Schedule, Scope } from "effect";
@@ -187,7 +189,7 @@ const makeJobLifecycleControls = (
       config,
       runHandshake,
       rpc["Job.Start"],
-      (request) => leaseTimeout(request.foregroundLeaseMillis),
+      (request) => leaseTimeout(StartJobRequest.make(request).foregroundLeaseMillis),
     ),
     awaitJob: makeDaemonRequest(
       "LoomRpcClient.awaitJob",
@@ -195,7 +197,7 @@ const makeJobLifecycleControls = (
       config,
       runHandshake,
       rpc["Job.Await"],
-      (request) => leaseTimeout(request.foregroundLeaseMillis),
+      (request) => leaseTimeout(WaitForJobRequest.make(request).foregroundLeaseMillis),
     ),
     cancelJob: makeDaemonRequest(
       "LoomRpcClient.cancelJob",

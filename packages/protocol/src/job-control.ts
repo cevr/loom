@@ -1,9 +1,29 @@
 import { JobAddress, JobRecord, JobRequest } from "@cvr/loom-domain";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Rpc } from "effect/unstable/rpc";
 
-export const defaultForegroundLeaseMillis = 5 * 60 * 1_000;
+const defaultForegroundLeaseMillis = 5 * 60 * 1_000;
+const defaultJobOutputBytes = 16 * 1_024;
 export const maximumJobOutputBytes = 256 * 1_024;
+
+const foregroundLeaseMillis = Schema.Natural.pipe(
+  Schema.withDecodingDefaultKey(Effect.succeed(defaultForegroundLeaseMillis)),
+  Schema.withConstructorDefault(Effect.succeed(defaultForegroundLeaseMillis)),
+);
+const attached = Schema.Boolean.pipe(
+  Schema.withDecodingDefaultKey(Effect.succeed(true)),
+  Schema.withConstructorDefault(Effect.succeed(true)),
+);
+const outputSequence = Schema.Natural.pipe(
+  Schema.withDecodingDefaultKey(Effect.succeed(0)),
+  Schema.withConstructorDefault(Effect.succeed(0)),
+);
+const outputBytes = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: maximumJobOutputBytes }),
+).pipe(
+  Schema.withDecodingDefaultKey(Effect.succeed(defaultJobOutputBytes)),
+  Schema.withConstructorDefault(Effect.succeed(defaultJobOutputBytes)),
+);
 
 export const JobState = Schema.Struct({
   jobId: JobRecord.fields.jobId,
@@ -17,14 +37,17 @@ export const JobState = Schema.Struct({
 export type JobState = typeof JobState.Type;
 
 export const StartJobRequest = Schema.Struct({
-  ...JobRequest.fields,
-  foregroundLeaseMillis: Schema.Natural,
+  sessionId: JobRequest.fields.sessionId,
+  jobId: JobRequest.fields.jobId,
+  command: JobRequest.fields.command,
+  attached,
+  foregroundLeaseMillis,
 });
 export type StartJobRequest = typeof StartJobRequest.Type;
 
 export const WaitForJobRequest = Schema.Struct({
   ...JobAddress.fields,
-  foregroundLeaseMillis: Schema.Natural,
+  foregroundLeaseMillis,
 });
 export type WaitForJobRequest = typeof WaitForJobRequest.Type;
 
@@ -34,8 +57,8 @@ export type JobOutputStream = typeof JobOutputStream.Type;
 export const ReadJobOutputRequest = Schema.Struct({
   ...JobAddress.fields,
   stream: JobOutputStream,
-  sequence: Schema.Natural,
-  maximumBytes: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumJobOutputBytes })),
+  sequence: outputSequence,
+  maximumBytes: outputBytes,
 });
 export type ReadJobOutputRequest = typeof ReadJobOutputRequest.Type;
 

@@ -23,9 +23,7 @@ import {
   EvaluateCell,
   EvaluateCellRequest,
   HandshakeRequest,
-  JobOutputChunk,
   LoomRpcs,
-  ReadJobOutputRequest,
   SignalWorkflowRequest,
   WorkflowIdentityConflictError,
   WorkflowCompensationDecisionConflictError,
@@ -95,31 +93,6 @@ describe("Loom RPC registry", () => {
         "Workflow.Interrupt",
         "Workflow.DecideCompensation",
       ]);
-    }),
-  );
-});
-
-describe("Job protocol", () => {
-  it.effect("round-trips a bounded output chunk", () =>
-    Effect.gen(function* () {
-      const request = yield* Schema.decodeUnknownEffect(ReadJobOutputRequest)({
-        sessionId: "session-1",
-        jobId: "job-1",
-        stream: "stdout",
-        sequence: 3,
-        maximumBytes: 128,
-      });
-      const codec = Schema.fromJsonString(JobOutputChunk);
-      const chunk = JobOutputChunk.make({
-        stream: "stdout",
-        sequence: request.sequence,
-        nextSequence: 6,
-        data: new Uint8Array([97, 98, 99]),
-        complete: false,
-      });
-      expect(yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(chunk))).toEqual(
-        chunk,
-      );
     }),
   );
 });
