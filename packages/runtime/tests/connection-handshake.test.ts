@@ -12,6 +12,7 @@ const workspaceRoot = WorkspaceRoot.make("/workspace");
 const handshake = makeConnectionHandshake({
   workspaceRoot,
   daemonStartedAtMillis: 1234,
+  codeKernelIdleLease: "5 minutes",
 });
 
 it.effect("selects the highest common protocol version", () =>
@@ -27,6 +28,7 @@ it.effect("selects the highest common protocol version", () =>
       protocolVersion: currentProtocolVersion,
       maximumFrameSize,
       daemonStartedAtMillis: 1234,
+      codeKernelIdleLeaseMillis: 300_000,
     });
   }),
 );

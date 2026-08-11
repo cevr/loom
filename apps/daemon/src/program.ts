@@ -159,7 +159,11 @@ const launchDaemon = <E, R, E2>(
     const handlers = layerLoomRpcHandlers.pipe(
       Layer.provide(application),
       Layer.provide(
-        layerConnectionHandshake({ workspaceRoot: config.workspaceRoot, daemonStartedAtMillis }),
+        layerConnectionHandshake({
+          workspaceRoot: config.workspaceRoot,
+          daemonStartedAtMillis,
+          codeKernelIdleLease: policy.codeKernelIdleLease,
+        }),
       ),
     );
     const server = layerBunLoomServer({ socketPath: config.socketPath }).pipe(

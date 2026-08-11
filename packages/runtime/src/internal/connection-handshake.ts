@@ -9,11 +9,12 @@ import {
   type HandshakeError,
   type HandshakeRequest,
 } from "@cvr/loom-protocol";
-import { Context, Effect, Layer } from "effect";
+import { Context, Duration, Effect, Layer } from "effect";
 
 export interface ConnectionHandshakeConfig {
   readonly workspaceRoot: WorkspaceRoot;
   readonly daemonStartedAtMillis: number;
+  readonly codeKernelIdleLease: Duration.Input;
   readonly maximumFrameSize?: number;
 }
 
@@ -59,6 +60,7 @@ export const makeConnectionHandshake = (
       protocolVersion: yield* negotiateVersion(request),
       maximumFrameSize: config.maximumFrameSize ?? maximumFrameSize,
       daemonStartedAtMillis: config.daemonStartedAtMillis,
+      codeKernelIdleLeaseMillis: Duration.toMillis(config.codeKernelIdleLease),
     });
   });
   return ConnectionHandshake.of({ handshake });

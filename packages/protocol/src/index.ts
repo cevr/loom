@@ -1,3 +1,4 @@
+export { ActorStateSnapshot, WatchActorStates } from "./actor-state.js";
 export { CellEvaluation } from "./cell-evaluation.js";
 export { CellCompilationError } from "./cell-compilation-error.js";
 export { CellEvaluationError, CellKernelError } from "./cell-evaluation-error.js";

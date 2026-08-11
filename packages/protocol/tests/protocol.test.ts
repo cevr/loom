@@ -78,6 +78,7 @@ describe("Loom RPC registry", () => {
       expect(Array.from(LoomRpcs.requests.keys())).toEqual([
         "Connection.Handshake",
         "Session.Close",
+        "ActorState.Watch",
         "CodeKernel.EvaluateCell",
         "CodeKernel.Reset",
         "Job.Start",

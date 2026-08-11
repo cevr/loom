@@ -1,4 +1,4 @@
-import type { WorkspaceRoot } from "@cvr/loom-domain";
+import type { SessionId, WorkspaceRoot } from "@cvr/loom-domain";
 import {
   currentProtocolVersion,
   LoomRpcs,
@@ -8,7 +8,7 @@ import {
   WaitForJobRequest,
   type EvaluateCellRequest,
 } from "@cvr/loom-protocol";
-import { Duration, Effect, Layer, Option, Schedule, Scope } from "effect";
+import { Duration, Effect, Layer, Option, Schedule, Scope, Stream } from "effect";
 import { RpcClient, RpcClientError } from "effect/unstable/rpc";
 import {
   DaemonUnavailableError,
@@ -71,6 +71,18 @@ const makeDaemonRequest = <Request, Success, Error, Requirements>(
       timeoutFor?.(request) ?? config.requestTimeout ?? "10 seconds",
     ),
   );
+
+const makeActorStateStream =
+  (config: LoomRpcClientConfig, rpc: RpcClientShape, runHandshake: LoomClientShape["handshake"]) =>
+  (sessionId: SessionId) =>
+    Stream.fromEffect(runHandshake).pipe(
+      Stream.flatMap(() => rpc["ActorState.Watch"]({ sessionId })),
+      Stream.catchTag("RpcClientError", (cause) =>
+        Stream.fail(
+          unavailable(config, "watchActorStates", "TransportFailure", Option.some(cause)),
+        ),
+      ),
+    );
 
 const makeHandshake = (config: LoomRpcClientConfig, rpc: RpcClientShape) =>
   Effect.fn("LoomRpcClient.handshake")(function* () {
@@ -235,6 +247,7 @@ const makeLoomRpcClient = (
       ...makeJobControls(config, rpc, runHandshake),
       ...makeWorkflowControls(config, rpc, runHandshake),
       handshake: runHandshake,
+      watchActorStates: makeActorStateStream(config, rpc, runHandshake),
       closeSession: makeDaemonRequest(
         "LoomRpcClient.closeSession",
         "closeSession",

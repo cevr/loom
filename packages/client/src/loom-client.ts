@@ -1,5 +1,6 @@
 import type {
   AgentOwner,
+  ActorStateProjection,
   JobAddress,
   WorkflowRunAddress,
   WorkflowRunRequest,
@@ -27,7 +28,7 @@ import type {
   WorkflowRunState,
   WaitForJobRequest,
 } from "@cvr/loom-protocol";
-import { Context, type Effect, type Schema } from "effect";
+import { Context, type Effect, type Schema, type Stream } from "effect";
 import type { DaemonUnavailableError } from "./daemon-unavailable-error.js";
 import type { MessageTooLargeError } from "./message-too-large-error.js";
 
@@ -45,6 +46,9 @@ export interface LoomClientShape {
   readonly closeSession: (
     sessionId: AgentOwner["sessionId"],
   ) => Effect.Effect<void, CloseSessionError | HandshakeError | DaemonUnavailableError>;
+  readonly watchActorStates: (
+    sessionId: AgentOwner["sessionId"],
+  ) => Stream.Stream<ReadonlyArray<ActorStateProjection>, HandshakeError | DaemonUnavailableError>;
   readonly startJob: (
     request: StartJobRequest,
   ) => Effect.Effect<JobState, JobRpcError | HandshakeError | DaemonUnavailableError>;

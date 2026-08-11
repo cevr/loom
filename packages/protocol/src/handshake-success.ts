@@ -7,5 +7,6 @@ export const HandshakeSuccess = Schema.Struct({
   protocolVersion: ProtocolVersion,
   maximumFrameSize: Schema.Int.check(Schema.isGreaterThan(0)),
   daemonStartedAtMillis: Schema.Natural,
+  codeKernelIdleLeaseMillis: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 export type HandshakeSuccess = typeof HandshakeSuccess.Type;

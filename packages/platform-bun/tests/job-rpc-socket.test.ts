@@ -4,7 +4,7 @@ import { JobId, SessionId, WorkspaceRoot } from "@cvr/loom-domain";
 import { LoomRpcs } from "@cvr/loom-protocol";
 import { makeConnectionHandshake } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { type Duration, Effect, FileSystem, Layer } from "effect";
+import { type Duration, Effect, FileSystem, Layer, Stream } from "effect";
 import { layerBunLoomClient, layerBunLoomServer } from "../src/index.js";
 import { makeStubJobHandlers } from "./job-rpc-test-support.js";
 
@@ -23,8 +23,10 @@ const layerHandlers = (startDelay: Duration.Input) =>
         "Connection.Handshake": makeConnectionHandshake({
           workspaceRoot,
           daemonStartedAtMillis: 100,
+          codeKernelIdleLease: "5 minutes",
         }).handshake,
         "Session.Close": unused,
+        "ActorState.Watch": () => Stream.empty,
         "CodeKernel.EvaluateCell": unused,
         "CodeKernel.Reset": unused,
         "Workflow.Execute": unused,

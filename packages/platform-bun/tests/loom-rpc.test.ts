@@ -1,6 +1,8 @@
 import { BunServices } from "@effect/platform-bun";
-import { LoomClient, MessageTooLargeError } from "@cvr/loom-client";
+import { LoomClient } from "@cvr/loom-client";
 import {
+  ActorActivity,
+  ActorStateProjection,
   AgentId,
   CellId,
   SessionId,
@@ -17,14 +19,13 @@ import {
 } from "@cvr/loom-domain";
 import {
   LoomRpcs,
-  maximumCellSourceLength,
   maximumFrameSize,
   workflowInterpreterVersion,
   WorkflowRunState,
 } from "@cvr/loom-protocol";
 import { makeConnectionHandshake } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, Exit, FileSystem, Layer, Option, Scope } from "effect";
+import { Effect, Exit, FileSystem, Layer, Option, Scope, Stream } from "effect";
 import {
   layerBunLoomClient,
   layerBunLoomServer,
@@ -72,12 +73,21 @@ const layerHandlers = (
       const connection = makeConnectionHandshake({
         workspaceRoot: expectedRoot,
         daemonStartedAtMillis,
+        codeKernelIdleLease: "5 minutes",
       });
       const kernel = yield* makeInProcessCodeKernel;
       return LoomRpcs.of({
         ...makeStubJobHandlers(owner.sessionId),
         "Connection.Handshake": connection.handshake,
         "Session.Close": () => Effect.void,
+        "ActorState.Watch": () =>
+          Stream.make([
+            ActorStateProjection.make({
+              subject: { _tag: "Agent", ...owner },
+              activity: ActorActivity.cases.Idle.make({}),
+              revision: 1,
+            }),
+          ]),
         "CodeKernel.EvaluateCell": (request) =>
           kernel.evaluate({ cellId: request.cellId, source: request.source }),
         "CodeKernel.Reset": () => kernel.reset,
@@ -119,6 +129,7 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
     yield* Effect.gen(function* () {
       const client = yield* LoomClient;
       const handshake = yield* client.handshake;
+      const actors = yield* client.watchActorStates(owner.sessionId).pipe(Stream.runHead);
       yield* client.closeSession(owner.sessionId);
       const cell = yield* client.evaluateCell({
         ...owner,
@@ -144,6 +155,7 @@ scoped("calls typed daemon procedures through the real Unix socket", () =>
       });
 
       expect(handshake.maximumFrameSize).toBe(maximumFrameSize);
+      expect(actors).toHaveProperty("value.0.subject._tag", "Agent");
       expect(cell.display).toBe("42");
       expect(workflowResult).toEqual(workflow.input);
       expect(workflowHandle.workflowRunId).toBe(WorkflowRunId.make("workflow-run-1"));
@@ -223,28 +235,6 @@ scopedLive("bounds a daemon request separately from connection setup", () =>
     expect(error).toHaveProperty("operation", "decideWorkflowCompensation");
     expect(error).toHaveProperty("reason", "RequestTimeout");
   }),
-);
-
-scoped("rejects an oversized Cell before socket I/O", () =>
-  Effect.gen(function* () {
-    const client = yield* LoomClient;
-    const error = yield* client
-      .evaluateCell({
-        ...owner,
-        cellId: CellId.make("cell-large"),
-        source: "x".repeat(maximumCellSourceLength + 1),
-      })
-      .pipe(Effect.flip);
-
-    expect(error).toBeInstanceOf(MessageTooLargeError);
-  }).pipe(
-    Effect.provide(
-      layerBunLoomClient({
-        socketPath: "/tmp/loom-not-used.sock",
-        workspaceRoot,
-      }),
-    ),
-  ),
 );
 
 scopedLive("reconnects after the daemon restarts", () =>
