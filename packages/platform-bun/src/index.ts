@@ -41,6 +41,10 @@ export {
   makeSqlitePluginStateStore,
 } from "./internal/sqlite-plugin-state-store.js";
 export {
+  layerSqliteSessionClosureStore,
+  makeSqliteSessionClosureStore,
+} from "./internal/sqlite-session-closure-store.js";
+export {
   layerSqliteCodeKernelProcessStore,
   makeSqliteCodeKernelProcessStore,
 } from "./internal/sqlite-code-kernel-process-store.js";

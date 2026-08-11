@@ -22,6 +22,7 @@ const inspectDatabase = Effect.gen(function* () {
           'code_kernel_processes',
           'jobs',
           'plugin_state',
+          'session_closures',
           'workflow_run_acceptance'
         )
       ORDER BY name
@@ -93,6 +94,7 @@ scopedLive("creates the Loom schema and preserves current data", () =>
         "code_kernel_processes",
         "jobs",
         "plugin_state",
+        "session_closures",
         "workflow_run_acceptance",
       ],
       cells: [{ source: "const answer = 42" }],

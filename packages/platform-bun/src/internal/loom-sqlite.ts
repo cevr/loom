@@ -146,6 +146,20 @@ const createPluginSchema = Effect.gen(function* () {
   `;
 });
 
+const createSessionSchema = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    CREATE TABLE IF NOT EXISTS session_closures (
+      session_id TEXT PRIMARY KEY,
+      retain_until INTEGER NOT NULL
+    )
+  `;
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS session_closures_retention
+    ON session_closures (retain_until)
+  `;
+});
+
 const createSchema = Effect.all(
   [
     createKernelSchema,
@@ -153,6 +167,7 @@ const createSchema = Effect.all(
     createWorkflowSchema,
     createCapabilitySchema,
     createPluginSchema,
+    createSessionSchema,
   ],
   { discard: true },
 );
