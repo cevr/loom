@@ -73,6 +73,7 @@ export { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
 export { WorkflowRunError } from "./workflow-run-error.js";
 export { WorkflowRunState } from "./workflow-run-state.js";
 export { WorkflowRunNotFoundError } from "./workflow-run-not-found-error.js";
+export { WorkflowRunRetiringError } from "./workflow-run-retiring-error.js";
 export { WorkflowCompensationNotPendingError } from "./workflow-compensation-not-pending-error.js";
 export { WorkflowCompensationDecisionConflictError } from "./workflow-compensation-decision-conflict-error.js";
 export { WorkflowCompensationDecisionTimeoutError } from "./workflow-compensation-decision-timeout-error.js";

@@ -39,7 +39,8 @@ const makeClaim = (sql: SqlClient.SqlClient) =>
         RETURNING
           incarnation_id AS incarnationId,
           workflow_run_id AS workflowRunId,
-          request_digest AS digest
+          request_digest AS digest,
+          status
       `,
   });
 

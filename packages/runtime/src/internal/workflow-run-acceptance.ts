@@ -11,6 +11,7 @@ import {
   WorkflowIdentityConflictError,
   WorkflowRunAcceptanceError,
   WorkflowRunNotFoundError,
+  WorkflowRunRetiringError,
 } from "@cvr/loom-protocol";
 import { Context, Crypto, Effect, Inspectable, Layer, Option, Schema } from "effect";
 import { canonicalJsonSha256 } from "effect-encore";
@@ -22,7 +23,7 @@ export interface WorkflowRunAcceptanceShape {
     request: WorkflowRunRequest,
   ) => Effect.Effect<
     AcceptedWorkflowRun,
-    WorkflowIdentityConflictError | WorkflowRunAcceptanceError
+    WorkflowIdentityConflictError | WorkflowRunAcceptanceError | WorkflowRunRetiringError
   >;
   readonly authorize: (
     address: WorkflowRunAddress,
@@ -112,6 +113,12 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
     const digest = yield* digestRequest(request);
     const { incarnationId, workflowRunId } = yield* makeCandidate(request);
     const accepted = yield* store.claim(identity, digest, incarnationId, workflowRunId);
+    if (accepted.status === "Retiring") {
+      return yield* new WorkflowRunRetiringError({
+        identity,
+        workflowRunId: accepted.workflowRunId,
+      });
+    }
     if (accepted.digest !== digest) {
       return yield* new WorkflowIdentityConflictError({
         identity,

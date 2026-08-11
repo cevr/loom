@@ -10,7 +10,7 @@ import {
   WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
-import { WorkflowIdentityConflictError } from "@cvr/loom-protocol";
+import { WorkflowIdentityConflictError, WorkflowRunRetiringError } from "@cvr/loom-protocol";
 import { WorkflowRunAcceptance, layerWorkflowRunAcceptance } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
@@ -95,6 +95,12 @@ const countAcceptanceRows = (filename: string) =>
       execute: () => sql`SELECT COUNT(*) AS count FROM workflow_run_acceptance`,
     });
     return (yield* count()).count;
+  }).pipe(Effect.provide(layerLoomSqlite({ filename })), Effect.scoped);
+
+const markRetiring = (filename: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`UPDATE workflow_run_acceptance SET status = 'Retiring'`;
   }).pipe(Effect.provide(layerLoomSqlite({ filename })), Effect.scoped);
 
 scopedLive("creates one acceptance row for concurrent matching requests", () =>
@@ -198,6 +204,39 @@ scopedLive("keeps the accepted request immutable across daemon storage restarts"
         expect(yield* acceptance.accept(request)).toEqual(accepted);
       }),
     );
+  }),
+);
+
+scopedLive("rejects attachment while the accepted Workflow Run retires", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-retiring-" });
+    const filename = `${directory}/loom.sqlite`;
+    const accepted = yield* withAcceptance(
+      filename,
+      WorkflowRunAcceptance.pipe(Effect.flatMap((acceptance) => acceptance.accept(request))),
+    );
+
+    yield* markRetiring(filename);
+
+    const failure = yield* withAcceptance(
+      filename,
+      WorkflowRunAcceptance.pipe(
+        Effect.flatMap((acceptance) => acceptance.accept(request)),
+        Effect.flip,
+      ),
+    );
+
+    expect(failure).toBeInstanceOf(WorkflowRunRetiringError);
+    if (failure instanceof WorkflowRunRetiringError) {
+      expect(failure.identity).toEqual({
+        sessionId: request.sessionId,
+        name: request.definition.name,
+        version: request.definition.version,
+        key: request.key,
+      });
+      expect(failure.workflowRunId).toBe(accepted.workflowRunId);
+    }
   }),
 );
 

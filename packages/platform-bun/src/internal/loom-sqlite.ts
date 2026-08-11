@@ -33,7 +33,9 @@ const createKernelSchema = Effect.gen(function* () {
       incarnation_id TEXT NOT NULL,
       workflow_run_id TEXT NOT NULL UNIQUE,
       request_digest TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Active',
       retire_after INTEGER,
+      CHECK (status IN ('Active', 'Retiring')),
       PRIMARY KEY (session_id, workflow_name, workflow_version, workflow_key)
     )
   `;

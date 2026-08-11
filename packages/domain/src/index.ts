@@ -126,6 +126,9 @@ export const WorkflowRunExecution = Schema.Struct({
 });
 export type WorkflowRunExecution = typeof WorkflowRunExecution.Type;
 
+export const WorkflowRunAcceptanceStatus = Schema.Literals(["Active", "Retiring"]);
+export type WorkflowRunAcceptanceStatus = typeof WorkflowRunAcceptanceStatus.Type;
+
 export const AcceptedWorkflowRun = Schema.Struct({
   incarnationId: WorkflowIncarnationId,
   workflowRunId: WorkflowRunId,

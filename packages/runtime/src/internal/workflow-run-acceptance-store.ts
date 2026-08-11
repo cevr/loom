@@ -1,6 +1,7 @@
 import {
   WorkflowIncarnationId,
   WorkflowIdentity,
+  WorkflowRunAcceptanceStatus,
   WorkflowRequestDigest,
   WorkflowRunId,
   type WorkflowRunAddress,
@@ -12,6 +13,7 @@ export const WorkflowRunClaim = Schema.Struct({
   incarnationId: WorkflowIncarnationId,
   workflowRunId: WorkflowRunId,
   digest: WorkflowRequestDigest,
+  status: WorkflowRunAcceptanceStatus,
 });
 export type WorkflowRunClaim = typeof WorkflowRunClaim.Type;
 
