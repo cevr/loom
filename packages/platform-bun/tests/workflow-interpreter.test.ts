@@ -77,6 +77,48 @@ it.effect("rejects an undeclared signal", () =>
   }),
 );
 
+it.effect("describes the supported source API after an invalid Step call", () =>
+  Effect.gen(function* () {
+    const error = yield* interpretWorkflow(
+      request(`return await step.run("invalid")`),
+      host((call) => Effect.succeed(execution(call.input))),
+    ).pipe(Effect.flip);
+
+    expect(error).toBeInstanceOf(WorkflowSourceError);
+    expect(error).toHaveProperty("message", expect.stringContaining("await step.run({"));
+    expect(error).toHaveProperty("message", expect.stringContaining("await signal.wait"));
+    expect(error).toHaveProperty("message", expect.stringContaining('"capability":"job"'));
+    expect(error).toHaveProperty("message", expect.stringContaining('"capability":"agent"'));
+  }),
+);
+
+it.effect("rejects excess Step keys with a source diagnostic", () =>
+  Effect.gen(function* () {
+    const error = yield* interpretWorkflow(
+      request(
+        `return await step.run({ stepId: "invalid", capability: "job", input: {}, retries: 3 })`,
+      ),
+      host((call) => Effect.succeed(execution(call.input))),
+    ).pipe(Effect.flip);
+
+    expect(error).toBeInstanceOf(WorkflowSourceError);
+    expect(error).toHaveProperty("message", expect.stringContaining("retries"));
+    expect(error).toHaveProperty("message", expect.stringContaining("await step.run({"));
+  }),
+);
+
+it.effect("describes the async body after unsupported source syntax", () =>
+  Effect.gen(function* () {
+    const error = yield* interpretWorkflow(
+      request(`export default async function workflow() { return true }`),
+      host((call) => Effect.succeed(execution(call.input))),
+    ).pipe(Effect.flip);
+
+    expect(error).toBeInstanceOf(WorkflowSourceError);
+    expect(error).toHaveProperty("message", expect.stringContaining("Do not export a function"));
+  }),
+);
+
 it.effect("rejects a duplicate Step ID before a second operation runs", () =>
   Effect.gen(function* () {
     const calls: Array<WorkflowStepCall> = [];

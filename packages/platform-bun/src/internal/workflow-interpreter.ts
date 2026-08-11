@@ -8,6 +8,7 @@ import {
   type WorkflowStepId,
 } from "@cvr/loom-domain";
 import {
+  workflowArtifactCapability,
   WorkflowArtifactWrite,
   type WorkflowActivityContext,
   WorkflowBudgetExceededError,
@@ -22,7 +23,7 @@ import {
   WorkflowStepExecution,
   type WorkflowArtifactReference,
 } from "@cvr/loom-runtime";
-import { workflowInterpreterVersion } from "@cvr/loom-protocol";
+import { describeWorkflowSourceError, workflowInterpreterVersion } from "@cvr/loom-protocol";
 import { Effect, Option, Predicate, Schema, Scope, Semaphore } from "effect";
 import * as NodeVm from "node:vm";
 import { makeWorkflowBridge, type WorkflowBridge, workflowSourceError } from "./workflow-bridge.js";
@@ -58,10 +59,15 @@ export interface WorkflowInterpreterHost<R> {
   ) => Effect.Effect<Schema.Json, WorkflowRunError, R>;
 }
 
-const decodeHostCall = Schema.decodeUnknownEffect(WorkflowHostCall);
+const decodeHostCall = Schema.decodeUnknownEffect(WorkflowHostCall, {
+  onExcessProperty: "error",
+});
 const decodeResult = Schema.decodeUnknownEffect(Schema.Json);
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Json));
 const textEncoder = new TextEncoder();
+
+const schemaSourceError = (error: Schema.SchemaError) =>
+  new WorkflowSourceError({ message: describeWorkflowSourceError(error.message) });
 
 /* oxlint-disable effect/noNullish -- The VM sandbox requires a null prototype and explicit undefined globals. */
 const deterministicMath = (): object => {
@@ -131,14 +137,14 @@ const evaluateSource = (
     });
     if (!Predicate.isPromiseLike(raw)) {
       return yield* new WorkflowSourceError({
-        message: "Workflow source did not return a Promise.",
+        message: describeWorkflowSourceError("Workflow source did not return a Promise."),
       });
     }
     const value = yield* Effect.tryPromise({
       try: () => raw,
       catch: bridge.sourceError,
     });
-    return yield* decodeResult(value).pipe(Effect.mapError(workflowSourceError));
+    return yield* decodeResult(value).pipe(Effect.mapError(schemaSourceError));
   });
 
 const budgetError = (
@@ -166,7 +172,7 @@ const completeStep = <R>(
     const encoded = yield* encodeJson(result.value).pipe(Effect.orDie);
     const bytes = textEncoder.encode(encoded).byteLength;
     if (bytes <= request.budget.maxInlineStepResultBytes) return result;
-    if (!state.declaredCapabilities.has(WorkflowCapability.make("artifact"))) {
+    if (!state.declaredCapabilities.has(workflowArtifactCapability)) {
       return yield* budgetError(
         "InlineResultBytes",
         request.budget.maxInlineStepResultBytes,
@@ -228,7 +234,7 @@ const makeRunHostCall = <R>(
   const runStep = makeRunStep(request, host, state);
   const declaredSignals = new Set(request.definition.signals);
   return Effect.fn("WorkflowInterpreter.runHostCall")(function* (received: unknown) {
-    const call = yield* decodeHostCall(received).pipe(Effect.mapError(workflowSourceError));
+    const call = yield* decodeHostCall(received).pipe(Effect.mapError(schemaSourceError));
     return yield* WorkflowHostCall.match(call, {
       Step: ({ call: stepCall }) => runStep(stepCall).pipe(Effect.map((result) => result.value)),
       Signal: ({ name }) => {

@@ -1,5 +1,6 @@
 /* oxlint-disable effect/noNewPromise -- This adapter owns the VM Promise bridge. */
 import {
+  describeWorkflowSourceError,
   WorkflowDuplicateStepError,
   WorkflowRunError,
   WorkflowSourceError,
@@ -21,10 +22,12 @@ const decodeSourceError = Schema.decodeUnknownOption(Schema.Struct({ message: Sc
 
 export const workflowSourceError = (cause: unknown): WorkflowSourceError =>
   new WorkflowSourceError({
-    message: Option.match(decodeSourceError(cause), {
-      onNone: () => Inspectable.toStringUnknown(cause),
-      onSome: ({ message }) => message,
-    }),
+    message: describeWorkflowSourceError(
+      Option.match(decodeSourceError(cause), {
+        onNone: () => Inspectable.toStringUnknown(cause),
+        onSome: ({ message }) => message,
+      }),
+    ),
   });
 
 export interface WorkflowBridge {

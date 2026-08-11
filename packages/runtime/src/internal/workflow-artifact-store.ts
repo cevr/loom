@@ -1,9 +1,6 @@
 import { Context, type Effect } from "effect";
 import type { WorkflowRunError } from "@cvr/loom-protocol";
-import type {
-  WorkflowArtifactReference,
-  WorkflowArtifactWrite,
-} from "./workflow-interpreter-model.js";
+import type { WorkflowArtifactReference, WorkflowArtifactWrite } from "@cvr/loom-protocol";
 import type { WorkflowActivityContext } from "./workflow-capability-model.js";
 
 export interface WorkflowArtifactStoreShape {

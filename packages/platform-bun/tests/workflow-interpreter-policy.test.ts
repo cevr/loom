@@ -207,7 +207,11 @@ it.effect("reports source and interpreter version failures", () =>
     ).pipe(Effect.flip);
 
     expect(sourceFailure).toBeInstanceOf(WorkflowSourceError);
-    expect(asyncSourceFailure).toHaveProperty("message", "source failed");
+    expect(asyncSourceFailure).toHaveProperty("message", expect.stringContaining("source failed"));
+    expect(asyncSourceFailure).toHaveProperty(
+      "message",
+      expect.stringContaining("Supported Workflow source API"),
+    );
     expect(versionFailure).toBeInstanceOf(WorkflowInterpreterVersionMismatchError);
   }),
 );

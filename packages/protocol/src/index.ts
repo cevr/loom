@@ -78,4 +78,27 @@ export { WorkflowCompensationDecisionConflictError } from "./workflow-compensati
 export { WorkflowCompensationDecisionTimeoutError } from "./workflow-compensation-decision-timeout-error.js";
 export { WorkflowSourceError } from "./workflow-source-error.js";
 export { WorkflowStepError } from "./workflow-step-error.js";
+export {
+  supportsBuiltInWorkflowCapability,
+  workflowAgentCapability,
+  workflowArtifactCapability,
+  workflowJobCapability,
+  WorkflowAgentHandle,
+  WorkflowAgentInput,
+  WorkflowJobHandle,
+  WorkflowJobInput,
+} from "./workflow-capability-model.js";
+export {
+  WorkflowArtifactReference,
+  WorkflowArtifactWrite,
+  WorkflowHostCall,
+  WorkflowStepCall,
+  WorkflowStepExecution,
+} from "./workflow-interpreter-model.js";
+export {
+  describeWorkflowSourceError,
+  workflowCapabilitiesGuide,
+  workflowSignalsGuide,
+  workflowSourceGuide,
+} from "./workflow-source-contract.js";
 export { WorkspaceMismatchError } from "./workspace-mismatch-error.js";

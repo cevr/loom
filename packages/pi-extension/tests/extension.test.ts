@@ -1,8 +1,27 @@
-import type { RegisteredCommand } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, RegisteredCommand } from "@earendil-works/pi-coding-agent";
+import {
+  workflowCapabilitiesGuide,
+  workflowSignalsGuide,
+  workflowSourceGuide,
+} from "@cvr/loom-protocol";
 import { expect, it } from "bun:test";
 import { Effect, Option } from "effect";
 import loomExtension, { shouldCloseSession } from "../src/index.js";
 import { runTool } from "../src/internal/tool-result.js";
+
+const makeRegisterTool = (toolNames: Set<string>): ExtensionAPI["registerTool"] => {
+  const registerTool: ExtensionAPI["registerTool"] = (tool) => {
+    toolNames.add(tool.name);
+    if (tool.name !== "loom_workflow_start") return;
+    expect(tool.parameters).toHaveProperty("properties.source.description", workflowSourceGuide);
+    expect(tool.parameters).toHaveProperty(
+      "properties.capabilities.description",
+      workflowCapabilitiesGuide,
+    );
+    expect(tool.parameters).toHaveProperty("properties.signals.description", workflowSignalsGuide);
+  };
+  return registerTool;
+};
 
 it("registers the Loom development command", () => {
   let command = Option.none<Omit<RegisteredCommand, "name" | "sourceInfo">>();
@@ -16,9 +35,7 @@ it("registers the Loom development command", () => {
       expect(name).toBe("loom");
       command = Option.some(options);
     },
-    registerTool: (tool: { readonly name: string }) => {
-      toolNames.add(tool.name);
-    },
+    registerTool: makeRegisterTool(toolNames),
   };
 
   loomExtension(pi);

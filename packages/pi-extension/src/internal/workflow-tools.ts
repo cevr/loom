@@ -10,7 +10,13 @@ import {
   WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
-import { WorkflowCompensationDecision, workflowInterpreterVersion } from "@cvr/loom-protocol";
+import {
+  WorkflowCompensationDecision,
+  workflowInterpreterVersion,
+  workflowCapabilitiesGuide,
+  workflowSignalsGuide,
+  workflowSourceGuide,
+} from "@cvr/loom-protocol";
 import { StringEnum, Type, type Static } from "@earendil-works/pi-ai";
 import { Effect, Option, Schema } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
@@ -25,11 +31,15 @@ const workflowParameters = Type.Object({
   key: Type.String({ minLength: 1, description: "Run key within this Pi session" }),
   source: Type.String({
     minLength: 1,
-    description: "Async workflow body. Use input and step.run for declared capabilities.",
+    description: workflowSourceGuide,
   }),
   input: Type.String({ description: "Workflow input as JSON text" }),
-  capabilities: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
-  signals: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+  capabilities: Type.Optional(
+    Type.Array(Type.String({ minLength: 1 }), { description: workflowCapabilitiesGuide }),
+  ),
+  signals: Type.Optional(
+    Type.Array(Type.String({ minLength: 1 }), { description: workflowSignalsGuide }),
+  ),
   budget: Type.Optional(
     Type.Object({
       maxSteps: Type.Optional(Type.Integer({ minimum: 1 })),

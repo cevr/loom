@@ -83,18 +83,28 @@ export {
   WorkflowHostCall,
   WorkflowStepCall,
   WorkflowStepExecution,
-} from "./internal/workflow-interpreter-model.js";
+} from "@cvr/loom-protocol";
 export {
   WorkflowCapabilityExecutor,
   type WorkflowCapabilityExecutorShape,
 } from "./internal/workflow-capability-executor.js";
 export {
+  supportsBuiltInWorkflowCapability,
+  workflowAgentCapability,
+  workflowArtifactCapability,
+  workflowJobCapability,
   WorkflowActivityContext,
   WorkflowAgentHandle,
   WorkflowAgentInput,
   WorkflowJobHandle,
   WorkflowJobInput,
 } from "./internal/workflow-capability-model.js";
+export {
+  describeWorkflowSourceError,
+  workflowCapabilitiesGuide,
+  workflowSignalsGuide,
+  workflowSourceGuide,
+} from "@cvr/loom-protocol";
 export { WorkflowCapabilityStoreError } from "./internal/workflow-capability-store-error.js";
 export {
   WorkflowChildAgentStore,

@@ -1,7 +1,6 @@
 import {
   JobAddress,
   JobRequest,
-  WorkflowCapability,
   workflowArtifactId,
   workflowJobId,
   type WorkspaceRoot,
@@ -17,6 +16,10 @@ import {
   WorkflowJobHandle,
   WorkflowJobInput,
   WorkflowStepExecution,
+  supportsBuiltInWorkflowCapability,
+  workflowAgentCapability,
+  workflowArtifactCapability,
+  workflowJobCapability,
   type WorkflowActivityContext,
   type WorkflowArtifactStoreShape,
   type WorkflowChildAgentStoreShape,
@@ -25,9 +28,6 @@ import {
 import { WorkflowStepError } from "@cvr/loom-protocol";
 import { Effect, FileSystem, Inspectable, Layer, Schema } from "effect";
 
-const agentCapability = WorkflowCapability.make("agent");
-const jobCapability = WorkflowCapability.make("job");
-const supportedCapabilities = new Set([agentCapability, jobCapability]);
 const decodeAgentInput = Schema.decodeUnknownEffect(WorkflowAgentInput);
 const decodeJobInput = Schema.decodeUnknownEffect(WorkflowJobInput);
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Json));
@@ -42,10 +42,7 @@ const stepError = (call: WorkflowStepCall, message: string) =>
 const decodeInput = <A>(
   call: WorkflowStepCall,
   decode: (input: Schema.Json) => Effect.Effect<A, Schema.SchemaError>,
-) =>
-  decode(call.input).pipe(
-    Effect.mapError((cause) => stepError(call, Inspectable.toStringUnknown(cause))),
-  );
+) => decode(call.input).pipe(Effect.mapError((cause) => stepError(call, cause.message)));
 
 const launchAgent = Effect.fn("WorkflowCapabilities.launchAgent")(function* (
   store: WorkflowChildAgentStoreShape,
@@ -100,15 +97,13 @@ const makeArtifactStore = (
           Effect.andThen(encodeJson(write.value)),
           Effect.flatMap((value) => fs.writeFileString(path, value)),
           Effect.as(WorkflowArtifactReference.make({ artifactId })),
-          Effect.mapError((cause) =>
-            stepError(
-              {
+          Effect.mapError(
+            (cause) =>
+              new WorkflowStepError({
                 stepId: write.stepId,
-                capability: WorkflowCapability.make("artifact"),
-                input: write.value,
-              },
-              Inspectable.toStringUnknown(cause),
-            ),
+                capability: workflowArtifactCapability,
+                message: Inspectable.toStringUnknown(cause),
+              }),
           ),
         );
       },
@@ -127,23 +122,23 @@ export const layerWorkflowCapabilities = (config: WorkflowCapabilitiesConfig) =>
         const childAgents = yield* WorkflowChildAgentStore;
         const jobs = yield* JobRuntime;
         return WorkflowCapabilityExecutor.of({
-          supports: (capability) => supportedCapabilities.has(capability),
+          supports: supportsBuiltInWorkflowCapability,
           execute: (call, context) => {
-            if (call.capability === agentCapability) {
+            if (call.capability === workflowAgentCapability) {
               return launchAgent(childAgents, call, context);
             }
-            if (call.capability === jobCapability) {
+            if (call.capability === workflowJobCapability) {
               return launchJob(jobs, call, context);
             }
             return Effect.fail(stepError(call, `No adapter is installed for ${call.capability}.`));
           },
           compensate: (call, context) => {
-            if (call.capability === agentCapability) {
+            if (call.capability === workflowAgentCapability) {
               return childAgents
                 .stop(context.activityKey)
                 .pipe(Effect.mapError((error) => stepError(call, error.message)));
             }
-            if (call.capability === jobCapability) {
+            if (call.capability === workflowJobCapability) {
               return jobs
                 .cancel(
                   JobAddress.make({
