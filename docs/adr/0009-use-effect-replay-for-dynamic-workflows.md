@@ -48,7 +48,7 @@ Every external operation is an Activity.
 Every Activity has an explicit Step ID.
 A Step ID is unique during one workflow pass.
 The interpreter records each Step ID during the current pass.
-The interpreter stops the run as a defect when a Step ID repeats.
+The interpreter stops the run with a typed failure when a Step ID repeats.
 
 The workflow interpreter creates a fresh VM context for each pass.
 It provides only the declared capability services.
@@ -57,6 +57,9 @@ Durable time uses Effect Durable Clock.
 Seeded random values use a declared deterministic capability.
 
 The interpreter decodes host calls once with Effect Schema.
+The VM bridge queues each host call.
+The Workflow fiber executes the decoded call.
+It does not start an Activity from a Promise callback fiber.
 Step inputs and results use `Schema.Json`.
 Source reads the accepted JSON value from `input`.
 Source calls `step.run({ stepId, capability, input })` for each external operation.
@@ -93,10 +96,17 @@ Interruption closes the gate and stops the process before it can run the command
 Daemon startup changes every stale Starting claim to a `Launch` failure before it accepts work.
 A Stopping claim without Process Identity becomes Cancelled because the launch gate prevented command start.
 Artifact identity also derives from the Activity key.
-The Job Activity returns a stable handle after a durable launch claim.
-It rejects a stored `Failed` or `Lost` Job instead of reporting a successful launch.
+The Job Activity waits for a terminal Job result.
+It returns a stable handle only for a successful Job.
+It rejects a `Failed`, `Lost`, or `Cancelled` Job.
 
-Effect owns parallel fibers, durable races, and concurrency primitives.
+`Promise.all` accepts only values returned by Job `step.run` calls.
+The interpreter sends one host call for the complete batch.
+The host runs one durable batch Activity.
+Each Job receives a stable child Activity key.
+The batch waits for every Job exit before it returns the first failure in source order.
+The batch cannot use nested child Activities because SingleRunner queues their replies behind the active batch Activity.
+Effect owns the batch fibers and concurrency primitives.
 Loom applies the resolved parallelism budget with an Effect semaphore.
 Loom does not add a promise limiter.
 
@@ -173,9 +183,14 @@ The accepted request resolves these budgets:
 
 The interpreter derives spend from replayed Activity results.
 It does not store a second spend counter.
-A duration budget uses a durable race against Effect Durable Clock.
-The Bun interpreter accepts that race as a host Effect and does not expose a clock to source.
-The Bun VM timeout stops synchronous source that would block the Effect race.
+A duration budget schedules one Effect Durable Clock for the Workflow Run.
+Each replay pass checks the durable clock result before it evaluates source.
+The duration budget binds at replay pass boundaries.
+The Workflow can suspend while the clock entity owns the deadline.
+The Bun interpreter does not expose the clock to source.
+The Bun VM timeout stops synchronous source only before the first asynchronous continuation.
+Synchronous source after an `await` can still block the daemon event loop.
+Worker isolation must close this existing risk.
 Budget failure uses a typed workflow error.
 
 ## Error contract

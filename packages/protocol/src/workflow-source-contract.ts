@@ -32,6 +32,7 @@ export const workflowSourceGuide = [
   'Read the Workflow input from the global "input".',
   "Use one unique stepId for each Step in a Workflow pass.",
   `Declare "${workflowJobCapability}" in capabilities. Run a Job with: await step.run(${jobStep})`,
+  "Run independent Job Steps together with Promise.all. Promise.all accepts only values returned by Job step.run calls.",
   `Declare "${workflowAgentCapability}" in capabilities. Run an Agent with: await step.run(${agentStep})`,
   `Declare "${workflowArtifactCapability}" in capabilities to store an oversized Step result. Loom stores it automatically.`,
   'Declare "approval" in signals. Wait for it with: await signal.wait("approval")',

@@ -18,6 +18,7 @@ import {
   layerWorkflowCapabilities,
   makeBunProcessInspector,
 } from "@cvr/loom-platform-bun";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
 import {
   JobStore,
   ProcessObservation,
@@ -44,7 +45,7 @@ const ownershipRequest = (command: string) =>
     definition: WorkflowDefinition.make({
       name: WorkflowName.make("workflow-ownership-restart"),
       version: WorkflowVersion.make("1"),
-      interpreterVersion: 1,
+      interpreterVersion: workflowInterpreterVersion,
       source: `
         const agent = await step.run({
           stepId: "agent", capability: "agent", input: { prompt: "Inspect the build." },

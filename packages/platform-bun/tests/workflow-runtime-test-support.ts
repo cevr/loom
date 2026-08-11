@@ -49,7 +49,10 @@ export const workflowSupport = (filename: string, executions: Ref.Ref<number>) =
   );
   return Layer.mergeAll(
     foundation,
-    SingleRunner.layer({ runnerStorage: "memory" }).pipe(Layer.provide(foundation)),
+    SingleRunner.layer({
+      runnerStorage: "memory",
+      shardingConfig: { entityMessagePollInterval: "10 millis" },
+    }).pipe(Layer.provide(foundation)),
     capabilities,
     artifacts,
   );

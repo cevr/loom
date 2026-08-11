@@ -9,6 +9,7 @@ import {
   WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
 import { Option } from "effect";
 
 export const activityRestartRequest = WorkflowRunRequest.make({
@@ -17,7 +18,7 @@ export const activityRestartRequest = WorkflowRunRequest.make({
   definition: WorkflowDefinition.make({
     name: WorkflowName.make("daemon-restart"),
     version: WorkflowVersion.make("1"),
-    interpreterVersion: 1,
+    interpreterVersion: workflowInterpreterVersion,
     source: `
       const completed = await step.run({
         stepId: "completed",

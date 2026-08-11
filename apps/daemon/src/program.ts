@@ -122,7 +122,10 @@ const launchDaemon = <E, R, E2>(
     const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
     const cluster = SingleRunner.layer({
       runnerStorage: "sql",
-      shardingConfig: { entityTerminationTimeout: "1 second" },
+      shardingConfig: {
+        entityMessagePollInterval: "100 millis",
+        entityTerminationTimeout: "1 second",
+      },
     });
     const actors = layerActorStateHub;
     const jobs = makeJobLayer(config, actors);

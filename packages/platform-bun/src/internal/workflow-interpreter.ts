@@ -1,4 +1,3 @@
-/* oxlint-disable effect/noGlobals, effect/noNodeBuiltinImport -- This adapter owns the unmatched VM APIs. */
 import {
   WorkflowCapability,
   type WorkflowRunId,
@@ -21,12 +20,14 @@ import {
   WorkflowSourceError,
   WorkflowStepCall,
   WorkflowStepExecution,
+  workflowJobCapability,
   type WorkflowArtifactReference,
 } from "@cvr/loom-runtime";
-import { describeWorkflowSourceError, workflowInterpreterVersion } from "@cvr/loom-protocol";
-import { Effect, Option, Predicate, Schema, Scope, Semaphore } from "effect";
-import * as NodeVm from "node:vm";
-import { makeWorkflowBridge, type WorkflowBridge, workflowSourceError } from "./workflow-bridge.js";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
+import { Effect, Option, Schema, Semaphore } from "effect";
+import { evaluateWorkflowSource, schemaSourceError } from "./workflow-source-vm.js";
+
+export { makeWorkflowInterpreterHost } from "./workflow-interpreter-host.js";
 
 export interface WorkflowInterpreterHost<R> {
   readonly workflowRunId: WorkflowRunId;
@@ -37,6 +38,13 @@ export interface WorkflowInterpreterHost<R> {
     ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
     compensate: (context: WorkflowActivityContext) => Effect.Effect<void, WorkflowRunError, R>,
   ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>;
+  readonly parallel: (
+    calls: ReadonlyArray<WorkflowStepCall>,
+    execute: (
+      call: WorkflowStepCall,
+      context: WorkflowActivityContext,
+    ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
+  ) => Effect.Effect<ReadonlyArray<WorkflowStepExecution>, WorkflowRunError, R>;
   readonly execute: (
     call: WorkflowStepCall,
     context: WorkflowActivityContext,
@@ -62,90 +70,8 @@ export interface WorkflowInterpreterHost<R> {
 const decodeHostCall = Schema.decodeUnknownEffect(WorkflowHostCall, {
   onExcessProperty: "error",
 });
-const decodeResult = Schema.decodeUnknownEffect(Schema.Json);
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Json));
 const textEncoder = new TextEncoder();
-
-const schemaSourceError = (error: Schema.SchemaError) =>
-  new WorkflowSourceError({ message: describeWorkflowSourceError(error.message) });
-
-/* oxlint-disable effect/noNullish -- The VM sandbox requires a null prototype and explicit undefined globals. */
-const deterministicMath = (): object => {
-  const target = Object.create(null);
-  for (const key of Reflect.ownKeys(Math)) {
-    if (key === "random") continue;
-    const descriptor = Reflect.getOwnPropertyDescriptor(Math, key);
-    if (descriptor !== undefined) Reflect.defineProperty(target, key, descriptor);
-  }
-  return Object.freeze(target);
-};
-
-const makeContext = (
-  input: WorkflowRunRequest["input"],
-  run: (call: unknown) => Promise<unknown>,
-): NodeVm.Context =>
-  NodeVm.createContext(
-    {
-      input,
-      signal: Object.freeze({ wait: (name: unknown) => run({ _tag: "Signal", name }) }),
-      step: Object.freeze({ run: (call: unknown) => run({ _tag: "Step", call }) }),
-      Bun: undefined,
-      Date: undefined,
-      fetch: undefined,
-      Math: deterministicMath(),
-      module: undefined,
-      process: undefined,
-      require: undefined,
-    },
-    {
-      name: "Loom Workflow",
-      codeGeneration: { strings: false, wasm: false },
-    },
-  );
-/* oxlint-enable effect/noNullish */
-
-const evaluateSource = (
-  request: WorkflowRunRequest,
-  bridge: WorkflowBridge,
-): Effect.Effect<Schema.Json, WorkflowRunError> =>
-  Effect.gen(function* () {
-    const context = makeContext(request.input, bridge.run);
-    const source = `(async () => {\n"use strict"\n${request.definition.source}\n})()`;
-    const raw = yield* Effect.try({
-      try: () => {
-        const script = new NodeVm.Script(source, {
-          filename: `${request.definition.name}@${request.definition.version}.workflow.js`,
-        });
-        return Option.match(request.budget.maxDurationMillis, {
-          onNone: () => script.runInContext(context),
-          onSome: (milliseconds) => script.runInContext(context, { timeout: milliseconds }),
-        });
-      },
-      catch: (cause) =>
-        Option.match(request.budget.maxDurationMillis, {
-          onNone: () => workflowSourceError(cause),
-          onSome: (milliseconds) => {
-            if (
-              Predicate.hasProperty(cause, "code") &&
-              cause.code === "ERR_SCRIPT_EXECUTION_TIMEOUT"
-            ) {
-              return budgetError("Duration", milliseconds, milliseconds);
-            }
-            return workflowSourceError(cause);
-          },
-        }),
-    });
-    if (!Predicate.isPromiseLike(raw)) {
-      return yield* new WorkflowSourceError({
-        message: describeWorkflowSourceError("Workflow source did not return a Promise."),
-      });
-    }
-    const value = yield* Effect.tryPromise({
-      try: () => raw,
-      catch: bridge.sourceError,
-    });
-    return yield* decodeResult(value).pipe(Effect.mapError(schemaSourceError));
-  });
 
 const budgetError = (
   budget: WorkflowBudgetExceededError["budget"],
@@ -186,44 +112,81 @@ const completeStep = <R>(
     return WorkflowStepExecution.make({ ...result, value });
   });
 
+const validateStep = <R>(
+  request: WorkflowRunRequest,
+  host: WorkflowInterpreterHost<R>,
+  state: WorkflowPassState,
+  call: WorkflowStepCall,
+): Effect.Effect<void, WorkflowRunError> => {
+  if (state.seenStepIds.has(call.stepId)) {
+    return new WorkflowDuplicateStepError({ stepId: call.stepId });
+  }
+  const nextStepCount = state.seenStepIds.size + 1;
+  if (nextStepCount > request.budget.maxSteps) {
+    return budgetError("Steps", request.budget.maxSteps, nextStepCount);
+  }
+  if (!state.declaredCapabilities.has(call.capability) || !host.supports(call.capability)) {
+    return new WorkflowCapabilityDeniedError({ capability: call.capability });
+  }
+  state.seenStepIds.add(call.stepId);
+  return Effect.void;
+};
+
+const recordUsage = (
+  request: WorkflowRunRequest,
+  state: WorkflowPassState,
+  result: WorkflowStepExecution,
+): Effect.Effect<void, WorkflowRunError> => {
+  state.usage.agentRuns += result.agentRuns;
+  state.usage.tokens += result.tokenCount;
+  if (state.usage.agentRuns > request.budget.maxAgentRuns) {
+    return budgetError("Agents", request.budget.maxAgentRuns, state.usage.agentRuns);
+  }
+  const exceededTokenBudget = Option.filter(
+    request.budget.maxTokens,
+    (maximum) => state.usage.tokens > maximum,
+  );
+  if (Option.isSome(exceededTokenBudget)) {
+    return budgetError("Tokens", exceededTokenBudget.value, state.usage.tokens);
+  }
+  return Effect.void;
+};
+
 const makeRunStep = <R>(
   request: WorkflowRunRequest,
   host: WorkflowInterpreterHost<R>,
   state: WorkflowPassState,
 ) =>
   Effect.fn("WorkflowInterpreter.runStep")(function* (call: WorkflowStepCall) {
-    if (state.seenStepIds.has(call.stepId)) {
-      return yield* new WorkflowDuplicateStepError({ stepId: call.stepId });
-    }
-    state.seenStepIds.add(call.stepId);
-    if (state.seenStepIds.size > request.budget.maxSteps) {
-      return yield* budgetError("Steps", request.budget.maxSteps, state.seenStepIds.size);
-    }
-    if (!state.declaredCapabilities.has(call.capability) || !host.supports(call.capability)) {
-      return yield* new WorkflowCapabilityDeniedError({ capability: call.capability });
-    }
-
-    const result = yield* Semaphore.withPermit(
-      state.semaphore,
-      host.activity(
-        call.stepId,
-        (context) => completeStep(request, host, state, call, context),
-        (context) => host.compensate(call, context),
-      ),
+    yield* validateStep(request, host, state, call);
+    const result = yield* host.activity(
+      call.stepId,
+      (context) => completeStep(request, host, state, call, context),
+      (context) => host.compensate(call, context),
     );
-    state.usage.agentRuns += result.agentRuns;
-    state.usage.tokens += result.tokenCount;
-    if (state.usage.agentRuns > request.budget.maxAgentRuns) {
-      return yield* budgetError("Agents", request.budget.maxAgentRuns, state.usage.agentRuns);
-    }
-    const exceededTokenBudget = Option.filter(
-      request.budget.maxTokens,
-      (maximum) => state.usage.tokens > maximum,
-    );
-    if (Option.isSome(exceededTokenBudget)) {
-      return yield* budgetError("Tokens", exceededTokenBudget.value, state.usage.tokens);
-    }
+    yield* recordUsage(request, state, result);
     return result;
+  });
+
+const makeRunParallel = <R>(
+  request: WorkflowRunRequest,
+  host: WorkflowInterpreterHost<R>,
+  state: WorkflowPassState,
+) =>
+  Effect.fn("WorkflowInterpreter.runParallel")(function* (calls: ReadonlyArray<WorkflowStepCall>) {
+    for (const call of calls) {
+      if (call.capability !== workflowJobCapability) {
+        return yield* new WorkflowSourceError({
+          message: "Promise.all supports only Job Steps.",
+        });
+      }
+    }
+    for (const call of calls) yield* validateStep(request, host, state, call);
+    const results = yield* host.parallel(calls, (call, context) =>
+      Semaphore.withPermit(state.semaphore, completeStep(request, host, state, call, context)),
+    );
+    for (const result of results) yield* recordUsage(request, state, result);
+    return results.map((result) => result.value);
   });
 
 const makeRunHostCall = <R>(
@@ -232,10 +195,12 @@ const makeRunHostCall = <R>(
   state: WorkflowPassState,
 ) => {
   const runStep = makeRunStep(request, host, state);
+  const runParallel = makeRunParallel(request, host, state);
   const declaredSignals = new Set(request.definition.signals);
   return Effect.fn("WorkflowInterpreter.runHostCall")(function* (received: unknown) {
     const call = yield* decodeHostCall(received).pipe(Effect.mapError(schemaSourceError));
     return yield* WorkflowHostCall.match(call, {
+      Parallel: ({ calls }) => runParallel(calls),
       Step: ({ call: stepCall }) => runStep(stepCall).pipe(Effect.map((result) => result.value)),
       Signal: ({ name }) => {
         if (declaredSignals.has(name)) return host.awaitSignal(name);
@@ -254,7 +219,7 @@ const makeRunHostCall = <R>(
 const evaluatePass = <R>(
   request: WorkflowRunRequest,
   host: WorkflowInterpreterHost<R>,
-): Effect.Effect<Schema.Json, WorkflowRunError, R | Scope.Scope> =>
+): Effect.Effect<Schema.Json, WorkflowRunError, R> =>
   Effect.gen(function* () {
     const state: WorkflowPassState = {
       declaredCapabilities: new Set(request.definition.capabilities),
@@ -262,13 +227,13 @@ const evaluatePass = <R>(
       semaphore: yield* Semaphore.make(request.budget.maxParallelism),
       usage: { agentRuns: 0, tokens: 0 },
     };
-    const bridge = yield* makeWorkflowBridge(makeRunHostCall(request, host, state));
-    const evaluation = Effect.raceFirst(evaluateSource(request, bridge), bridge.fatal);
+    const runHostCall = makeRunHostCall(request, host, state);
+    const evaluation = evaluateWorkflowSource(request, runHostCall);
     const evaluated = Option.match(request.budget.maxDurationMillis, {
       onNone: () => evaluation,
       onSome: (milliseconds) => host.withDurationLimit(milliseconds, evaluation),
     });
-    return yield* evaluated.pipe(Effect.ensuring(bridge.deactivate));
+    return yield* evaluated;
   });
 
 export const interpretWorkflow = <R>(
@@ -281,5 +246,5 @@ export const interpretWorkflow = <R>(
       received: request.definition.interpreterVersion,
     });
   }
-  return Effect.scoped(evaluatePass(request, host));
+  return evaluatePass(request, host);
 };

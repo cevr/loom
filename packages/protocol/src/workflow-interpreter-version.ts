@@ -1,1 +1,1 @@
-export const workflowInterpreterVersion = 1;
+export const workflowInterpreterVersion = 2;

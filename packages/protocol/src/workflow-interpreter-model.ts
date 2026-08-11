@@ -15,6 +15,7 @@ export type WorkflowStepCall = typeof WorkflowStepCall.Type;
 
 export const WorkflowHostCall = Schema.TaggedUnion({
   Step: { call: WorkflowStepCall },
+  Parallel: { calls: Schema.NonEmptyArray(WorkflowStepCall) },
   Signal: { name: WorkflowSignalName },
 });
 export type WorkflowHostCall = typeof WorkflowHostCall.Type;

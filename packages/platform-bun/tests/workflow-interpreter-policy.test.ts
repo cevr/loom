@@ -8,6 +8,7 @@ import {
   WorkflowStepError,
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
 import { expect, it } from "effect-bun-test";
 import { Deferred, Effect, Fiber, Latch, Option, Ref } from "effect";
 import { interpretWorkflow } from "../src/index.js";
@@ -78,13 +79,16 @@ it.effect("bounds parallel Step work with an Effect Semaphore", () =>
         () => release.await.pipe(Effect.as(execution(0))),
         () => Ref.update(active, (count) => count - 1),
       );
-    const workflow = request(`
+    const workflow = request(
+      `
       return await Promise.all([
-        step.run({ stepId: "one", capability: "echo", input: null }),
-        step.run({ stepId: "two", capability: "echo", input: null }),
-        step.run({ stepId: "three", capability: "echo", input: null }),
+        step.run({ stepId: "one", capability: "job", input: null }),
+        step.run({ stepId: "two", capability: "job", input: null }),
+        step.run({ stepId: "three", capability: "job", input: null }),
       ])
-    `);
+    `,
+      ["job"],
+    );
 
     const fiber = yield* interpretWorkflow(workflow, host(execute)).pipe(Effect.forkChild);
     yield* Deferred.await(twoStarted);
@@ -202,7 +206,7 @@ it.effect("reports source and interpreter version failures", () =>
       interpreterHost,
     ).pipe(Effect.flip);
     const versionFailure = yield* interpretWorkflow(
-      request("return null", ["echo"], budget, 2),
+      request("return null", ["echo"], budget, workflowInterpreterVersion + 1),
       interpreterHost,
     ).pipe(Effect.flip);
 

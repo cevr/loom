@@ -50,7 +50,7 @@ export const execution = (value: WorkflowStepExecution["value"]): WorkflowStepEx
   WorkflowStepExecution.make({ value, tokenCount: 0, agentRuns: 0 });
 
 export const host = (
-  execute: WorkflowInterpreterHost<never>["execute"],
+  executeStep: WorkflowInterpreterHost<never>["execute"],
 ): WorkflowInterpreterHost<never> => ({
   workflowRunId: WorkflowRunId.make("workflow-run-1"),
   activity: (_stepId, effect) =>
@@ -59,9 +59,20 @@ export const host = (
       sessionId: SessionId.make("session-1"),
       workflowRunId: WorkflowRunId.make("workflow-run-1"),
     }),
+  parallel: (calls, execute) =>
+    Effect.forEach(
+      calls,
+      (call, index) =>
+        execute(call, {
+          activityKey: WorkflowActivityKey.make(`parallel-${index}`),
+          sessionId: SessionId.make("session-1"),
+          workflowRunId: WorkflowRunId.make("workflow-run-1"),
+        }),
+      { concurrency: "unbounded" },
+    ),
   awaitSignal: () => Effect.succeed({ received: true }),
   supports: () => true,
-  execute,
+  execute: executeStep,
   compensate: () => Effect.void,
   storeArtifact: ({ stepId }) =>
     Effect.succeed(

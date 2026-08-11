@@ -11,6 +11,7 @@ import {
   WorkflowSignalName,
   WorkflowVersion,
 } from "@cvr/loom-domain";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
 import { Option } from "effect";
 
 export const execution = (request: WorkflowRunRequest) =>
@@ -25,7 +26,7 @@ export const request = WorkflowRunRequest.make({
   definition: WorkflowDefinition.make({
     name: WorkflowName.make("echo"),
     version: WorkflowVersion.make("1"),
-    interpreterVersion: 1,
+    interpreterVersion: workflowInterpreterVersion,
     source: `
       return await step.run({
         stepId: "echo",
@@ -52,7 +53,8 @@ export const durationRequest = WorkflowRunRequest.make({
   key: WorkflowKey.make("duration"),
   definition: WorkflowDefinition.make({
     ...request.definition,
-    source: "return await new Promise(() => {})",
+    source: 'return await signal.wait("duration")',
+    signals: [WorkflowSignalName.make("duration")],
   }),
   budget: WorkflowBudget.make({
     ...request.budget,

@@ -13,6 +13,7 @@ import {
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
 } from "@cvr/loom-platform-bun";
+import { workflowInterpreterVersion } from "@cvr/loom-protocol";
 import { expect } from "effect-bun-test";
 import { Effect, Fiber, FileSystem, Layer, Option } from "effect";
 import { runLoomDaemon } from "../src/program.js";
@@ -24,7 +25,7 @@ const request = WorkflowRunRequest.make({
   definition: WorkflowDefinition.make({
     name: WorkflowName.make("job-failure"),
     version: WorkflowVersion.make("1"),
-    interpreterVersion: 1,
+    interpreterVersion: workflowInterpreterVersion,
     source: `
       await step.run({
         stepId: "prepare",

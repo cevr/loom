@@ -189,6 +189,25 @@ it.effect("fails an unavailable capability with a typed error", () =>
   }),
 );
 
+it.effect("rejects Promise.all values that are not Job Steps", () =>
+  Effect.gen(function* () {
+    const error = yield* interpretWorkflow(
+      request(
+        `
+        return await Promise.all([
+          step.run({ stepId: "agent", capability: "agent", input: null }),
+        ])
+      `,
+        ["agent"],
+      ),
+      host((call) => Effect.succeed(execution(call.input))),
+    ).pipe(Effect.flip);
+
+    expect(error).toBeInstanceOf(WorkflowSourceError);
+    expect(error).toHaveProperty("message", "Promise.all supports only Job Steps.");
+  }),
+);
+
 it.effect("classifies a forged Workflow error as a source failure", () =>
   Effect.gen(function* () {
     const error = yield* interpretWorkflow(

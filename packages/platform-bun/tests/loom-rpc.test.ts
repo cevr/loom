@@ -19,6 +19,7 @@ import {
   LoomRpcs,
   maximumCellSourceLength,
   maximumFrameSize,
+  workflowInterpreterVersion,
   WorkflowRunState,
 } from "@cvr/loom-protocol";
 import { makeConnectionHandshake } from "@cvr/loom-runtime";
@@ -43,7 +44,7 @@ const workflow = WorkflowRunRequest.make({
   definition: WorkflowDefinition.make({
     name: WorkflowName.make("rpc"),
     version: WorkflowVersion.make("1"),
-    interpreterVersion: 1,
+    interpreterVersion: workflowInterpreterVersion,
     source: "return input",
     capabilities: [],
     signals: [],
