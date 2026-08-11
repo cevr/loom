@@ -2,3 +2,4 @@ export { DaemonUnavailableError, DaemonUnavailableReason } from "./daemon-unavai
 export { LoomClient, type LoomClientShape } from "./loom-client.js";
 export { layerLoomRpcClient, type LoomRpcClientConfig } from "./loom-rpc-client.js";
 export { MessageTooLargeError } from "./message-too-large-error.js";
+export { makePluginState, type PluginStateValue } from "./plugin-state.js";

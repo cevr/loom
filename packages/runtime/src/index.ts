@@ -43,6 +43,7 @@ export {
   type EvaluateCellInput,
 } from "./internal/code-kernel.js";
 export { JobStoreError } from "./internal/job-store-error.js";
+export { PluginStateStore, type PluginStateStoreShape } from "./internal/plugin-state-store.js";
 export { JobStore, type JobStoreShape } from "./internal/job-store.js";
 export { JobRuntimeError } from "./internal/job-runtime-error.js";
 export {

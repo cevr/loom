@@ -121,8 +121,39 @@ const createCapabilitySchema = Effect.gen(function* () {
   `;
 });
 
+const createPluginSchema = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    CREATE TABLE IF NOT EXISTS plugin_state (
+      plugin_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      state_key TEXT NOT NULL,
+      value_json TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      CHECK (scope IN ('Workspace', 'Session')),
+      CHECK (
+        (scope = 'Workspace' AND owner_id = '')
+        OR (scope = 'Session' AND length(owner_id) > 0)
+      ),
+      CHECK (revision > 0),
+      PRIMARY KEY (plugin_id, scope, owner_id, state_key)
+    )
+  `;
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS plugin_state_session
+    ON plugin_state (scope, owner_id)
+  `;
+});
+
 const createSchema = Effect.all(
-  [createKernelSchema, createJobSchema, createWorkflowSchema, createCapabilitySchema],
+  [
+    createKernelSchema,
+    createJobSchema,
+    createWorkflowSchema,
+    createCapabilitySchema,
+    createPluginSchema,
+  ],
   { discard: true },
 );
 

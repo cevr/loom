@@ -35,6 +35,8 @@ const layerHandlers = (startDelay: Duration.Input) =>
         "Workflow.Inspect": unused,
         "Workflow.Interrupt": unused,
         "Workflow.DecideCompensation": unused,
+        "PluginState.Read": unused,
+        "PluginState.Write": unused,
       });
     }),
   );

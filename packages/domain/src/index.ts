@@ -41,6 +41,8 @@ export const AgentOwner = Schema.Struct({
 });
 export type AgentOwner = typeof AgentOwner.Type;
 
+export { PluginStateAddress, PluginStateScope } from "./plugin-state.js";
+
 export const WorkflowRunAddress = Schema.Struct({
   sessionId: SessionId,
   workflowRunId: WorkflowRunId,

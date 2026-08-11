@@ -1,14 +1,21 @@
-import { CloseSessionError, LoomRpcs, WorkflowRunHandle } from "@cvr/loom-protocol";
-import type { SessionId } from "@cvr/loom-domain";
+import {
+  CloseSessionError,
+  LoomRpcs,
+  type WritePluginStateRequest,
+  WorkflowRunHandle,
+} from "@cvr/loom-protocol";
+import { PluginStateScope, type SessionId } from "@cvr/loom-domain";
 import {
   AgentActor,
   ActorStateHub,
   ConnectionHandshake,
   JobRuntime,
+  PluginStateStore,
   SessionLifecycle,
   WorkflowChildAgentStore,
   WorkflowRuntime,
   type JobRuntimeShape,
+  type PluginStateStoreShape,
   type SessionLifecycleShape,
   type WorkflowChildAgentStoreShape,
   type WorkflowRuntimeShape,
@@ -21,6 +28,7 @@ const makeCloseSession =
     workflows: WorkflowRuntimeShape,
     childAgents: WorkflowChildAgentStoreShape,
     jobs: JobRuntimeShape,
+    pluginState: PluginStateStoreShape,
     sessions: SessionLifecycleShape,
   ) =>
   (sessionId: SessionId) =>
@@ -33,13 +41,15 @@ const makeCloseSession =
             Effect.result(
               jobs.closeSession(sessionId).pipe(Effect.andThen(childAgents.stopSession(sessionId))),
             ),
+            Effect.result(pluginState.deleteSession(sessionId)),
           ],
           { concurrency: "unbounded" },
         ).pipe(
           // Collect each result so one cleanup failure does not skip the remaining cleanup.
-          Effect.flatMap(([workflowResult, ownedWorkResult]) =>
+          Effect.flatMap(([workflowResult, ownedWorkResult, pluginStateResult]) =>
             Effect.fromResult(workflowResult).pipe(
               Effect.andThen(Effect.fromResult(ownedWorkResult)),
+              Effect.andThen(Effect.fromResult(pluginStateResult)),
             ),
           ),
         ),
@@ -54,6 +64,13 @@ const makeCloseSession =
         ),
       );
 
+const writePluginState = (pluginState: PluginStateStoreShape, sessions: SessionLifecycleShape) =>
+  Effect.fn("LoomRpcHandlers.writePluginState")(function* (request: WritePluginStateRequest) {
+    const write = pluginState.write(request.address, request.expected, request.value);
+    if (PluginStateScope.guards.Workspace(request.address.scope)) return yield* write;
+    return yield* sessions.admit(request.address.scope.sessionId, write);
+  });
+
 export const layerLoomRpcHandlers = LoomRpcs.toLayer(
   Effect.gen(function* () {
     const connection = yield* ConnectionHandshake;
@@ -61,8 +78,10 @@ export const layerLoomRpcHandlers = LoomRpcs.toLayer(
     const workflows = yield* WorkflowRuntime;
     const childAgents = yield* WorkflowChildAgentStore;
     const jobs = yield* JobRuntime;
+    const pluginState = yield* PluginStateStore;
     const sessions = yield* SessionLifecycle;
-    const closeSession = makeCloseSession(workflows, childAgents, jobs, sessions);
+    const closeSession = makeCloseSession(workflows, childAgents, jobs, pluginState, sessions);
+    const writeState = writePluginState(pluginState, sessions);
     return LoomRpcs.of({
       ...makeJobRpcHandlers(jobs, sessions),
       "Connection.Handshake": connection.handshake,
@@ -86,6 +105,8 @@ export const layerLoomRpcHandlers = LoomRpcs.toLayer(
       "Workflow.Inspect": workflows.inspect,
       "Workflow.Interrupt": workflows.interrupt,
       "Workflow.DecideCompensation": workflows.decideCompensation,
+      "PluginState.Read": ({ address }) => pluginState.read(address),
+      "PluginState.Write": writeState,
     });
   }),
 );

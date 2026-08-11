@@ -47,6 +47,18 @@ export {
 export { WorkflowCompensationDecision } from "./workflow-compensation-decision.js";
 export { LoomRpcs } from "./loom-rpcs.js";
 export {
+  PluginStateReadResult,
+  PluginStateRevision,
+  PluginStateVersion,
+  ReadPluginStateRequest,
+  WritePluginStateRequest,
+} from "./plugin-state.js";
+export { PluginStateRevisionConflictError } from "./plugin-state-revision-conflict-error.js";
+export { PluginStateStoreError } from "./plugin-state-store-error.js";
+export { PluginStateWriteError } from "./plugin-state-write-error.js";
+export { ReadPluginState } from "./read-plugin-state.js";
+export { WritePluginState } from "./write-plugin-state.js";
+export {
   currentProtocolVersion,
   maximumCellSourceLength,
   maximumCellDisplayLength,

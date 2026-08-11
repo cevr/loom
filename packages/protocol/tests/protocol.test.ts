@@ -93,6 +93,8 @@ describe("Loom RPC registry", () => {
         "Workflow.Inspect",
         "Workflow.Interrupt",
         "Workflow.DecideCompensation",
+        "PluginState.Read",
+        "PluginState.Write",
       ]);
     }),
   );

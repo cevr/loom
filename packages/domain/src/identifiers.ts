@@ -47,6 +47,12 @@ export type WorkflowSignalName = typeof WorkflowSignalName.Type;
 export const ArtifactId = identifier("@cvr/loom/ArtifactId");
 export type ArtifactId = typeof ArtifactId.Type;
 
+export const PluginId = identifier("@cvr/loom/PluginId");
+export type PluginId = typeof PluginId.Type;
+
+export const PluginStateKey = identifier("@cvr/loom/PluginStateKey");
+export type PluginStateKey = typeof PluginStateKey.Type;
+
 export const workflowAgentId = (activityKey: WorkflowActivityKey): AgentId =>
   AgentId.make(`workflow-agent:${activityKey}`);
 

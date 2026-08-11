@@ -18,6 +18,11 @@ import type {
   JobOutputChunk,
   JobRpcError,
   JobState,
+  PluginStateReadResult,
+  PluginStateRevision,
+  PluginStateStoreError,
+  PluginStateWriteError,
+  ReadPluginStateRequest,
   ReadJobOutputRequest,
   SignalWorkflowError,
   SignalWorkflowRequest,
@@ -28,6 +33,7 @@ import type {
   WorkflowRunHandle,
   WorkflowRunState,
   WaitForJobRequest,
+  WritePluginStateRequest,
 } from "@cvr/loom-protocol";
 import { Context, type Effect, type Schema, type Stream } from "effect";
 import type { DaemonUnavailableError } from "./daemon-unavailable-error.js";
@@ -94,6 +100,18 @@ export interface LoomClientShape {
   ) => Effect.Effect<
     void,
     DecideWorkflowCompensationError | HandshakeError | DaemonUnavailableError
+  >;
+  readonly readPluginState: (
+    request: ReadPluginStateRequest,
+  ) => Effect.Effect<
+    PluginStateReadResult,
+    PluginStateStoreError | HandshakeError | DaemonUnavailableError
+  >;
+  readonly writePluginState: (
+    request: WritePluginStateRequest,
+  ) => Effect.Effect<
+    PluginStateRevision,
+    PluginStateWriteError | HandshakeError | DaemonUnavailableError
   >;
 }
 

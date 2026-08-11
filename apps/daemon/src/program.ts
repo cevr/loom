@@ -7,6 +7,7 @@ import {
   layerLoomSqlite,
   layerLoomWorkflowRuntime,
   layerSqliteJobStore,
+  layerSqlitePluginStateStore,
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
   layerSqliteCellLedger,
@@ -129,6 +130,16 @@ const makeJobLayer = (config: DaemonConfig, actors: typeof layerActorStateHub) =
     ]),
   );
 
+const makeClusterLayer = (policy: DaemonPolicy) =>
+  SingleRunner.layer({
+    runnerStorage: "sql",
+    shardingConfig: {
+      entityMaxIdleTime: policy.entityIdleLease,
+      entityMessagePollInterval: "100 millis",
+      entityTerminationTimeout: "1 second",
+    },
+  });
+
 const launchDaemon = <E, R, E2>(
   config: DaemonConfig,
   capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
@@ -137,14 +148,7 @@ const launchDaemon = <E, R, E2>(
 ) =>
   Effect.gen(function* () {
     const daemonStartedAtMillis = yield* Clock.currentTimeMillis;
-    const cluster = SingleRunner.layer({
-      runnerStorage: "sql",
-      shardingConfig: {
-        entityMaxIdleTime: policy.entityIdleLease,
-        entityMessagePollInterval: "100 millis",
-        entityTerminationTimeout: "1 second",
-      },
-    });
+    const cluster = makeClusterLayer(policy);
     const actors = layerActorStateHub;
     const jobs = makeJobLayer(config, actors);
     const childAgents = layerSqliteWorkflowChildAgentStore;
@@ -156,6 +160,7 @@ const launchDaemon = <E, R, E2>(
       actors,
       makeAgentLayer(config, policy),
       childAgents,
+      layerSqlitePluginStateStore,
       orchestration,
       workflows,
     ).pipe(

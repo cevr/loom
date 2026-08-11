@@ -20,6 +20,7 @@ import {
 import {
   LoomRpcs,
   maximumFrameSize,
+  PluginStateReadResult,
   workflowInterpreterVersion,
   WorkflowRunState,
 } from "@cvr/loom-protocol";
@@ -99,6 +100,8 @@ const layerHandlers = (
           Effect.succeed(WorkflowRunState.cases.Success.make({ value: workflow.input })),
         "Workflow.Interrupt": () => Effect.void,
         "Workflow.DecideCompensation": decideCompensation,
+        "PluginState.Read": () => Effect.succeed(PluginStateReadResult.cases.Missing.make({})),
+        "PluginState.Write": () => Effect.succeed(1),
       });
     }),
   );

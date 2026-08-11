@@ -37,6 +37,10 @@ export {
 } from "./internal/bun-job-runtime.js";
 export { layerSqliteCellLedger, makeSqliteCellLedger } from "./internal/sqlite-cell-ledger.js";
 export {
+  layerSqlitePluginStateStore,
+  makeSqlitePluginStateStore,
+} from "./internal/sqlite-plugin-state-store.js";
+export {
   layerSqliteCodeKernelProcessStore,
   makeSqliteCodeKernelProcessStore,
 } from "./internal/sqlite-code-kernel-process-store.js";

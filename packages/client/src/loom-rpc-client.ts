@@ -1,4 +1,4 @@
-import type { SessionId, WorkspaceRoot } from "@cvr/loom-domain";
+import type { SessionId } from "@cvr/loom-domain";
 import {
   currentProtocolVersion,
   LoomRpcs,
@@ -10,67 +10,13 @@ import {
 } from "@cvr/loom-protocol";
 import { Duration, Effect, Layer, Option, Schedule, Scope, Stream } from "effect";
 import { RpcClient, RpcClientError } from "effect/unstable/rpc";
-import {
-  DaemonUnavailableError,
-  type DaemonUnavailableReason,
-} from "./daemon-unavailable-error.js";
+import { DaemonUnavailableError } from "./daemon-unavailable-error.js";
+import { makeDaemonRequest, unavailable, withTimeout } from "./daemon-request.js";
 import { LoomClient, type LoomClientShape } from "./loom-client.js";
+import type { LoomRpcClientConfig } from "./loom-rpc-client-config.js";
 import { MessageTooLargeError } from "./message-too-large-error.js";
 
-export interface LoomRpcClientConfig {
-  readonly socketPath: string;
-  readonly workspaceRoot: WorkspaceRoot;
-  readonly connectionTimeout?: Duration.Input;
-  readonly requestTimeout?: Duration.Input;
-}
-
-const unavailable = (
-  config: LoomRpcClientConfig,
-  operation: string,
-  reason: DaemonUnavailableReason,
-  cause: Option.Option<unknown>,
-) => new DaemonUnavailableError({ socketPath: config.socketPath, operation, reason, cause });
-
 type RpcClientShape = RpcClient.FromGroup<typeof LoomRpcs, RpcClientError.RpcClientError>;
-
-const withTimeout = <A, E, R>(
-  config: LoomRpcClientConfig,
-  operation: string,
-  reason: DaemonUnavailableReason,
-  effect: Effect.Effect<A, E, R>,
-  duration: Duration.Input,
-) =>
-  effect.pipe(
-    Effect.timeoutOrElse({
-      duration,
-      orElse: () => Effect.fail(unavailable(config, operation, reason, Option.none())),
-    }),
-  );
-
-const makeDaemonRequest = <Request, Success, Error, Requirements>(
-  name: string,
-  operation: string,
-  config: LoomRpcClientConfig,
-  runHandshake: LoomClientShape["handshake"],
-  send: (
-    request: Request,
-  ) => Effect.Effect<Success, Error | RpcClientError.RpcClientError, Requirements>,
-  timeoutFor?: (request: Request) => Duration.Input,
-) =>
-  Effect.fn(name)((request: Request) =>
-    withTimeout(
-      config,
-      operation,
-      "RequestTimeout",
-      runHandshake.pipe(
-        Effect.flatMap(() => send(request)),
-        Effect.catchTag("RpcClientError", (cause) =>
-          Effect.fail(unavailable(config, operation, "TransportFailure", Option.some(cause))),
-        ),
-      ),
-      timeoutFor?.(request) ?? config.requestTimeout ?? "10 seconds",
-    ),
-  );
 
 const makeActorStateStream =
   (config: LoomRpcClientConfig, rpc: RpcClientShape, runHandshake: LoomClientShape["handshake"]) =>
@@ -237,6 +183,27 @@ const makeJobControls = (
   ...makeJobReadControls(config, rpc, runHandshake),
 });
 
+const makePluginStateControls = (
+  config: LoomRpcClientConfig,
+  rpc: RpcClientShape,
+  runHandshake: LoomClientShape["handshake"],
+) => ({
+  readPluginState: makeDaemonRequest(
+    "LoomRpcClient.readPluginState",
+    "readPluginState",
+    config,
+    runHandshake,
+    rpc["PluginState.Read"],
+  ),
+  writePluginState: makeDaemonRequest(
+    "LoomRpcClient.writePluginState",
+    "writePluginState",
+    config,
+    runHandshake,
+    rpc["PluginState.Write"],
+  ),
+});
+
 const makeLoomRpcClient = (
   config: LoomRpcClientConfig,
 ): Effect.Effect<LoomClientShape, never, RpcClient.Protocol | Scope.Scope> =>
@@ -245,6 +212,7 @@ const makeLoomRpcClient = (
     const runHandshake = makeRunHandshake(config, rpc);
     return LoomClient.of({
       ...makeJobControls(config, rpc, runHandshake),
+      ...makePluginStateControls(config, rpc, runHandshake),
       ...makeWorkflowControls(config, rpc, runHandshake),
       handshake: runHandshake,
       watchActorStates: makeActorStateStream(config, rpc, runHandshake),
@@ -291,3 +259,5 @@ export const layerLoomRpcClient = (
   config: LoomRpcClientConfig,
 ): Layer.Layer<LoomClient, never, RpcClient.Protocol> =>
   Layer.effect(LoomClient, makeLoomRpcClient(config));
+
+export type { LoomRpcClientConfig } from "./loom-rpc-client-config.js";
