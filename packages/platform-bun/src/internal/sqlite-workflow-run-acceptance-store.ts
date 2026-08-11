@@ -132,7 +132,6 @@ const makeMarkRetiring =
       SET status = 'Retiring'
       WHERE session_id = ${sessionId} AND workflow_run_id = ${workflowRunId}
     `.pipe(
-      sql.withTransaction,
       Effect.asVoid,
       Effect.tapError((cause) => Effect.logError("Workflow retirement mark failed.", cause)),
       Effect.mapError((cause) => storeError("retire", cause)),
