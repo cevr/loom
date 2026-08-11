@@ -1,4 +1,5 @@
 import {
+  JobFailure,
   JobOutcome,
   processIdentitiesMatch,
   type JobId,
@@ -16,7 +17,7 @@ import {
   type JobRuntimeServices,
   mapRuntimeError,
   publishJob,
-  recordLaunchFailure,
+  recordSupervisorFailure,
   settleMissingJob,
 } from "./bun-job-runtime-state.js";
 
@@ -32,7 +33,7 @@ const requireIdentity = (observation: ProcessObservation) =>
 const prepareProcess = Effect.fn("BunJobRuntime.prepareProcess")(function* (
   services: JobRuntimeServices,
   workspaceRoot: WorkspaceRoot,
-  job: JobRecord,
+  job: Extract<JobRecord, { readonly status: "Starting" }>,
 ) {
   yield* services.fs
     .makeDirectory(services.path.dirname(job.stdoutPath), { recursive: true })
@@ -65,8 +66,9 @@ const outcomeForExit = (exit: Exit.Exit<ChildProcessSpawner.ExitCode, unknown>):
     onSuccess: outcomeForExitCode,
     onFailure: (cause) =>
       JobOutcome.cases.Failed.make({
-        exitCode: Option.none(),
-        detail: Option.some(Inspectable.toStringUnknown(cause)),
+        failure: JobFailure.cases.Runtime.make({
+          detail: Inspectable.toStringUnknown(cause),
+        }),
       }),
   });
 
@@ -204,11 +206,8 @@ const launch = Effect.fn("BunJobRuntime.launch")(function* (
   services: JobRuntimeServices,
   workspaceRoot: WorkspaceRoot,
   grace: Duration.Input,
-  job: JobRecord,
+  job: Extract<JobRecord, { readonly status: "Starting" }>,
 ) {
-  const ownsLaunch = yield* services.jobs.begin(job.jobId).pipe(mapRuntimeError("begin"));
-  if (!ownsLaunch) return;
-  yield* publishJob(services.actors, JobRecord.make({ ...job, status: "Starting" }));
   yield* Effect.scoped(
     Effect.gen(function* () {
       const prepared = yield* prepareProcess(services, workspaceRoot, job);
@@ -230,21 +229,27 @@ export const superviseJob = (
   workspaceRoot: WorkspaceRoot,
   grace: Duration.Input,
   fibers: FiberMap.FiberMap<JobId>,
-  job: JobRecord,
+  job: Extract<JobRecord, { readonly status: "Starting" }>,
 ) =>
   FiberMap.run(
     fibers,
     job.jobId,
     launch(services, workspaceRoot, grace, job).pipe(
-      Effect.catch((error) =>
-        recordLaunchFailure(services, job, Inspectable.toStringUnknown(error)).pipe(
+      Effect.catch((error) => {
+        const detail = Inspectable.toStringUnknown(error);
+        let failure: JobFailure;
+        if (error.operation === "prepareFiles" || error.operation === "spawn") {
+          failure = JobFailure.cases.Launch.make({ detail });
+        } else {
+          failure = JobFailure.cases.Runtime.make({ detail });
+        }
+        return recordSupervisorFailure(services, job, failure).pipe(
           Effect.catchCause((completionCause) =>
             Effect.logError("Job launch and failure recording failed.", completionCause),
           ),
-        ),
-      ),
+        );
+      }),
     ),
-    { onlyIfMissing: true },
   ).pipe(Effect.asVoid);
 
 export const monitorJob = (

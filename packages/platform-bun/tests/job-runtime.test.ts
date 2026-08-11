@@ -57,11 +57,12 @@ it.scopedLive.layer(BunServices.layer)("runs a Job and persists its result", () 
 
     yield* Effect.gen(function* () {
       const runtime = yield* JobRuntime;
-      const accepted = yield* runtime.start(jobRequest);
-      expect(accepted.status).toBe("Accepted");
+      const started = yield* runtime.start(jobRequest);
+      expect(started.status).toBe("Starting");
       const completed = yield* waitForJob(runtime, address, terminal);
       expect(completed.status).toBe("Succeeded");
-      expect(completed.exitCode).toEqual(Option.some(0));
+      if (completed.status !== "Succeeded") return yield* Effect.die("Job did not succeed.");
+      expect(completed.exitCode).toBe(0);
       expect(yield* fs.readFileString(completed.stdoutPath)).toBe("complete\n");
       expect(yield* fs.readFileString(completed.resultPath)).toBe("0\n");
     }).pipe(Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, workspaceRoot)));
@@ -140,6 +141,8 @@ it.scopedLive.layer(BunServices.layer)("recovers an exact Job identity after res
       const runtime = yield* JobRuntime;
       yield* runtime.reconcile;
       const recovered = yield* waitForJob(runtime, address, (status) => status === "Running");
+      if (recovered.status !== "Running") return yield* Effect.die("Job is not running.");
+      if (before.status !== "Running") return yield* Effect.die("Job was not running.");
       expect(recovered.identity).toEqual(before.identity);
       expect(yield* fs.readFileString(recovered.stdoutPath)).toBe("before-restart\n");
       yield* runtime.cancel(address);
@@ -162,7 +165,8 @@ it.scopedLive.layer(BunServices.layer)("escalates cancellation for a TERM-resist
       const runtime = yield* JobRuntime;
       yield* runtime.start(jobRequest);
       const running = yield* waitForJob(runtime, address, (status) => status === "Running");
-      const identity = Option.getOrThrow(running.identity);
+      if (running.status !== "Running") return yield* Effect.die("Job is not running.");
+      const identity = running.identity;
       expect(Option.map(yield* runtime.cancel(address), (job) => job.status)).toEqual(
         Option.some("Cancelled"),
       );
@@ -196,7 +200,8 @@ it.scopedLive.layer(BunServices.layer)(
         const runtime = yield* JobRuntime;
         yield* runtime.start(jobRequest);
         const running = yield* waitForJob(runtime, address, (status) => status === "Running");
-        const identity = Option.getOrThrow(running.identity);
+        if (running.status !== "Running") return yield* Effect.die("Job is not running.");
+        const identity = running.identity;
         expect(Option.map(yield* runtime.cancel(address), (job) => job.status)).toEqual(
           Option.some("Cancelled"),
         );

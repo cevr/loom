@@ -94,7 +94,7 @@ const readOwnership = (filename: string, sessionId: SessionId) =>
     const agents = yield* WorkflowChildAgentStore;
     const jobs = yield* JobStore;
     const agent = yield* requireHead(yield* agents.listActiveBySession(sessionId), "child Agent");
-    const running = yield* jobs.listByStatus(["Running", "Stopping"]).pipe(
+    const running = yield* jobs.listRecoverable.pipe(
       Effect.repeat({
         while: (records) => records.length === 0,
         schedule: Schedule.spaced("10 millis"),
@@ -113,7 +113,8 @@ const readActiveAgents = (filename: string, sessionId: SessionId) =>
 
 const readActiveJobs = (filename: string) =>
   JobStore.pipe(
-    Effect.flatMap((jobs) => jobs.listByStatus(["Accepted", "Starting", "Running", "Stopping"])),
+    Effect.flatMap((jobs) => Effect.all([jobs.listUncommitted, jobs.listRecoverable])),
+    Effect.map(([uncommitted, recoverable]) => [...uncommitted, ...recoverable]),
     Effect.provide(ownershipStorage(filename)),
   );
 
@@ -181,6 +182,8 @@ scopedLive("reconciles Workflow child ownership through a full daemon restart", 
     yield* withClient(config.workspaceRoot, config.socketPath, (client) => client.handshake);
     const after = yield* readOwnership(config.databasePath, request.sessionId);
     expect(after.agent).toEqual(before.agent);
+    if (after.job.status !== "Running") return yield* Effect.die("Job is not running.");
+    if (before.job.status !== "Running") return yield* Effect.die("Job was not running.");
     expect(after.job.identity).toEqual(before.job.identity);
     expect(after.job.status).toBe("Running");
 
@@ -192,7 +195,7 @@ scopedLive("reconciles Workflow child ownership through a full daemon restart", 
     );
     expect(yield* readActiveAgents(config.databasePath, request.sessionId)).toEqual([]);
     yield* fs.writeFileString(releasePath, "release");
-    const identity = Option.getOrThrow(after.job.identity);
+    const identity = after.job.identity;
     expect(yield* waitForProcessExit(identity.pid)).toHaveProperty("_tag", "Missing");
     expect(yield* waitForNoActiveJobs(config.databasePath)).toEqual([]);
     yield* Fiber.interrupt(secondDaemon);

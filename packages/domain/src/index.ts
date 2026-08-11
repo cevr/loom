@@ -1,54 +1,19 @@
 import { Effect, Option, Schema } from "effect";
+import {
+  AgentId,
+  JobId,
+  SessionId,
+  WorkflowActivityKey,
+  WorkflowCapability,
+  WorkflowIncarnationId,
+  WorkflowKey,
+  WorkflowName,
+  WorkflowRunId,
+  WorkflowSignalName,
+  WorkflowVersion,
+} from "./identifiers.js";
 
-const identifier = (name: string) => Schema.NonEmptyString.pipe(Schema.brand(name));
-
-export const SessionId = identifier("@cvr/loom/SessionId");
-export type SessionId = typeof SessionId.Type;
-
-export const WorkspaceRoot = identifier("@cvr/loom/WorkspaceRoot");
-export type WorkspaceRoot = typeof WorkspaceRoot.Type;
-
-export const AgentId = identifier("@cvr/loom/AgentId");
-export type AgentId = typeof AgentId.Type;
-
-export const CellId = identifier("@cvr/loom/CellId");
-export type CellId = typeof CellId.Type;
-
-export const JobId = identifier("@cvr/loom/JobId");
-export type JobId = typeof JobId.Type;
-
-export const WorkflowRunId = identifier("@cvr/loom/WorkflowRunId");
-export type WorkflowRunId = typeof WorkflowRunId.Type;
-
-export const WorkflowIncarnationId = identifier("@cvr/loom/WorkflowIncarnationId");
-export type WorkflowIncarnationId = typeof WorkflowIncarnationId.Type;
-
-export const WorkflowName = identifier("@cvr/loom/WorkflowName");
-export type WorkflowName = typeof WorkflowName.Type;
-
-export const WorkflowVersion = identifier("@cvr/loom/WorkflowVersion");
-export type WorkflowVersion = typeof WorkflowVersion.Type;
-
-export const WorkflowKey = identifier("@cvr/loom/WorkflowKey");
-export type WorkflowKey = typeof WorkflowKey.Type;
-
-export const WorkflowCapability = identifier("@cvr/loom/WorkflowCapability");
-export type WorkflowCapability = typeof WorkflowCapability.Type;
-
-export const WorkflowStepId = identifier("@cvr/loom/WorkflowStepId");
-export type WorkflowStepId = typeof WorkflowStepId.Type;
-
-export const WorkflowActivityKey = identifier("@cvr/loom/WorkflowActivityKey");
-export type WorkflowActivityKey = typeof WorkflowActivityKey.Type;
-
-export const workflowAgentId = (activityKey: WorkflowActivityKey): AgentId =>
-  AgentId.make(`workflow-agent:${activityKey}`);
-
-export const workflowJobId = (activityKey: WorkflowActivityKey): JobId =>
-  JobId.make(`workflow-job:${activityKey}`);
-
-export const WorkflowSignalName = identifier("@cvr/loom/WorkflowSignalName");
-export type WorkflowSignalName = typeof WorkflowSignalName.Type;
+export * from "./identifiers.js";
 
 export const WorkflowSignalAddress = Schema.Struct({
   sessionId: SessionId,
@@ -69,12 +34,6 @@ export const WorkflowIdentity = Schema.Struct({
   key: WorkflowKey,
 });
 export type WorkflowIdentity = typeof WorkflowIdentity.Type;
-
-export const ArtifactId = identifier("@cvr/loom/ArtifactId");
-export type ArtifactId = typeof ArtifactId.Type;
-
-export const workflowArtifactId = (activityKey: WorkflowActivityKey): ArtifactId =>
-  ArtifactId.make(`workflow-artifact:${activityKey}`);
 
 export const AgentOwner = Schema.Struct({
   sessionId: SessionId,
@@ -220,13 +179,7 @@ export const ProcessIdentity = Schema.Struct({
 });
 export type ProcessIdentity = typeof ProcessIdentity.Type;
 
-export const processIdentitiesMatch = (
-  expected: ProcessIdentity,
-  actual: ProcessIdentity,
-): boolean =>
-  expected.pid === actual.pid &&
-  expected.processGroupId === actual.processGroupId &&
-  expected.processStartId === actual.processStartId;
+export const processIdentitiesMatch = Schema.toEquivalence(ProcessIdentity);
 
 export const CodeKernelProcessRecord = Schema.Struct({
   ...AgentOwner.fields,
@@ -265,31 +218,64 @@ export const JobRequest = Schema.Struct({
 });
 export type JobRequest = typeof JobRequest.Type;
 
+export const JobFailureExitCode = Schema.Union([
+  Schema.Int.check(Schema.isLessThan(0)),
+  Schema.Int.check(Schema.isGreaterThan(0)),
+]);
+export type JobFailureExitCode = typeof JobFailureExitCode.Type;
+
+export const JobFailure = Schema.TaggedUnion({
+  Launch: { detail: Schema.NonEmptyString },
+  Exit: { exitCode: JobFailureExitCode, detail: Schema.OptionFromNullOr(Schema.String) },
+  Runtime: { detail: Schema.NonEmptyString },
+});
+export type JobFailure = typeof JobFailure.Type;
+
 export const JobOutcome = Schema.TaggedUnion({
   Succeeded: { exitCode: Schema.Literal(0) },
-  Failed: {
-    exitCode: Schema.OptionFromNullOr(Schema.Int),
-    detail: Schema.OptionFromNullOr(Schema.String),
-  },
+  Failed: { failure: JobFailure },
   Cancelled: {},
   Lost: { detail: Schema.OptionFromNullOr(Schema.String) },
 });
 export type JobOutcome = typeof JobOutcome.Type;
 
-export const JobRecord = Schema.Struct({
-  jobId: JobId,
-  sessionId: SessionId,
-  command: Schema.NonEmptyString,
-  attached: Schema.Boolean,
-  status: JobStatus,
-  stdoutPath: Schema.NonEmptyString,
-  stderrPath: Schema.NonEmptyString,
-  resultPath: Schema.NonEmptyString,
-  identity: Schema.OptionFromNullOr(ProcessIdentity),
-  exitCode: Schema.OptionFromNullOr(Schema.Int),
-  detail: Schema.OptionFromNullOr(Schema.String),
-});
+const JobRecordFields = JobSubmission.fields;
+
+export const JobRecord = Schema.Union([
+  Schema.Struct({ ...JobRecordFields, status: Schema.tag("Accepted") }),
+  Schema.Struct({ ...JobRecordFields, status: Schema.tag("Starting") }),
+  Schema.Struct({
+    ...JobRecordFields,
+    status: Schema.tag("Running"),
+    identity: ProcessIdentity,
+  }),
+  Schema.Struct({
+    ...JobRecordFields,
+    status: Schema.tag("Stopping"),
+    identity: Schema.OptionFromNullOr(ProcessIdentity),
+  }),
+  Schema.Struct({
+    ...JobRecordFields,
+    status: Schema.tag("Succeeded"),
+    exitCode: Schema.Literal(0),
+  }),
+  Schema.Struct({
+    ...JobRecordFields,
+    status: Schema.tag("Failed"),
+    failure: JobFailure,
+  }),
+  Schema.Struct({ ...JobRecordFields, status: Schema.tag("Cancelled") }),
+  Schema.Struct({
+    ...JobRecordFields,
+    status: Schema.tag("Lost"),
+    detail: Schema.OptionFromNullOr(Schema.String),
+  }),
+]).pipe(Schema.toTaggedUnion("status"));
 export type JobRecord = typeof JobRecord.Type;
+export type JobAcceptedRecord = Extract<JobRecord, { readonly status: "Accepted" }>;
+export type JobStartingRecord = Extract<JobRecord, { readonly status: "Starting" }>;
+export type JobUncommittedRecord = Extract<JobRecord, { readonly status: "Accepted" | "Starting" }>;
+export type JobRecoverableRecord = Extract<JobRecord, { readonly status: "Running" | "Stopping" }>;
 
 export const JobAddress = Schema.Struct({
   sessionId: SessionId,

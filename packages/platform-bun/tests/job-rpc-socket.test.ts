@@ -79,7 +79,6 @@ scopedLive("round-trips every Job operation through a Unix socket", () =>
       expect(Object.keys(job).sort()).toEqual([
         "attached",
         "command",
-        "detail",
         "exitCode",
         "jobId",
         "sessionId",

@@ -4,8 +4,9 @@ import {
   ActorSubject,
   JobActiveStatus,
   JobAddress,
+  JobFailure,
   JobOutcome,
-  type JobRecord,
+  JobRecord,
 } from "@cvr/loom-domain";
 import {
   JobRuntimeError,
@@ -14,7 +15,7 @@ import {
   type ProcessControllerShape,
   type ProcessInspectorShape,
 } from "@cvr/loom-runtime";
-import { Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Effect, FileSystem, Option, Path } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { readJobOutcome } from "./bun-job-command.js";
 
@@ -46,20 +47,30 @@ const revision = (job: JobRecord): number => {
       return 2;
     case "Stopping":
       return 3;
-    default:
+    case "Succeeded":
+    case "Failed":
+    case "Cancelled":
+    case "Lost":
       return 4;
   }
 };
 
-const isActiveStatus = Schema.is(JobActiveStatus);
-
 const activity = (job: JobRecord) => {
-  if (isActiveStatus(job.status)) {
+  if (JobRecord.isAnyOf(JobActiveStatus.literals)(job)) {
     return ActorActivity.cases.Working.make({ message: `Job ${job.status}` });
   }
-  if (job.status === "Failed" || job.status === "Lost") {
+  if (job.status === "Failed") {
     return ActorActivity.cases.Failed.make({
-      message: Option.getOrElse(job.detail, () => `Job ${job.status}`),
+      message: JobFailure.match(job.failure, {
+        Launch: (failure) => failure.detail,
+        Exit: (failure) => Option.getOrElse(failure.detail, () => "Job Failed"),
+        Runtime: (failure) => failure.detail,
+      }),
+    });
+  }
+  if (job.status === "Lost") {
+    return ActorActivity.cases.Failed.make({
+      message: Option.getOrElse(job.detail, () => "Job Lost"),
     });
   }
   return ActorActivity.cases.Stopped.make({});
@@ -108,21 +119,44 @@ export const settleMissingJob = Effect.fn("BunJobRuntime.settleMissing")(functio
   return yield* completeJob(services, current.value, outcome);
 });
 
-export const recordLaunchFailure = Effect.fn("BunJobRuntime.recordLaunchFailure")(function* (
-  services: JobRuntimeServices,
-  job: JobRecord,
-  detail: string,
-) {
-  const current = yield* services.jobs.get(jobAddress(job)).pipe(mapRuntimeError("inspect"));
-  if (Option.isNone(current)) return;
-  let outcome: JobOutcome;
-  if (current.value.status === "Stopping") {
-    outcome = JobOutcome.cases.Cancelled.make({});
-  } else {
-    outcome = JobOutcome.cases.Failed.make({
-      exitCode: Option.none(),
-      detail: Option.some(detail),
-    });
-  }
-  yield* completeJob(services, current.value, outcome);
-});
+export const recordSupervisorFailure = Effect.fn("BunJobRuntime.recordSupervisorFailure")(
+  function* (services: JobRuntimeServices, job: JobRecord, failure: JobFailure) {
+    const current = yield* services.jobs.get(jobAddress(job)).pipe(mapRuntimeError("inspect"));
+    if (Option.isNone(current)) return;
+    switch (current.value.status) {
+      case "Starting":
+        yield* completeJob(
+          services,
+          current.value,
+          JobOutcome.cases.Failed.make({
+            failure,
+          }),
+        );
+        return;
+      case "Running":
+        yield* completeJob(
+          services,
+          current.value,
+          JobOutcome.cases.Failed.make({
+            failure: JobFailure.cases.Runtime.make({
+              detail: JobFailure.match(failure, {
+                Launch: ({ detail }) => detail,
+                Exit: ({ detail }) => Option.getOrElse(detail, () => "The Job process failed."),
+                Runtime: ({ detail }) => detail,
+              }),
+            }),
+          }),
+        );
+        return;
+      case "Stopping":
+        yield* completeJob(services, current.value, JobOutcome.cases.Cancelled.make({}));
+        break;
+      case "Accepted":
+      case "Succeeded":
+      case "Failed":
+      case "Cancelled":
+      case "Lost":
+        break;
+    }
+  },
+);

@@ -1,4 +1,4 @@
-import { JobAddress, JobRecord, JobRequest } from "@cvr/loom-domain";
+import { JobAddress, JobFailure, JobRequest } from "@cvr/loom-domain";
 import { Effect, Schema } from "effect";
 import { Rpc } from "effect/unstable/rpc";
 
@@ -25,15 +25,35 @@ const outputBytes = Schema.Int.check(
   Schema.withConstructorDefault(Effect.succeed(defaultJobOutputBytes)),
 );
 
-export const JobState = Schema.Struct({
-  jobId: JobRecord.fields.jobId,
-  sessionId: JobRecord.fields.sessionId,
-  command: JobRecord.fields.command,
-  attached: JobRecord.fields.attached,
-  status: JobRecord.fields.status,
-  exitCode: JobRecord.fields.exitCode,
-  detail: JobRecord.fields.detail,
-});
+const JobStateFields = {
+  jobId: JobRequest.fields.jobId,
+  sessionId: JobRequest.fields.sessionId,
+  command: JobRequest.fields.command,
+  attached: JobRequest.fields.attached,
+};
+
+export const JobState = Schema.Union([
+  Schema.Struct({ ...JobStateFields, status: Schema.tag("Accepted") }),
+  Schema.Struct({ ...JobStateFields, status: Schema.tag("Starting") }),
+  Schema.Struct({ ...JobStateFields, status: Schema.tag("Running") }),
+  Schema.Struct({ ...JobStateFields, status: Schema.tag("Stopping") }),
+  Schema.Struct({
+    ...JobStateFields,
+    status: Schema.tag("Succeeded"),
+    exitCode: Schema.Literal(0),
+  }),
+  Schema.Struct({
+    ...JobStateFields,
+    status: Schema.tag("Failed"),
+    failure: JobFailure,
+  }),
+  Schema.Struct({ ...JobStateFields, status: Schema.tag("Cancelled") }),
+  Schema.Struct({
+    ...JobStateFields,
+    status: Schema.tag("Lost"),
+    detail: Schema.OptionFromNullOr(Schema.String),
+  }),
+]).pipe(Schema.toTaggedUnion("status"));
 export type JobState = typeof JobState.Type;
 
 export const StartJobRequest = Schema.Struct({
@@ -82,7 +102,7 @@ export const JobOperation = Schema.Literals([
 export type JobOperation = typeof JobOperation.Type;
 
 export class JobRpcError extends Schema.TaggedError<JobRpcError>()("JobRpcError", {
-  jobId: JobRecord.fields.jobId,
+  jobId: JobAddress.fields.jobId,
   operation: JobOperation,
   message: Schema.String,
 }) {}

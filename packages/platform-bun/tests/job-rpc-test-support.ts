@@ -1,6 +1,6 @@
 import { JobId, type SessionId } from "@cvr/loom-domain";
 import { JobState, type StartJobRequest } from "@cvr/loom-protocol";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 
 export const makeStubJobHandlers = (sessionId: SessionId) => {
   const job = JobState.make({
@@ -9,8 +9,7 @@ export const makeStubJobHandlers = (sessionId: SessionId) => {
     command: "exit 0",
     attached: true,
     status: "Succeeded",
-    exitCode: Option.some(0),
-    detail: Option.none(),
+    exitCode: 0,
   });
   return {
     "Job.Start": (_request: StartJobRequest) => Effect.succeed(job),

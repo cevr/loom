@@ -1,6 +1,7 @@
 import { BunServices } from "@effect/platform-bun";
 import {
   JobAddress,
+  JobFailure,
   JobId,
   JobOutcome,
   JobRecord,
@@ -29,15 +30,16 @@ const submission = JobSubmission.make({
 const accepted = JobRecord.make({
   ...submission,
   status: "Accepted",
-  identity: Option.none(),
-  exitCode: Option.none(),
-  detail: Option.none(),
 });
 const identity = ProcessIdentity.make({
   pid: 42001,
   processGroupId: 42001,
   processStartId: "Sun Aug  9 10:00:00 2026",
 });
+const invalidRunningJobId = JobId.make("job-2");
+const invalidSucceededJobId = JobId.make("job-3");
+const invalidFailedJobId = JobId.make("job-4");
+const invalidLostJobId = JobId.make("job-5");
 const layerJobStore = (filename: string) => {
   const sqlite = layerLoomSqlite({ filename });
   return layerSqliteJobStore.pipe(Layer.provideMerge(sqlite));
@@ -75,6 +77,65 @@ const insertSuccessWithoutExitCode = (sql: SqlClient.SqlClient, succeededJobId: 
   )
 `;
 
+const insertFailedWithSuccessCode = (sql: SqlClient.SqlClient, failedJobId: JobId) => sql`
+  INSERT INTO jobs (
+    job_id, session_id, command, attached, status,
+    stdout_path, stderr_path, result_path, failure_kind, exit_code
+  ) VALUES (
+    ${failedJobId}, ${sessionId}, 'exit 0', 1, 'Failed',
+    '/tmp/job-4/stdout.log', '/tmp/job-4/stderr.log', '/tmp/job-4/result', 'Exit', 0
+  )
+`;
+
+const insertLostWithIdentity = (sql: SqlClient.SqlClient, lostJobId: JobId) => sql`
+  INSERT INTO jobs (
+    job_id, session_id, command, attached, status,
+    stdout_path, stderr_path, result_path, pid, process_group_id, process_start_id
+  ) VALUES (
+    ${lostJobId}, ${sessionId}, 'sleep 30', 1, 'Lost',
+    '/tmp/job-5/stdout.log', '/tmp/job-5/stderr.log', '/tmp/job-5/result',
+    42005, 42005, 'Sun Aug  9 10:00:00 2026'
+  )
+`;
+
+const assertForeignWritesFail = Effect.fn(function* (sql: SqlClient.SqlClient) {
+  expect(Exit.isFailure(yield* Effect.exit(insertPartialIdentity(sql)))).toBe(true);
+  expect(
+    Exit.isFailure(yield* Effect.exit(insertRunningWithoutIdentity(sql, invalidRunningJobId))),
+  ).toBe(true);
+  expect(
+    Exit.isFailure(yield* Effect.exit(insertSuccessWithoutExitCode(sql, invalidSucceededJobId))),
+  ).toBe(true);
+  expect(
+    Exit.isFailure(yield* Effect.exit(insertFailedWithSuccessCode(sql, invalidFailedJobId))),
+  ).toBe(true);
+  expect(Exit.isFailure(yield* Effect.exit(insertLostWithIdentity(sql, invalidLostJobId)))).toBe(
+    true,
+  );
+});
+
+const assertForeignRowsFailToDecode = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  jobs: JobStore["Service"],
+) {
+  yield* sql`PRAGMA ignore_check_constraints = ON`;
+  yield* insertPartialIdentity(sql);
+  yield* insertRunningWithoutIdentity(sql, invalidRunningJobId);
+  yield* insertSuccessWithoutExitCode(sql, invalidSucceededJobId);
+  yield* insertFailedWithSuccessCode(sql, invalidFailedJobId);
+  yield* insertLostWithIdentity(sql, invalidLostJobId);
+  for (const foreignJobId of [
+    jobId,
+    invalidRunningJobId,
+    invalidSucceededJobId,
+    invalidFailedJobId,
+    invalidLostJobId,
+  ]) {
+    const foreignAddress = JobAddress.make({ sessionId, jobId: foreignJobId });
+    expect(Exit.isFailure(yield* Effect.exit(jobs.get(foreignAddress)))).toBe(true);
+  }
+});
+
 it.scopedLive.layer(BunServices.layer)("owns the durable Job lifecycle", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -82,15 +143,19 @@ it.scopedLive.layer(BunServices.layer)("owns the durable Job lifecycle", () =>
 
     yield* Effect.gen(function* () {
       const jobs = yield* JobStore;
-      expect(yield* jobs.create(submission)).toBe(true);
-      expect(yield* jobs.create(submission)).toBe(false);
+      expect(Option.map(yield* jobs.create(submission), (job) => job.status)).toEqual(
+        Option.some("Accepted"),
+      );
+      expect(yield* jobs.create(submission)).toEqual(Option.none());
       expect(yield* jobs.get(address)).toEqual(Option.some(accepted));
-      expect(yield* jobs.begin(jobId)).toBe(true);
-      expect(yield* jobs.begin(jobId)).toBe(false);
+      expect(Option.map(yield* jobs.begin(jobId), (job) => job.status)).toEqual(
+        Option.some("Starting"),
+      );
+      expect(yield* jobs.begin(jobId)).toEqual(Option.none());
 
       const running = yield* jobs.activate(jobId, identity);
       expect(Option.map(running, (job) => job.status)).toEqual(Option.some("Running"));
-      expect(yield* jobs.listRecoverable).toEqual([Option.getOrThrow(running)]);
+      expect((yield* jobs.listRecoverable).map((job) => job.status)).toEqual(["Running"]);
       expect(yield* jobs.listAttachedActive(sessionId)).toHaveLength(1);
 
       const detached = yield* jobs.detach(address);
@@ -119,10 +184,10 @@ it.scopedLive.layer(BunServices.layer)("cancels an accepted Job without launchin
     yield* Effect.gen(function* () {
       const jobs = yield* JobStore;
       yield* jobs.create(submission);
-      expect(yield* jobs.listUncommitted).toEqual([accepted]);
+      expect((yield* jobs.listUncommitted).map((job) => job.status)).toEqual(["Accepted"]);
       const cancelled = yield* jobs.requestStop(address);
       expect(Option.map(cancelled, (job) => job.status)).toEqual(Option.some("Cancelled"));
-      expect(yield* jobs.begin(jobId)).toBe(false);
+      expect(yield* jobs.begin(jobId)).toEqual(Option.none());
       expect(yield* jobs.listUncommitted).toEqual([]);
     }).pipe(Effect.provide(layerJobStore(`${directory}/loom.sqlite`)));
   }),
@@ -142,7 +207,12 @@ it.scopedLive.layer(BunServices.layer)(
         yield* jobs.requestStop(address);
         const stopping = yield* jobs.activate(jobId, identity);
         expect(Option.map(stopping, (job) => job.status)).toEqual(Option.some("Stopping"));
-        expect(Option.flatMap(stopping, (job) => job.identity)).toEqual(Option.some(identity));
+        expect(
+          stopping.pipe(
+            Option.filter(JobRecord.guards.Stopping),
+            Option.flatMap((job) => job.identity),
+          ),
+        ).toEqual(Option.some(identity));
         expect(yield* jobs.activate(jobId, { ...identity, pid: 42002 })).toEqual(Option.none());
       }).pipe(Effect.provide(layerJobStore(`${directory}/loom.sqlite`)));
     }),
@@ -162,9 +232,12 @@ it.scopedLive.layer(BunServices.layer)("persists successful and failed Job outco
         true,
       );
       const succeeded = yield* jobs.get(address);
-      expect(Option.map(succeeded, (job) => [job.status, job.exitCode])).toEqual(
-        Option.some(["Succeeded", Option.some(0)]),
-      );
+      expect(
+        succeeded.pipe(
+          Option.filter(JobRecord.guards.Succeeded),
+          Option.map((job) => [job.status, job.exitCode]),
+        ),
+      ).toEqual(Option.some(["Succeeded", 0]));
 
       const failedJobId = JobId.make("job-2");
       const failedAddress = JobAddress.make({ sessionId, jobId: failedJobId });
@@ -174,13 +247,20 @@ it.scopedLive.layer(BunServices.layer)("persists successful and failed Job outco
         yield* jobs.complete(
           failedJobId,
           JobOutcome.cases.Failed.make({
-            exitCode: Option.none(),
-            detail: Option.some("launch failed"),
+            failure: JobFailure.cases.Launch.make({ detail: "launch failed" }),
           }),
         ),
       ).toBe(true);
-      expect(Option.map(yield* jobs.get(failedAddress), (job) => job.detail)).toEqual(
-        Option.some(Option.some("launch failed")),
+      expect(
+        (yield* jobs.get(failedAddress)).pipe(
+          Option.filter(JobRecord.guards.Failed),
+          Option.map((job) => job.failure),
+          Option.filter(JobFailure.guards.Launch),
+          Option.map((failure) => failure.detail),
+        ),
+      ).toEqual(Option.some("launch failed"));
+      expect(Option.map(yield* jobs.begin(failedJobId), (job) => job.status)).toEqual(
+        Option.some("Starting"),
       );
     }).pipe(Effect.provide(layerJobStore(`${directory}/loom.sqlite`)));
   }),
@@ -202,7 +282,7 @@ it.scopedLive.layer(BunServices.layer)("reports a typed store failure", () =>
   }),
 );
 
-it.scopedLive.layer(BunServices.layer)("rejects invalid stored Job states", () =>
+it.scopedLive.layer(BunServices.layer)("rejects invalid foreign Job writes", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-job-identity-" });
@@ -210,24 +290,8 @@ it.scopedLive.layer(BunServices.layer)("rejects invalid stored Job states", () =
     yield* Effect.gen(function* () {
       const jobs = yield* JobStore;
       const sql = yield* SqlClient.SqlClient;
-      yield* sql`PRAGMA ignore_check_constraints = ON`;
-      const runningJobId = JobId.make("job-2");
-      const succeededJobId = JobId.make("job-3");
-      yield* insertPartialIdentity(sql);
-      yield* insertRunningWithoutIdentity(sql, runningJobId);
-      yield* insertSuccessWithoutExitCode(sql, succeededJobId);
-
-      expect(Exit.isFailure(yield* Effect.exit(jobs.get(address)))).toBe(true);
-      expect(
-        Exit.isFailure(
-          yield* Effect.exit(jobs.get(JobAddress.make({ sessionId, jobId: runningJobId }))),
-        ),
-      ).toBe(true);
-      expect(
-        Exit.isFailure(
-          yield* Effect.exit(jobs.get(JobAddress.make({ sessionId, jobId: succeededJobId }))),
-        ),
-      ).toBe(true);
+      yield* assertForeignWritesFail(sql);
+      yield* assertForeignRowsFailToDecode(sql, jobs);
     }).pipe(Effect.provide(layerJobStore(`${directory}/loom.sqlite`)));
   }),
 );

@@ -18,7 +18,7 @@ export const superviseCancellation = (
   services: JobRuntimeServices,
   grace: Duration.Input,
   fibers: FiberMap.FiberMap<JobId>,
-  job: JobRecord,
+  job: Extract<JobRecord, { readonly status: "Stopping" }>,
 ) =>
   Option.match(job.identity, {
     onNone: () => Effect.void,
@@ -43,7 +43,11 @@ export const makeCancel = (
     const requestedJob = yield* Effect.gen(function* () {
       const requested = yield* services.jobs.requestStop(address).pipe(mapRuntimeError("cancel"));
       const current = yield* existingAfterMutation(services, "cancel", address, requested);
-      if (Option.isSome(current) && Option.isSome(requested)) {
+      if (
+        Option.isSome(current) &&
+        Option.isSome(requested) &&
+        current.value.status === "Stopping"
+      ) {
         yield* publishJob(services.actors, current.value);
         yield* superviseCancellation(services, grace, fibers, current.value);
       }

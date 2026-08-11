@@ -1,96 +1,19 @@
 import { BunServices } from "@effect/platform-bun";
-import {
-  JobAddress,
-  JobId,
-  JobRequest,
-  JobSubmission,
-  ProcessIdentity,
-  SessionId,
-  WorkspaceRoot,
-  type JobRecord,
-} from "@cvr/loom-domain";
-import { JobRuntime, JobStore, layerActorStateHub } from "@cvr/loom-runtime";
+import { JobAddress, ProcessIdentity, WorkspaceRoot } from "@cvr/loom-domain";
+import { JobRuntime, JobStore } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Option, Path, Schedule } from "effect";
+import { Effect, FileSystem, Option, Path, Schedule } from "effect";
+import { makeBunProcessController } from "../src/index.js";
 import {
-  layerBunJobRuntime,
-  layerBunProcessController,
-  layerBunProcessInspector,
-  layerLoomSqlite,
-  layerSqliteJobStore,
-  makeBunProcessController,
-} from "../src/index.js";
-
-const sessionId = SessionId.make("recovery-session");
-const request = (jobId: string, command: string) =>
-  JobRequest.make({ jobId: JobId.make(jobId), sessionId, command, attached: true });
-
-const storeLayer = (filename: string) =>
-  layerSqliteJobStore.pipe(Layer.provide(layerLoomSqlite({ filename })));
-
-const runtimeLayer = (filename: string, workspaceRoot: WorkspaceRoot) =>
-  layerBunJobRuntime({ workspaceRoot, terminationGrace: "50 millis" }).pipe(
-    Layer.provide([
-      layerActorStateHub,
-      layerBunProcessController,
-      layerBunProcessInspector,
-      storeLayer(filename),
-    ]),
-  );
-
-const submission = (workspaceRoot: WorkspaceRoot, jobRequest: JobRequest) => {
-  const directory = `${workspaceRoot}/.loom/jobs/${encodeURIComponent(jobRequest.jobId)}`;
-  return JobSubmission.make({
-    ...jobRequest,
-    stdoutPath: `${directory}/stdout.log`,
-    stderrPath: `${directory}/stderr.log`,
-    resultPath: `${directory}/result`,
-  });
-};
-
-const inspectAfterReconcile = (
-  filename: string,
-  workspaceRoot: WorkspaceRoot,
-  address: JobAddress,
-) =>
-  Effect.gen(function* () {
-    const runtime = yield* JobRuntime;
-    yield* runtime.reconcile;
-    return yield* runtime.inspect(address);
-  }).pipe(Effect.provide(runtimeLayer(filename, workspaceRoot)), Effect.scoped);
-
-const waitForTerminal = (runtime: JobRuntime["Service"], address: JobAddress) =>
-  runtime.inspect(address).pipe(
-    Effect.flatMap(
-      Option.match({ onNone: () => Effect.die("Missing Job."), onSome: Effect.succeed }),
-    ),
-    Effect.repeat({
-      until: (job) =>
-        job.status === "Succeeded" ||
-        job.status === "Failed" ||
-        job.status === "Cancelled" ||
-        job.status === "Lost",
-      schedule: Schedule.spaced("10 millis"),
-    }),
-    Effect.timeout("5 seconds"),
-  );
-
-const seedRunning = (filename: string, job: JobSubmission) =>
-  Effect.gen(function* () {
-    const jobs = yield* JobStore;
-    yield* jobs.create(job);
-    yield* jobs.begin(job.jobId);
-    yield* jobs.activate(
-      job.jobId,
-      ProcessIdentity.make({
-        pid: 2_147_483_647,
-        processGroupId: 2_147_483_647,
-        processStartId: "missing-process",
-      }),
-    );
-  }).pipe(Effect.provide(storeLayer(filename)));
-
-const status = (job: Option.Option<JobRecord>) => Option.map(job, (record) => record.status);
+  inspectAfterReconcile,
+  request,
+  runtimeLayer,
+  seedRunning,
+  status,
+  storeLayer,
+  submission,
+  waitForTerminal,
+} from "./job-recovery-test-support.js";
 
 it.scopedLive.layer(BunServices.layer)("fails a launch that did not commit before restart", () =>
   Effect.gen(function* () {
@@ -277,8 +200,7 @@ it.scopedLive.layer(BunServices.layer)("resumes cancellation after restart", () 
     }).pipe(Effect.provide(runtimeLayer(filename, workspaceRoot)), Effect.scoped);
 
     expect(status(reconciled)).toEqual(Option.some("Cancelled"));
-    expect(yield* makeBunProcessController.isGroupAlive(Option.getOrThrow(running.identity))).toBe(
-      false,
-    );
+    if (running.status !== "Running") return yield* Effect.die("Job is not running.");
+    expect(yield* makeBunProcessController.isGroupAlive(running.identity)).toBe(false);
   }),
 );

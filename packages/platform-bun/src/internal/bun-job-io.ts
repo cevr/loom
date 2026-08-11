@@ -1,21 +1,21 @@
-import { JobAddress, JobTerminalStatus } from "@cvr/loom-domain";
+import { JobAddress, JobRecord } from "@cvr/loom-domain";
 import {
   JobRuntimeError,
   type JobOutputChunk,
   type JobOutputRequest,
   type JobWaitRequest,
 } from "@cvr/loom-runtime";
-import { Duration, Effect, Option, type PlatformError, Schedule, Schema, Stream } from "effect";
+import { Duration, Effect, Option, type PlatformError, Schedule, Stream } from "effect";
 import { type JobRuntimeServices, mapRuntimeError } from "./bun-job-runtime-state.js";
 
-const isTerminal = Schema.is(JobTerminalStatus);
+const isTerminal = JobRecord.isAnyOf(["Succeeded", "Failed", "Cancelled", "Lost"]);
 
 export const makeAwaitTerminal = (services: JobRuntimeServices) =>
   Effect.fn("BunJobRuntime.awaitTerminal")((address: JobAddress) =>
     services.jobs.get(address).pipe(
       mapRuntimeError("await"),
       Effect.repeat({
-        until: Option.match({ onNone: () => true, onSome: (job) => isTerminal(job.status) }),
+        until: Option.match({ onNone: () => true, onSome: isTerminal }),
         schedule: Schedule.spaced("50 millis"),
       }),
     ),
@@ -32,16 +32,6 @@ export const makeAwait = (services: JobRuntimeServices) =>
       }),
     );
   });
-
-const concatenate = (arrays: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const output = new Uint8Array(arrays.reduce((size, bytes) => size + bytes.length, 0));
-  let offset = 0;
-  for (const bytes of arrays) {
-    output.set(bytes, offset);
-    offset += bytes.length;
-  }
-  return output;
-};
 
 const ignoreMissing = <A>(effect: Effect.Effect<A, PlatformError.PlatformError>) =>
   effect.pipe(
@@ -66,7 +56,7 @@ export const makeReadOutput = (services: JobRuntimeServices) =>
       .stream(path, { offset: request.sequence, bytesToRead: request.maximumBytes })
       .pipe(
         Stream.runCollect,
-        Effect.map(concatenate),
+        Effect.map((chunks) => Buffer.concat(chunks)),
         ignoreMissing,
         mapRuntimeError("readOutput"),
       );
@@ -74,7 +64,7 @@ export const makeReadOutput = (services: JobRuntimeServices) =>
     const nextSequence = request.sequence + data.length;
     const info = yield* ignoreMissing(services.fs.stat(path)).pipe(mapRuntimeError("readOutput"));
     const complete =
-      isTerminal(job.value.status) &&
+      isTerminal(job.value) &&
       Option.match(info, {
         onNone: () => true,
         onSome: (file) => BigInt(nextSequence) >= file.size,

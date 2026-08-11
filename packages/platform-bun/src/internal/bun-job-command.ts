@@ -1,4 +1,4 @@
-import { JobOutcome, type JobRecord, type WorkspaceRoot } from "@cvr/loom-domain";
+import { JobFailure, JobOutcome, type JobRecord, type WorkspaceRoot } from "@cvr/loom-domain";
 import { Effect, FileSystem, Option, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/unstable/process";
 
@@ -32,8 +32,10 @@ export const releaseJob = (child: ChildProcessSpawner.ChildProcessHandle) =>
 export const outcomeForExitCode = (exitCode: number): JobOutcome => {
   if (exitCode === 0) return JobOutcome.cases.Succeeded.make({ exitCode });
   return JobOutcome.cases.Failed.make({
-    exitCode: Option.some(exitCode),
-    detail: Option.none(),
+    failure: JobFailure.cases.Exit.make({
+      exitCode,
+      detail: Option.none(),
+    }),
   });
 };
 
