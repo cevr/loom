@@ -10,6 +10,7 @@ import {
 } from "@cvr/loom-protocol";
 import { expect, it } from "bun:test";
 import { Effect, Option } from "effect";
+import { TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import loomExtension, { type LoomExtensionApi, shouldCloseSession } from "../src/index.js";
 import {
   readJobOutputRequest,
@@ -79,10 +80,15 @@ it("registers the Loom development command", () => {
   );
   expect(events).toEqual(
     new Map([
-      ["session_start", 2],
+      ["session_start", 3],
       ["session_shutdown", 2],
     ]),
   );
+});
+
+it("uses Pi input bindings for multiline prompts", () => {
+  expect(TUI_KEYBINDINGS["tui.input.newLine"].defaultKeys).toContain("shift+enter");
+  expect(TUI_KEYBINDINGS["tui.input.submit"].defaultKeys).toBe("enter");
 });
 
 it("keeps the Session active during extension reload", () => {

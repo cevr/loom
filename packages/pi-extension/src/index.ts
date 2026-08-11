@@ -4,8 +4,7 @@ import { Effect } from "effect";
 import { registerCellTools } from "./internal/cell-tools.js";
 import type { LoomExtensionApi } from "./internal/extension-api.js";
 import { registerJobTools } from "./internal/job-tools.js";
-import { registerLoomInterface } from "./internal/loom-interface.js";
-import { registerLoomTheme } from "./internal/loom-theme.js";
+import { registerLoomUi } from "./internal/loom-ui.js";
 import {
   ensureLoomDaemon,
   type EnsureLoomDaemon,
@@ -40,8 +39,7 @@ export const registerLoomExtension = (
   ensureDaemon: EnsureLoomDaemon = ensureLoomDaemon,
 ): void => {
   registerSessionLifecycle(pi);
-  registerLoomTheme(pi);
-  registerLoomInterface(pi, ensureDaemon);
+  registerLoomUi(pi, ensureDaemon);
   pi.registerCommand("loom", {
     description: "Show the Loom daemon state",
     handler: (_arguments, context) =>
