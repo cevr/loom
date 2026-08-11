@@ -10,6 +10,7 @@ Pi starts the Workspace daemon when no daemon answers.
 
 Loom selects its packaged Rosé Pine theme when Pi starts.
 Loom also installs a compact header and an empty footer.
+Loom installs a Pi `CustomEditor` with at least two columns of prompt padding.
 The header shows the daemon state and its Code Kernel lease.
 It shows active Agent, Job, and Workflow state on a second line.
 Wide terminals include short Job and Workflow Run IDs.

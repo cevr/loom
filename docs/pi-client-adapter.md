@@ -6,13 +6,16 @@ Loom does not fork Pi.
 
 ## Input ownership
 
-Pi owns its editor and input key behavior.
+Pi owns input key behavior and completion.
 Pi `0.84.1` inserts a new line for Shift+Enter.
 Pi also supports Ctrl+J as a newline alias.
-Loom does not replace the Pi editor.
+Loom uses Pi `CustomEditor` with at least two columns of prompt padding.
+This minimum is part of the Loom terminal interface.
+Pi settings can increase the padding.
+It does not add a second input parser.
 
 The Pi Client Adapter maps Loom Client Contributions to Pi commands and tools.
-Pi keeps input parsing, completion, and display ownership.
+Pi keeps input parsing, completion, and standard tool display ownership.
 Loom can supply `/btw`, `/goal`, and similar features as scoped Client Components.
 These Components use narrow Client Adapter grants.
 They do not receive the full Pi extension API.
@@ -35,10 +38,15 @@ The extension selects this theme on start and reload.
 The extension replaces the Pi header with a compact Loom state view.
 The extension replaces the Pi footer with an empty component.
 The header shows active Loom state only.
+Pi tool panels show each Loom tool call and its terminal state.
+The actor line shows live Agent, Job, and Workflow Run state.
 Pi `/session` keeps full model and usage information available.
 Loom `/loom` keeps full daemon and socket information available.
 Loom uses Pi theme tokens and Pi TUI width helpers.
 It does not add a second TUI framework.
+
+These choices follow the useful parts of the Prime Agent interface.
+They keep the prompt padded, the footer quiet, and execution state visible.
 
 Each operation performs the typed Workspace handshake.
 The adapter starts the daemon when no daemon answers.
