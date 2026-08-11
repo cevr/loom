@@ -27,6 +27,19 @@ Pi `/reload` keeps the Loom Session open.
 Pi shutdown closes the attached Loom Session.
 Detached Jobs do not belong to that shutdown.
 
+## Interface ownership
+
+Loom packages an official Rosé Pine theme for Pi.
+Its tokens use the Rosé Pine main palette from [the official palette repository](https://github.com/rose-pine/palette).
+The extension selects this theme on start and reload.
+The extension replaces the Pi header with a compact Loom state view.
+The extension replaces the Pi footer with an empty component.
+The header shows active Loom state only.
+Pi `/session` keeps full model and usage information available.
+Loom `/loom` keeps full daemon and socket information available.
+Loom uses Pi theme tokens and Pi TUI width helpers.
+It does not add a second TUI framework.
+
 Each operation performs the typed Workspace handshake.
 The adapter starts the daemon when no daemon answers.
 The client reconnects after a daemon restart within the operation timeout.

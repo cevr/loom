@@ -4,6 +4,8 @@ import { Effect } from "effect";
 import { registerCellTools } from "./internal/cell-tools.js";
 import type { LoomExtensionApi } from "./internal/extension-api.js";
 import { registerJobTools } from "./internal/job-tools.js";
+import { registerLoomInterface } from "./internal/loom-interface.js";
+import { registerLoomTheme } from "./internal/loom-theme.js";
 import {
   ensureLoomDaemon,
   type EnsureLoomDaemon,
@@ -18,23 +20,10 @@ export type { EnsureLoomDaemon, LoomDaemonStatus, LoomExtensionApi };
 const notifyFailure = (context: ExtensionContext, cause: unknown) =>
   Effect.sync(() => context.ui.notify(`Loom daemon failed: ${String(cause)}`, "error"));
 
-const ensureForSession = (context: ExtensionContext, ensureDaemon: EnsureLoomDaemon) =>
-  ensureDaemon(context.cwd).pipe(
-    Effect.matchEffect({
-      onFailure: (cause) => notifyFailure(context, cause),
-      onSuccess: (status) => {
-        if (!status.started) return Effect.void;
-        return Effect.sync(() => context.ui.notify("Loom daemon started.", "info"));
-      },
-    }),
-    Effect.runPromise,
-  );
-
 export const shouldCloseSession = (event: SessionShutdownEvent): boolean =>
   event.reason !== "reload";
 
-const registerSessionLifecycle = (pi: LoomExtensionApi, ensureDaemon: EnsureLoomDaemon) => {
-  pi.on("session_start", (_event, context) => ensureForSession(context, ensureDaemon));
+const registerSessionLifecycle = (pi: LoomExtensionApi) => {
   pi.on("session_shutdown", (event, context) => {
     if (!shouldCloseSession(event)) return;
     return runWithLoomClient(context.cwd, "5 seconds", (client) =>
@@ -50,7 +39,9 @@ export const registerLoomExtension = (
   pi: LoomExtensionApi,
   ensureDaemon: EnsureLoomDaemon = ensureLoomDaemon,
 ): void => {
-  registerSessionLifecycle(pi, ensureDaemon);
+  registerSessionLifecycle(pi);
+  registerLoomTheme(pi);
+  registerLoomInterface(pi, ensureDaemon);
   pi.registerCommand("loom", {
     description: "Show the Loom daemon state",
     handler: (_arguments, context) =>

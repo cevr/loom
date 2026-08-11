@@ -10,7 +10,7 @@ import {
 } from "@cvr/loom-protocol";
 import { expect, it } from "bun:test";
 import { Effect, Option } from "effect";
-import loomExtension, { shouldCloseSession } from "../src/index.js";
+import loomExtension, { type LoomExtensionApi, shouldCloseSession } from "../src/index.js";
 import {
   readJobOutputRequest,
   startJobRequest,
@@ -44,11 +44,12 @@ const makeRegisterTool = (toolNames: Set<string>): ExtensionAPI["registerTool"] 
 it("registers the Loom development command", () => {
   let command = Option.none<Omit<RegisteredCommand, "name" | "sourceInfo">>();
   const toolNames = new Set<string>();
-  const events = new Set<string>();
+  const events = new Map<string, number>();
+  const on: LoomExtensionApi["on"] = (event) => {
+    events.set(event, (events.get(event) ?? 0) + 1);
+  };
   const pi = {
-    on: (event: "session_start" | "session_shutdown") => {
-      events.add(event);
-    },
+    on,
     registerCommand: (name: string, options: Omit<RegisteredCommand, "name" | "sourceInfo">) => {
       expect(name).toBe("loom");
       command = Option.some(options);
@@ -76,7 +77,12 @@ it("registers the Loom development command", () => {
       "loom_workflow_compensation",
     ]),
   );
-  expect(events).toEqual(new Set(["session_start", "session_shutdown"]));
+  expect(events).toEqual(
+    new Map([
+      ["session_start", 2],
+      ["session_shutdown", 2],
+    ]),
+  );
 });
 
 it("keeps the Session active during extension reload", () => {

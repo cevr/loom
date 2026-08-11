@@ -8,7 +8,15 @@ bun run dev:pi
 
 Pi starts the Workspace daemon when no daemon answers.
 
-Run `/loom` in Pi to confirm the daemon connection.
+Loom selects its packaged Rosé Pine theme when Pi starts.
+Loom also installs a compact header and an empty footer.
+The header shows the daemon state and its Code Kernel lease.
+It shows active Agent, Job, and Workflow state on a second line.
+Wide terminals include short Job and Workflow Run IDs.
+Narrow terminals omit these IDs and bound each line to the terminal width.
+
+Run `/loom` in Pi to see full daemon and socket details.
+Run `/session` in Pi to see full model and usage details.
 
 Run `/reload` after you change Loom extension source files.
 
@@ -28,4 +36,4 @@ herdr pane run <pane-id> "bun run dev:pi"
 herdr pane read <pane-id> --source recent-unwrapped --lines 100
 ```
 
-Use `herdr pane run <pane-id> "/reload"` after a source change.
+Send `/reload` through the Pi editor after a source change.

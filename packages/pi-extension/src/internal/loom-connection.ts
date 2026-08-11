@@ -1,7 +1,7 @@
 import { type DaemonUnavailableError, LoomClient, type LoomClientShape } from "@cvr/loom-client";
 import { WorkspaceRoot } from "@cvr/loom-domain";
 import { layerNodeLoomClient, layerNodeServices, startNodeDaemon } from "@cvr/loom-platform-node";
-import { type Duration, Effect, FileSystem, Path } from "effect";
+import { type Duration, Effect, FileSystem, Path, Stream } from "effect";
 
 const daemonEntry = new URL("../../../../apps/daemon/src/main.ts", import.meta.url).pathname;
 
@@ -44,12 +44,18 @@ const ensureAt = Effect.fn("LoomPiExtension.ensureAt")(function* (workspaceRoot:
     connect(workspaceRoot, socketPath, "100 millis"),
     connect(workspaceRoot, socketPath, "5 seconds"),
   );
-  return { started, protocolVersion: value.protocolVersion, socketPath };
+  return {
+    started,
+    protocolVersion: value.protocolVersion,
+    codeKernelIdleLeaseMillis: value.codeKernelIdleLeaseMillis,
+    socketPath,
+  };
 });
 
 export interface LoomDaemonStatus {
   readonly started: boolean;
   readonly protocolVersion: number;
+  readonly codeKernelIdleLeaseMillis: number;
   readonly socketPath: string;
 }
 
@@ -84,3 +90,24 @@ export const runWithLoomClient = <A, E>(
       ),
     );
   }).pipe(Effect.provide(layerNodeServices));
+
+export const streamWithLoomClient = <A, E>(
+  cwd: string,
+  operation: (client: LoomClientShape) => Stream.Stream<A, E | DaemonUnavailableError>,
+) =>
+  Stream.unwrap(
+    resolveWorkspaceRoot(cwd).pipe(
+      Effect.map((workspaceRoot) =>
+        Stream.fromEffect(LoomClient).pipe(
+          Stream.flatMap(operation),
+          Stream.provide(
+            layerNodeLoomClient({
+              workspaceRoot,
+              socketPath: `${workspaceRoot}/.loom/daemon.sock`,
+              connectionTimeout: "5 seconds",
+            }),
+          ),
+        ),
+      ),
+    ),
+  ).pipe(Stream.provide(layerNodeServices));

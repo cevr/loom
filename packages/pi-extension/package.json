@@ -2,6 +2,9 @@
   "name": "@cvr/loom-pi-extension",
   "version": "0.0.0",
   "private": true,
+  "keywords": [
+    "pi-package"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -15,10 +18,19 @@
     "@cvr/loom-domain": "workspace:*",
     "@cvr/loom-platform-node": "workspace:*",
     "@cvr/loom-protocol": "workspace:*",
-    "@earendil-works/pi-ai": "catalog:"
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-tui": "catalog:"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
     "effect": "catalog:"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "themes": [
+      "./themes"
+    ]
   }
 }

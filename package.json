@@ -15,7 +15,7 @@
   "type": "module",
   "scripts": {
     "dev": "turbo run dev --filter=@cvr/loom-daemon",
-    "dev:pi": "pi --extension packages/pi-extension/src/index.ts",
+    "dev:pi": "pi --extension packages/pi-extension/src/index.ts --theme packages/pi-extension/themes",
     "probe:herdr-live": "bun packages/plugin-herdr/probes/live.ts",
     "probe:cell-evaluate": "bun packages/platform-bun/probes/evaluate-live-cell.ts",
     "prototype:job-pipeline": "bun apps/daemon/prototypes/job-pipeline/main.ts",
@@ -51,6 +51,7 @@
     "@effect/sql-sqlite-bun": "4.0.0-beta.106",
     "@earendil-works/pi-ai": "0.84.1",
     "@earendil-works/pi-coding-agent": "0.84.1",
+    "@earendil-works/pi-tui": "0.84.1",
     "effect-encore": "0.27.1"
   }
 }

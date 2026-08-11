@@ -72,6 +72,7 @@
         "@cvr/loom-platform-node": "workspace:*",
         "@cvr/loom-protocol": "workspace:*",
         "@earendil-works/pi-ai": "catalog:",
+        "@earendil-works/pi-tui": "catalog:",
       },
       "peerDependencies": {
         "@earendil-works/pi-coding-agent": "catalog:",
@@ -145,6 +146,7 @@
   "catalog": {
     "@earendil-works/pi-ai": "0.84.1",
     "@earendil-works/pi-coding-agent": "0.84.1",
+    "@earendil-works/pi-tui": "0.84.1",
     "@effect/platform-bun": "4.0.0-beta.106",
     "@effect/platform-node-shared": "4.0.0-beta.106",
     "@effect/sql-sqlite-bun": "4.0.0-beta.106",
