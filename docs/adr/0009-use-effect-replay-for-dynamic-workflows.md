@@ -83,15 +83,18 @@ The Job store deduplicates Job launch by this key.
 The Agent store deduplicates child Agent creation by this key.
 An Activity retry cannot create a second logical Job or child Agent.
 The Agent claim stores the prompt and Workflow Run parent with the Activity key.
-The Job claim moves through Accepted, Starting, Running, and Failed states.
-A failed launch can claim the launch right again.
+The Job claim moves through Accepted, Starting, Running, and terminal states.
+A failed Job records `Launch`, `Exit`, or `Runtime` as its failure kind.
+Only a `Launch` failure can claim the launch right again.
 The Bun adapter keeps the child process scoped and behind an input gate during launch setup.
 It stores the process identity before it marks the Job as Running.
 It releases the input gate and process only after durable launch setup succeeds.
 Interruption closes the gate and stops the process before it can run the command.
-Daemon startup changes every stale Starting claim to Failed before it accepts work.
+Daemon startup changes every stale Starting claim to a `Launch` failure before it accepts work.
 A Stopping claim without Process Identity becomes Cancelled because the launch gate prevented command start.
 Artifact identity also derives from the Activity key.
+The Job Activity returns a stable handle after a durable launch claim.
+It rejects a stored `Failed` or `Lost` Job instead of reporting a successful launch.
 
 Effect owns parallel fibers, durable races, and concurrency primitives.
 Loom applies the resolved parallelism budget with an Effect semaphore.
