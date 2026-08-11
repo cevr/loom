@@ -36,6 +36,10 @@ _Avoid_: Conversation tree
 An autonomous participant in a session tree.
 _Avoid_: Worker, actor
 
+**Workflow Child Agent**:
+An Agent that belongs to one Workflow Run and returns one durable Step result.
+_Avoid_: Subagent handle, worker
+
 **Code Kernel**:
 A persistent code environment that belongs to one agent.
 _Avoid_: REPL, sandbox, kernel

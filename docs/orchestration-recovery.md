@@ -96,14 +96,21 @@ Loom does not copy these facts into a second table.
 The Workflow identity tuple is the acceptance idempotency key.
 The Workflow Incarnation ID separates later uses of that tuple.
 The Activity key is the child Agent idempotency key.
-The Activity key derives each Workflow Job ID and Workflow Artifact ID.
+The Activity key derives each Workflow Job ID, child Agent Job ID, and Workflow Artifact ID.
+
+Each Workflow child Agent owns one attached Job.
+The Job owns the Pi process, Process Identity, complete output, and terminal outcome.
+The Agent Step waits for that terminal outcome.
+It stores the Agent ID, typed Job outcome, and bounded output as its durable Activity result.
+Replay reads that result and cannot start a second child Agent or Job.
+Daemon startup adopts the exact child Agent Job Process Identity before Workflow replay continues.
 
 Workflow child Agent rows remain until terminal Workflow retirement.
 Retirement first changes the acceptance row to `Retiring` in one committed transaction.
 New acceptance cannot attach to a `Retiring` run.
 It returns a typed retryable error.
 Startup resumes each `Retiring` run.
-Retirement then stops each active child Agent and records it as `Stopped`.
+Retirement then stops each active child Agent and cancels each attached Agent Job.
 A stop failure keeps the acceptance and ownership rows for a later retry.
 Retirement then deletes Effect messages, Signal declarations, acceptance, and stopped child Agent rows in one transaction.
 It does not delete logs or Artifacts.

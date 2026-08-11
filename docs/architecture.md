@@ -142,6 +142,10 @@ Effect derives the Workflow Run ID from that idempotency key.
 The accepted request, signal declarations, and workflow send commit in one storage transaction.
 Each external Step becomes an Effect Workflow Activity.
 Every external Step requires an explicit and unique Step ID.
+A child Agent Step derives one attached Job from its Activity key.
+The Job owns the Pi process, output, terminal outcome, and restart recovery.
+The Step waits for that terminal outcome and stores a bounded Agent result for replay.
+A replay reuses the same Agent ID and Job ID.
 
 Workflow source receives a declared capability set.
 It does not receive unrestricted Bun APIs.
@@ -154,7 +158,7 @@ The orchestrator sets one Workflow State Lease.
 The default lease is five minutes.
 Success, interruption, failure, and defect remain public during this lease.
 The acceptance row stores the fixed retirement deadline.
-Retirement marks the acceptance as `Retiring` before it stops child Agents.
+Retirement marks the acceptance as `Retiring` before it stops child Agents and their Jobs.
 New acceptance cannot attach to a `Retiring` run.
 Loom then removes the accepted request, signal declarations, child Agent rows, and Effect Cluster messages.
 The durable record removal uses one SQLite transaction.

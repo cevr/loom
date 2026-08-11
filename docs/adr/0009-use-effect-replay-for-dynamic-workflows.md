@@ -86,6 +86,12 @@ The Job store deduplicates Job launch by this key.
 The Agent store deduplicates child Agent creation by this key.
 An Activity retry cannot create a second logical Job or child Agent.
 The Agent claim stores the prompt and Workflow Run parent with the Activity key.
+The Activity key also derives one attached Agent Job ID.
+That Job starts Pi with the stored prompt from the Workspace root.
+The Agent Step waits for the Job terminal outcome.
+It returns the Agent ID, typed Job outcome, and bounded standard output and standard error.
+The Activity result makes that terminal Agent result durable for replay.
+The Job log files keep the complete output.
 The Job claim moves through Accepted, Starting, Running, and terminal states.
 A failed Job records `Launch`, `Exit`, or `Runtime` as its failure kind.
 Only a `Launch` failure can claim the launch right again.
@@ -161,8 +167,9 @@ Audit records and artifacts have separate retention owners.
 
 A child Agent records its Workflow Run parent as a durable fact.
 The Agent belongs to the same Session as the Workflow Run.
-Compensation stops child Agents when the Workflow reverses their Steps.
-Terminal retirement stops any child Agent that remains active after success.
+One attached Job owns its Pi process and process group.
+Compensation cancels that Job and stops the child Agent row when the Workflow reverses its Step.
+Terminal retirement stops any child Agent and attached Agent Job that remains active after success.
 Session closure can also find these Agents from their durable parent facts.
 Session closure interrupts active Workflow Runs before it stops their attached Jobs and child Agents.
 The Agent store stops all active child Agents for one Session with one idempotent operation.
