@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 const identifier = (name: string) => Schema.NonEmptyString.pipe(Schema.brand(name));
 
@@ -111,15 +111,30 @@ export type WorkflowChildAgent = typeof WorkflowChildAgent.Type;
 
 const positiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 
+const positiveIntegerWithDefault = (value: number) =>
+  positiveInteger.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(value)),
+    Schema.withConstructorDefault(Effect.succeed(value)),
+  );
+
+const noPositiveInteger = Effect.succeed(Option.none<number>());
+
+const optionalPositiveInteger = Schema.OptionFromNullOr(positiveInteger).pipe(
+  Schema.withDecodingDefaultTypeKey(noPositiveInteger),
+  Schema.withConstructorDefault(noPositiveInteger),
+);
+
 export const WorkflowBudget = Schema.Struct({
-  maxSteps: positiveInteger,
-  maxAgentRuns: positiveInteger,
-  maxParallelism: positiveInteger,
-  maxInlineStepResultBytes: positiveInteger,
-  maxTokens: Schema.OptionFromNullOr(positiveInteger),
-  maxDurationMillis: Schema.OptionFromNullOr(positiveInteger),
+  maxSteps: positiveIntegerWithDefault(32),
+  maxAgentRuns: positiveIntegerWithDefault(8),
+  maxParallelism: positiveIntegerWithDefault(4),
+  maxInlineStepResultBytes: positiveIntegerWithDefault(64 * 1_024),
+  maxTokens: optionalPositiveInteger,
+  maxDurationMillis: optionalPositiveInteger,
 });
 export type WorkflowBudget = typeof WorkflowBudget.Type;
+
+export const defaultWorkflowBudget = WorkflowBudget.make({});
 
 export const WorkflowDefinition = Schema.Struct({
   name: WorkflowName,

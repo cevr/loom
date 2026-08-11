@@ -1,4 +1,5 @@
 import type { ExtensionAPI, RegisteredCommand } from "@earendil-works/pi-coding-agent";
+import { defaultWorkflowBudget } from "@cvr/loom-domain";
 import {
   workflowCapabilitiesGuide,
   workflowSignalsGuide,
@@ -8,6 +9,15 @@ import { expect, it } from "bun:test";
 import { Effect, Option } from "effect";
 import loomExtension, { shouldCloseSession } from "../src/index.js";
 import { runTool } from "../src/internal/tool-result.js";
+import { workflowRequest } from "../src/internal/workflow-tools.js";
+
+const workflowInput = {
+  name: "release",
+  version: "1",
+  key: "release-1",
+  source: "return input",
+  input: "{}",
+};
 
 const makeRegisterTool = (toolNames: Set<string>): ExtensionAPI["registerTool"] => {
   const registerTool: ExtensionAPI["registerTool"] = (tool) => {
@@ -65,6 +75,26 @@ it("keeps the Session active during extension reload", () => {
   expect(shouldCloseSession({ type: "session_shutdown", reason: "reload" })).toBe(false);
   expect(shouldCloseSession({ type: "session_shutdown", reason: "quit" })).toBe(true);
 });
+
+it("uses the domain Workflow Budget defaults", () =>
+  expect(Effect.runPromise(workflowRequest("session-1", workflowInput))).resolves.toHaveProperty(
+    "budget",
+    defaultWorkflowBudget,
+  ));
+
+it("resolves a partial Workflow Budget through the domain schema", () =>
+  expect(
+    Effect.runPromise(
+      workflowRequest("session-1", {
+        ...workflowInput,
+        budget: { maxSteps: 12, maxTokens: 1_000 },
+      }),
+    ),
+  ).resolves.toHaveProperty("budget", {
+    ...defaultWorkflowBudget,
+    maxSteps: 12,
+    maxTokens: Option.some(1_000),
+  }));
 
 it("reports a typed Loom tool failure to Pi", () =>
   expect(

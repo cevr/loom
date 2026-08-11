@@ -18,7 +18,7 @@ import {
   workflowSourceGuide,
 } from "@cvr/loom-protocol";
 import { StringEnum, Type, type Static } from "@earendil-works/pi-ai";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
 import { runWithLoomClient } from "./loom-connection.js";
 import { runTool, toolResult } from "./tool-result.js";
@@ -52,12 +52,16 @@ const workflowParameters = Type.Object({
   ),
 });
 
-const workflowRequest = (
+const decodeWorkflowBudget = Schema.decodeUnknownEffect(WorkflowBudget);
+
+export const workflowRequest = (
   sessionId: string,
   parameters: Static<typeof workflowParameters>,
 ): Effect.Effect<WorkflowRunRequest, Schema.SchemaError> =>
-  Effect.map(decodeJson(parameters.input), (input) =>
-    WorkflowRunRequest.make({
+  Effect.gen(function* () {
+    const input = yield* decodeJson(parameters.input);
+    const budget = yield* decodeWorkflowBudget(parameters.budget ?? {});
+    return WorkflowRunRequest.make({
       sessionId: SessionId.make(sessionId),
       key: WorkflowKey.make(parameters.key),
       definition: WorkflowDefinition.make({
@@ -69,16 +73,9 @@ const workflowRequest = (
         signals: (parameters.signals ?? []).map((name) => WorkflowSignalName.make(name)),
       }),
       input,
-      budget: WorkflowBudget.make({
-        maxSteps: parameters.budget?.maxSteps ?? 32,
-        maxAgentRuns: parameters.budget?.maxAgentRuns ?? 8,
-        maxParallelism: parameters.budget?.maxParallelism ?? 4,
-        maxInlineStepResultBytes: parameters.budget?.maxInlineStepResultBytes ?? 64 * 1_024,
-        maxTokens: Option.fromNullishOr(parameters.budget?.maxTokens),
-        maxDurationMillis: Option.fromNullishOr(parameters.budget?.maxDurationMillis),
-      }),
-    }),
-  );
+      budget,
+    });
+  });
 
 const workflowAddressParameters = Type.Object({ workflowRunId: Type.String({ minLength: 1 }) });
 

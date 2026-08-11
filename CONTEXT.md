@@ -88,6 +88,10 @@ _Avoid_: Attempt, generation
 The limited period in which Loom keeps a terminal Workflow Run available for inspection.
 _Avoid_: Cleanup delay, history window
 
+**Workflow Budget**:
+The resolved limits that bound one Workflow Run and become part of its accepted request.
+_Avoid_: Client defaults, runtime limits
+
 **Retiring Workflow Run**:
 A terminal Workflow Run that rejects new attachment while Loom stops owned work and removes recovery state.
 _Avoid_: Deleting workflow, cleaning workflow

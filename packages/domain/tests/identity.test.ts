@@ -3,9 +3,11 @@ import { Effect, Exit, Schema } from "effect";
 import {
   AgentOwner,
   AgentParent,
+  WorkflowBudget,
   WorkflowActivityKey,
   WorkflowName,
   WorkflowRunRequest,
+  defaultWorkflowBudget,
   workflowAgentId,
   workflowArtifactId,
   workflowJobId,
@@ -32,6 +34,32 @@ describe("Loom identity", () => {
       }).pipe(Effect.exit);
 
       expect(Exit.isFailure(exit)).toBe(true);
+    }),
+  );
+});
+
+describe("Workflow Budget", () => {
+  it.effect("owns the default Workflow Budget", () =>
+    Effect.gen(function* () {
+      const decoded = yield* Schema.decodeUnknownEffect(WorkflowBudget)({});
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(WorkflowBudget))(decoded);
+
+      expect(decoded).toEqual(defaultWorkflowBudget);
+      expect(encoded).toBe(
+        '{"maxSteps":32,"maxAgentRuns":8,"maxParallelism":4,"maxInlineStepResultBytes":65536,"maxTokens":null,"maxDurationMillis":null}',
+      );
+    }),
+  );
+
+  it.effect("keeps resolved defaults beside a budget override", () =>
+    Effect.gen(function* () {
+      const budget = yield* Schema.decodeUnknownEffect(WorkflowBudget)({ maxSteps: 12 });
+      const encoded = yield* Schema.encodeEffect(WorkflowBudget)(budget);
+      const encodedDefault = yield* Schema.encodeEffect(WorkflowBudget)(defaultWorkflowBudget);
+
+      expect(WorkflowBudget.make({ maxSteps: 12 })).toEqual(budget);
+      expect(budget).toEqual({ ...defaultWorkflowBudget, maxSteps: 12 });
+      expect(encoded).toEqual({ ...encodedDefault, maxSteps: 12 });
     }),
   );
 });

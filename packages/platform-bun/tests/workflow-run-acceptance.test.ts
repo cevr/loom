@@ -201,6 +201,35 @@ scopedLive("keeps the accepted request immutable across daemon storage restarts"
   }),
 );
 
+scopedLive("keeps the default Workflow Budget digest stable across storage restarts", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-workflow-budget-" });
+    const filename = `${directory}/loom.sqlite`;
+    const defaultedRequest = WorkflowRunRequest.make({
+      ...request,
+      key: WorkflowKey.make("default-budget"),
+      budget: WorkflowBudget.make({}),
+    });
+
+    const accepted = yield* withAcceptance(
+      filename,
+      WorkflowRunAcceptance.pipe(
+        Effect.flatMap((acceptance) => acceptance.accept(defaultedRequest)),
+      ),
+    );
+    const attached = yield* withAcceptance(
+      filename,
+      WorkflowRunAcceptance.pipe(
+        Effect.flatMap((acceptance) => acceptance.accept(defaultedRequest)),
+      ),
+    );
+
+    expect(attached.digest).toBe(accepted.digest);
+    expect(attached.workflowRunId).toBe(accepted.workflowRunId);
+  }),
+);
+
 scopedLive("resolves only the accepted Session after storage restarts", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
