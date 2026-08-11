@@ -67,7 +67,7 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
 ) {
   const input = yield* decodeInput(call, decodeJobInput);
   const jobId = workflowJobId(context.activityKey);
-  yield* jobs
+  const job = yield* jobs
     .start(
       JobRequest.make({
         jobId,
@@ -77,6 +77,9 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
       }),
     )
     .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))));
+  if (job.status === "Failed" || job.status === "Lost") {
+    return yield* stepError(call, `The Job is ${job.status}.`);
+  }
   return WorkflowStepExecution.make({
     value: WorkflowJobHandle.make({ jobId }),
     tokenCount: 0,

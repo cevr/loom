@@ -1,15 +1,20 @@
 import { BunServices } from "@effect/platform-bun";
 import {
   JobAddress,
+  JobFailure,
+  JobOutcome,
+  JobSubmission,
   SessionId,
   WorkflowActivityKey,
   WorkflowCapability,
   WorkflowRunId,
   WorkflowStepId,
   WorkspaceRoot,
+  workflowJobId,
 } from "@cvr/loom-domain";
 import {
   JobRuntime,
+  JobStore,
   WorkflowActivityContext,
   WorkflowAgentHandle,
   WorkflowArtifactStore,
@@ -161,5 +166,43 @@ it.scopedLive.layer(BunServices.layer)("cancels a Workflow Job during compensati
         Option.some("Cancelled"),
       );
     }).pipe(Effect.provide(capabilityLayer(`${directory}/loom.sqlite`, workspaceRoot)));
+  }),
+);
+
+it.scopedLive.layer(BunServices.layer)("rejects a terminal failed Job launch", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-capability-failed-job-" });
+    const workspaceRoot = WorkspaceRoot.make(directory);
+    const filename = `${directory}/loom.sqlite`;
+    const jobId = workflowJobId(jobContext.activityKey);
+
+    yield* Effect.gen(function* () {
+      const jobs = yield* JobStore;
+      yield* jobs.create(
+        JobSubmission.make({
+          jobId,
+          sessionId: jobContext.sessionId,
+          command: ": > cwd-marker; printf 'job-finished\\n'",
+          attached: true,
+          stdoutPath: `${directory}/.loom/jobs/${encodeURIComponent(jobId)}/stdout.log`,
+          stderrPath: `${directory}/.loom/jobs/${encodeURIComponent(jobId)}/stderr.log`,
+          resultPath: `${directory}/.loom/jobs/${encodeURIComponent(jobId)}/result`,
+        }),
+      );
+      yield* jobs.begin(jobId);
+      yield* jobs.complete(
+        jobId,
+        JobOutcome.cases.Failed.make({
+          failure: JobFailure.cases.Runtime.make({ detail: "The process runtime failed." }),
+        }),
+      );
+    }).pipe(Effect.provide(layerSqliteJobStore.pipe(Layer.provide(layerLoomSqlite({ filename })))));
+
+    const exit = yield* Effect.gen(function* () {
+      const executor = yield* WorkflowCapabilityExecutor;
+      return yield* Effect.exit(executor.execute(jobCall, jobContext));
+    }).pipe(Effect.provide(capabilityLayer(filename, workspaceRoot)));
+    expect(exit).toHaveProperty("_tag", "Failure");
   }),
 );
