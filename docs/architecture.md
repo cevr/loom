@@ -218,6 +218,10 @@ Plugins use narrow Effect services.
 They do not receive raw stores, Code Kernel processes, or the full daemon Context.
 A Plugin failure does not change actor-owned state.
 
+The Plugin host validates each Plugin State value with the Plugin-owned Effect Schema.
+The daemon stores only `Schema.Json` and one compare-and-set revision.
+Session admission prevents a Plugin State write from racing Session close.
+
 The Herdr Plugin consumes the latest actor-state projection for one Session.
 It maps Agent, Job, and Workflow Run activity into Herdr pane state.
 It uses a sliding latest-value buffer.
