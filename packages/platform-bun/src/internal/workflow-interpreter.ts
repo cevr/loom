@@ -29,13 +29,13 @@ import { evaluateWorkflowSource, schemaSourceError } from "./workflow-source-vm.
 
 export { makeWorkflowInterpreterHost } from "./workflow-interpreter-host.js";
 
-export interface WorkflowInterpreterHost<R> {
+export interface WorkflowInterpreterHost<R, ExecutionError = WorkflowRunError> {
   readonly workflowRunId: WorkflowRunId;
   readonly activity: (
     stepId: WorkflowStepId,
     execute: (
       context: WorkflowActivityContext,
-    ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
+    ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError | ExecutionError, R>,
     compensate: (context: WorkflowActivityContext) => Effect.Effect<void, WorkflowRunError, R>,
   ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>;
   readonly parallel: (
@@ -43,12 +43,12 @@ export interface WorkflowInterpreterHost<R> {
     execute: (
       call: WorkflowStepCall,
       context: WorkflowActivityContext,
-    ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>,
+    ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError | ExecutionError, R>,
   ) => Effect.Effect<ReadonlyArray<WorkflowStepExecution>, WorkflowRunError, R>;
   readonly execute: (
     call: WorkflowStepCall,
     context: WorkflowActivityContext,
-  ) => Effect.Effect<WorkflowStepExecution, WorkflowRunError, R>;
+  ) => Effect.Effect<WorkflowStepExecution, ExecutionError, R>;
   readonly compensate: (
     call: WorkflowStepCall,
     context: WorkflowActivityContext,
@@ -86,13 +86,13 @@ interface WorkflowPassState {
   readonly usage: { agentRuns: number; tokens: number };
 }
 
-const completeStep = <R>(
+const completeStep = <R, ExecutionError>(
   request: WorkflowRunRequest,
-  host: WorkflowInterpreterHost<R>,
+  host: WorkflowInterpreterHost<R, ExecutionError>,
   state: WorkflowPassState,
   call: WorkflowStepCall,
   context: WorkflowActivityContext,
-): Effect.Effect<WorkflowStepExecution, WorkflowRunError, R> =>
+): Effect.Effect<WorkflowStepExecution, WorkflowRunError | ExecutionError, R> =>
   Effect.gen(function* () {
     const result = yield* host.execute(call, context);
     const encoded = yield* encodeJson(result.value).pipe(Effect.orDie);
@@ -112,9 +112,9 @@ const completeStep = <R>(
     return WorkflowStepExecution.make({ ...result, value });
   });
 
-const validateStep = <R>(
+const validateStep = <R, ExecutionError>(
   request: WorkflowRunRequest,
-  host: WorkflowInterpreterHost<R>,
+  host: WorkflowInterpreterHost<R, ExecutionError>,
   state: WorkflowPassState,
   call: WorkflowStepCall,
 ): Effect.Effect<void, WorkflowRunError> => {
@@ -152,9 +152,9 @@ const recordUsage = (
   return Effect.void;
 };
 
-const makeRunStep = <R>(
+const makeRunStep = <R, ExecutionError>(
   request: WorkflowRunRequest,
-  host: WorkflowInterpreterHost<R>,
+  host: WorkflowInterpreterHost<R, ExecutionError>,
   state: WorkflowPassState,
 ) =>
   Effect.fn("WorkflowInterpreter.runStep")(function* (call: WorkflowStepCall) {
@@ -168,9 +168,9 @@ const makeRunStep = <R>(
     return result;
   });
 
-const makeRunParallel = <R>(
+const makeRunParallel = <R, ExecutionError>(
   request: WorkflowRunRequest,
-  host: WorkflowInterpreterHost<R>,
+  host: WorkflowInterpreterHost<R, ExecutionError>,
   state: WorkflowPassState,
 ) =>
   Effect.fn("WorkflowInterpreter.runParallel")(function* (calls: ReadonlyArray<WorkflowStepCall>) {
@@ -189,9 +189,9 @@ const makeRunParallel = <R>(
     return results.map((result) => result.value);
   });
 
-const makeRunHostCall = <R>(
+const makeRunHostCall = <R, ExecutionError>(
   request: WorkflowRunRequest,
-  host: WorkflowInterpreterHost<R>,
+  host: WorkflowInterpreterHost<R, ExecutionError>,
   state: WorkflowPassState,
 ) => {
   const runStep = makeRunStep(request, host, state);
@@ -216,9 +216,9 @@ const makeRunHostCall = <R>(
   });
 };
 
-const evaluatePass = <R>(
+const evaluatePass = <R, ExecutionError>(
   request: WorkflowRunRequest,
-  host: WorkflowInterpreterHost<R>,
+  host: WorkflowInterpreterHost<R, ExecutionError>,
 ): Effect.Effect<Schema.Json, WorkflowRunError, R> =>
   Effect.gen(function* () {
     const state: WorkflowPassState = {
@@ -236,9 +236,9 @@ const evaluatePass = <R>(
     return yield* evaluated;
   });
 
-export const interpretWorkflow = <R>(
+export const interpretWorkflow = <R, ExecutionError = WorkflowRunError>(
   request: WorkflowRunRequest,
-  host: WorkflowInterpreterHost<R>,
+  host: WorkflowInterpreterHost<R, ExecutionError>,
 ): Effect.Effect<Schema.Json, WorkflowRunError, R> => {
   if (request.definition.interpreterVersion !== workflowInterpreterVersion) {
     return new WorkflowInterpreterVersionMismatchError({

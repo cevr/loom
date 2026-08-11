@@ -53,7 +53,6 @@ const workspacePluginState = PluginStateAddress.make({
   scope: PluginStateScope.cases.Workspace.make({}),
   key: PluginStateAddress.fields.key.make("state"),
 });
-
 const capabilitiesFor = (workspaceRoot: WorkspaceRoot) =>
   layerWorkflowCapabilities({
     workspaceRoot,
@@ -151,8 +150,7 @@ const verifyClosedWork = Effect.fn("SessionCloseTest.verifyClosedWork")(function
     }),
     Effect.timeout("5 seconds"),
   );
-  expect(terminal).toHaveProperty("_tag", "Failure");
-  expect(terminal).toHaveProperty("error._tag", "SessionClosingError");
+  expect(terminal).toHaveProperty("_tag", "Interrupted");
   expect((yield* client.inspectJob({ sessionId, jobId: attachedJobId })).status).toBe("Cancelled");
   expect((yield* client.inspectJob({ sessionId, jobId: detachedJobId })).status).toBe("Running");
   expect(yield* client.readPluginState({ address: sessionPluginState })).toEqual(

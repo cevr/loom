@@ -6,7 +6,6 @@ import { WorkflowInterpreterVersionMismatchError } from "./workflow-interpreter-
 import { WorkflowSourceError } from "./workflow-source-error.js";
 import { WorkflowStepError } from "./workflow-step-error.js";
 import { WorkflowSignalNotDeclaredError } from "./workflow-signal-not-declared-error.js";
-import { SessionClosingError } from "./session-closing-error.js";
 
 export const WorkflowRunError = Schema.Union([
   WorkflowSourceError,
@@ -16,6 +15,5 @@ export const WorkflowRunError = Schema.Union([
   WorkflowDuplicateStepError,
   WorkflowSignalNotDeclaredError,
   WorkflowInterpreterVersionMismatchError,
-  SessionClosingError,
 ]);
 export type WorkflowRunError = typeof WorkflowRunError.Type;

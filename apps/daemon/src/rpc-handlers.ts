@@ -37,21 +37,25 @@ export const makeCloseSession =
     sessions
       .close(
         sessionId,
-        Effect.all(
-          [
-            Effect.result(workflows.closeSession(sessionId)),
-            Effect.result(
-              jobs.closeSession(sessionId).pipe(Effect.andThen(childAgents.stopSession(sessionId))),
-            ),
-            Effect.result(pluginState.deleteSession(sessionId)),
-          ],
-          { concurrency: "unbounded" },
-        ).pipe(
-          // Collect each result so one cleanup failure does not skip the remaining cleanup.
-          Effect.flatMap(([workflowResult, ownedWorkResult, pluginStateResult]) =>
-            Effect.fromResult(workflowResult).pipe(
-              Effect.andThen(Effect.fromResult(ownedWorkResult)),
-              Effect.andThen(Effect.fromResult(pluginStateResult)),
+        Effect.result(workflows.closeSession(sessionId)).pipe(
+          Effect.flatMap((workflowResult) =>
+            Effect.all(
+              [
+                Effect.result(
+                  jobs
+                    .closeSession(sessionId)
+                    .pipe(Effect.andThen(childAgents.stopSession(sessionId))),
+                ),
+                Effect.result(pluginState.deleteSession(sessionId)),
+              ],
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.flatMap(([ownedWorkResult, pluginStateResult]) =>
+                Effect.fromResult(workflowResult).pipe(
+                  Effect.andThen(Effect.fromResult(ownedWorkResult)),
+                  Effect.andThen(Effect.fromResult(pluginStateResult)),
+                ),
+              ),
             ),
           ),
         ),

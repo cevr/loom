@@ -1,6 +1,7 @@
 import {
   LoomDynamicWorkflow,
   WorkflowArtifactStore,
+  type WorkflowCapabilityExecutionError,
   WorkflowCapabilityExecutor,
   layerWorkflowRunAcceptance,
   layerWorkflowRunRecovery,
@@ -24,10 +25,10 @@ export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (exec
     const workflowRunId = WorkflowRunId.make(step.executionId);
     const capabilities = yield* WorkflowCapabilityExecutor;
     const artifacts = yield* WorkflowArtifactStore;
-    return yield* interpretWorkflow<WorkflowEngine | WorkflowInstance>(
-      request,
-      makeWorkflowInterpreterHost(request, workflowRunId, step, capabilities, artifacts),
-    );
+    return yield* interpretWorkflow<
+      WorkflowEngine | WorkflowInstance,
+      WorkflowCapabilityExecutionError
+    >(request, makeWorkflowInterpreterHost(request, workflowRunId, step, capabilities, artifacts));
   }),
 );
 

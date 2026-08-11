@@ -72,7 +72,6 @@ const launchAgent = Effect.fn("WorkflowCapabilities.launchAgent")(function* (
   const result = yield* awaitWorkflowAgent(config, jobs, agent).pipe(
     Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))),
   );
-  // Effect-TS/effect#7183 blocks the correct safe-interrupt classification.
   if (
     JobOutcome.guards.Cancelled(result.outcome) &&
     (yield* sessions.isClosing(context.sessionId))
@@ -114,7 +113,6 @@ const completeJob = Effect.fn("WorkflowCapabilities.completeJob")(function* (
     );
   }
   if (job.status === "Cancelled") {
-    // Effect-TS/effect#7183 blocks the correct safe-interrupt classification.
     if (yield* sessions.isClosing(context.sessionId)) {
       return yield* new SessionClosingError({ sessionId: context.sessionId });
     }
@@ -187,24 +185,22 @@ const makeCapabilityExecutor = (config: WorkflowCapabilitiesConfig) =>
     const fs = yield* FileSystem.FileSystem;
     return WorkflowCapabilityExecutor.of({
       supports: supportsBuiltInWorkflowCapability,
-      execute: (call, context) => {
-        if (call.capability === workflowAgentCapability) {
-          return launchAgent(config, sessions, childAgents, jobs, call, context).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.catchTag("SessionClosureStoreError", (error) =>
-              stepError(call, Inspectable.toStringUnknown(error.cause)),
-            ),
-          );
-        }
-        if (call.capability === workflowJobCapability) {
-          return launchJob(sessions, jobs, call, context).pipe(
-            Effect.catchTag("SessionClosureStoreError", (error) =>
-              stepError(call, Inspectable.toStringUnknown(error.cause)),
-            ),
-          );
-        }
-        return Effect.fail(stepError(call, `No adapter is installed for ${call.capability}.`));
-      },
+      execute: (call, context) =>
+        Effect.suspend(() => {
+          if (call.capability === workflowAgentCapability) {
+            return launchAgent(config, sessions, childAgents, jobs, call, context).pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+            );
+          }
+          if (call.capability === workflowJobCapability) {
+            return launchJob(sessions, jobs, call, context);
+          }
+          return Effect.fail(stepError(call, `No adapter is installed for ${call.capability}.`));
+        }).pipe(
+          Effect.catchTag("SessionClosureStoreError", (error) =>
+            stepError(call, Inspectable.toStringUnknown(error.cause)),
+          ),
+        ),
       compensate: (call, context) => {
         if (call.capability === workflowAgentCapability) {
           return compensateAgent(childAgents, jobs, call, context);

@@ -171,7 +171,12 @@ One attached Job owns its Pi process and process group.
 Compensation cancels that Job and stops the child Agent row when the Workflow reverses its Step.
 Terminal retirement stops any child Agent and attached Agent Job that remains active after success.
 Session closure can also find these Agents from their durable parent facts.
-Session closure interrupts active Workflow Runs before it stops their attached Jobs and child Agents.
+Session closure commits its durable fact and records safe Workflow interrupts before it stops attached Jobs and child Agents.
+The interrupt request does not wait for the Workflow to settle.
+The Activity adapter maps the resulting `SessionClosingError` control event to `Workflow.suspend`.
+Effect observes the stored interrupt signal at Workflow exit.
+It promotes the suspension to a terminal interrupt and owns compensation.
+The public Workflow error schema does not include `SessionClosingError`.
 The Agent store stops all active child Agents for one Session with one idempotent operation.
 The daemon exposes that operation through the typed Session close RPC.
 The Pi extension calls it when Pi closes or replaces a Session.

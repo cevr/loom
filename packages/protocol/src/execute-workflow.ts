@@ -6,12 +6,14 @@ import { WorkflowRunAcceptanceError } from "./workflow-run-acceptance-error.js";
 import { WorkflowRunError } from "./workflow-run-error.js";
 import { WorkflowRunRetiringError } from "./workflow-run-retiring-error.js";
 import { WorkflowSignalDeclarationsError } from "./workflow-signal-declarations-error.js";
+import { SessionClosingError } from "./session-closing-error.js";
 
 export const ExecuteWorkflowError = Schema.Union([
   WorkflowIdentityConflictError,
   WorkflowRunAcceptanceError,
   WorkflowRunRetiringError,
   WorkflowSignalDeclarationsError,
+  SessionClosingError,
   WorkflowRunError,
 ]);
 export type ExecuteWorkflowError = typeof ExecuteWorkflowError.Type;

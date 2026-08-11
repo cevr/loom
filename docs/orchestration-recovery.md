@@ -129,7 +129,8 @@ Later observations and daemon restarts do not extend it.
 Startup retires only terminal Workflow Runs whose stored deadline has passed.
 Success, interruption, failure, and defect use the same rule.
 
-Session close interrupts each active Workflow Run in that Session.
+Session close commits the Session closure fact.
+It then records a safe interrupt for each active Workflow Run in that Session.
 It then stops attached Jobs and child Agents.
 It then removes Session Plugin State.
 The operation is idempotent.
@@ -137,7 +138,12 @@ A Workflow Run cannot create new Session-owned work after close begins.
 Startup repeats this cleanup for every retained Session closure.
 This rule completes cleanup when a daemon stops after it writes the closure fact.
 Detached Jobs do not belong to Session cleanup.
-Effect-TS/effect#7183 blocks safe interruption while an active Activity settles.
+The safe interrupt does not wait for active work to settle.
+An Activity that observes `SessionClosingError` suspends through `Workflow.suspend`.
+Each replay pass applies the same rule.
+Effect observes the stored interrupt signal at Workflow exit.
+It promotes the suspension to a terminal interrupt.
+`SessionClosingError` is not a durable Workflow Run failure.
 Loom does not override the Effect Workflow terminal state.
 
 ## Files

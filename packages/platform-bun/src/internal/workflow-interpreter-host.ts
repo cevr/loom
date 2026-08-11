@@ -10,6 +10,7 @@ import {
   type WorkflowArtifactStore,
   WorkflowActivityContext,
   WorkflowBudgetExceededError,
+  type WorkflowCapabilityExecutionError,
   type WorkflowCapabilityExecutor,
   WorkflowRunError,
   WorkflowStepError,
@@ -21,7 +22,10 @@ import { WorkflowEngine, WorkflowInstance } from "effect/unstable/workflow/Workf
 import type { WorkflowStepContext } from "effect-encore";
 import type { WorkflowInterpreterHost } from "./workflow-interpreter.js";
 
-type Host = WorkflowInterpreterHost<WorkflowEngine | WorkflowInstance>;
+type Host = WorkflowInterpreterHost<
+  WorkflowEngine | WorkflowInstance,
+  WorkflowCapabilityExecutionError
+>;
 type Step = WorkflowStepContext<typeof WorkflowRunError>;
 
 const durationTimerStepId = "loom/workflow-duration/timer";
@@ -46,7 +50,7 @@ const makeActivity =
     Effect.gen(function* () {
       const context = activityContext(request, workflowRunId, yield* step.idempotencyKey(stepId));
       return yield* step.run(stepId, {
-        do: execute(context),
+        do: execute(context).pipe(Effect.catchTag("SessionClosingError", () => step.suspend)),
         undo: () => compensate(context),
         success: WorkflowStepExecution,
         error: WorkflowRunError,
@@ -69,7 +73,12 @@ const makeParallel =
         do: Effect.gen(function* () {
           const exits = yield* Effect.forEach(
             entries,
-            ({ call, context }) => Effect.exit(execute(call, context)),
+            ({ call, context }) =>
+              Effect.exit(
+                execute(call, context).pipe(
+                  Effect.catchTag("SessionClosingError", () => step.suspend),
+                ),
+              ),
             { concurrency: "unbounded" },
           );
           return yield* Effect.all(exits);

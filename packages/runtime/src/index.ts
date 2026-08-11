@@ -93,6 +93,7 @@ export {
 } from "@cvr/loom-protocol";
 export {
   WorkflowCapabilityExecutor,
+  type WorkflowCapabilityExecutionError,
   type WorkflowCapabilityExecutorShape,
 } from "./internal/workflow-capability-executor.js";
 export {
