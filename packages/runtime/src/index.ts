@@ -120,6 +120,8 @@ export {
   WorkflowArtifactStore,
   type WorkflowArtifactStoreShape,
 } from "./internal/workflow-artifact-store.js";
+export { WorkflowArtifactNotFoundError } from "./internal/workflow-artifact-not-found-error.js";
+export { WorkflowArtifactStoreError } from "./internal/workflow-artifact-store-error.js";
 export { LoomDynamicWorkflow, loomWorkflowSignal } from "./internal/loom-dynamic-workflow.js";
 export {
   WorkflowSignalDeclarations,

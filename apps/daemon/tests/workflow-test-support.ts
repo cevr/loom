@@ -43,6 +43,7 @@ const artifactStore = Layer.succeed(
   WorkflowArtifactStore.of({
     store: () =>
       Effect.succeed(WorkflowArtifactReference.make({ artifactId: ArtifactId.make("unused") })),
+    read: () => Effect.succeed({}),
   }),
 );
 

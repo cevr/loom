@@ -165,7 +165,6 @@ The daemon rebuilds it from actor-owned state after startup.
 
 ## Required implementation work
 
-- [Publish Workflow Artifacts with a temporary file and atomic rename](https://github.com/cevr/loom/issues/30).
 - [Stop and delete Workflow child Agent ownership during terminal Workflow retirement](https://github.com/cevr/loom/issues/29).
 - [Interrupt active Workflow Runs during Session close](https://github.com/cevr/loom/issues/36).
 - [Complete the missing Job recovery outcomes and Job lifecycle model](https://github.com/cevr/loom/issues/31).

@@ -69,6 +69,11 @@ export {
 } from "./internal/loom-dynamic-workflow.js";
 export { layerEmptyWorkflowHost } from "./internal/empty-workflow-host.js";
 export {
+  type BunWorkflowArtifactStoreConfig,
+  layerBunWorkflowArtifactStore,
+  makeBunWorkflowArtifactStore,
+} from "./internal/bun-workflow-artifact-store.js";
+export {
   type WorkflowCapabilitiesConfig,
   layerWorkflowCapabilities,
 } from "./internal/workflow-capabilities.js";

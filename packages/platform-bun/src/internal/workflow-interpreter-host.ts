@@ -5,12 +5,14 @@ import {
   WorkflowStepId,
 } from "@cvr/loom-domain";
 import {
+  workflowArtifactCapability,
   loomWorkflowSignal,
   type WorkflowArtifactStore,
   WorkflowActivityContext,
   WorkflowBudgetExceededError,
   type WorkflowCapabilityExecutor,
   WorkflowRunError,
+  WorkflowStepError,
   WorkflowStepExecution,
 } from "@cvr/loom-runtime";
 import { Effect, Option, Schema } from "effect";
@@ -110,7 +112,17 @@ export const makeWorkflowInterpreterHost = (
   execute: capabilities.execute,
   compensate: capabilities.compensate,
   supports: capabilities.supports,
-  storeArtifact: artifacts.store,
+  storeArtifact: (write, context) =>
+    artifacts.store(write, context).pipe(
+      Effect.mapError(
+        (error) =>
+          new WorkflowStepError({
+            stepId: write.stepId,
+            capability: workflowArtifactCapability,
+            message: error.message,
+          }),
+      ),
+    ),
   awaitSignal: (name) => loomWorkflowSignal(name).await,
   withDurationLimit,
 });

@@ -112,6 +112,11 @@ _Avoid_: Event, callback
 A file that stores a large or durable result from a cell, job, or workflow run.
 _Avoid_: Blob, attachment
 
+**Artifact Reference**:
+A typed Artifact ID that lets a caller read one published Artifact.
+A missing Artifact is a storage failure.
+_Avoid_: File path, result state
+
 **Plugin**:
 A versioned module that adds a declared Loom capability.
 _Avoid_: Extension, hook bundle

@@ -1,17 +1,8 @@
-import {
-  JobFailure,
-  JobAddress,
-  JobRequest,
-  workflowArtifactId,
-  workflowJobId,
-  type WorkspaceRoot,
-} from "@cvr/loom-domain";
+import { JobFailure, JobAddress, JobRequest, workflowJobId } from "@cvr/loom-domain";
 import {
   JobRuntime,
   WorkflowAgentHandle,
   WorkflowAgentInput,
-  WorkflowArtifactReference,
-  WorkflowArtifactStore,
   WorkflowCapabilityExecutor,
   WorkflowChildAgentStore,
   WorkflowJobHandle,
@@ -19,19 +10,20 @@ import {
   WorkflowStepExecution,
   supportsBuiltInWorkflowCapability,
   workflowAgentCapability,
-  workflowArtifactCapability,
   workflowJobCapability,
   type WorkflowActivityContext,
-  type WorkflowArtifactStoreShape,
   type WorkflowChildAgentStoreShape,
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
 import { WorkflowStepError } from "@cvr/loom-protocol";
-import { Effect, FileSystem, Inspectable, Layer, Option, Schema } from "effect";
+import { Effect, Inspectable, Layer, Option, Schema } from "effect";
+import {
+  layerBunWorkflowArtifactStore,
+  type BunWorkflowArtifactStoreConfig,
+} from "./bun-workflow-artifact-store.js";
 
 const decodeAgentInput = Schema.decodeUnknownEffect(WorkflowAgentInput);
 const decodeJobInput = Schema.decodeUnknownEffect(WorkflowJobInput);
-const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Json));
 
 const stepError = (call: WorkflowStepCall, message: string) =>
   new WorkflowStepError({
@@ -110,35 +102,7 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
   });
 });
 
-const makeArtifactStore = (
-  workspaceRoot: WorkspaceRoot,
-): Effect.Effect<WorkflowArtifactStoreShape, never, FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    return WorkflowArtifactStore.of({
-      store: (write, context) => {
-        const artifactId = workflowArtifactId(context.activityKey);
-        const path = `${workspaceRoot}/.loom/artifacts/${encodeURIComponent(artifactId)}.json`;
-        return fs.makeDirectory(`${workspaceRoot}/.loom/artifacts`, { recursive: true }).pipe(
-          Effect.andThen(encodeJson(write.value)),
-          Effect.flatMap((value) => fs.writeFileString(path, value)),
-          Effect.as(WorkflowArtifactReference.make({ artifactId })),
-          Effect.mapError(
-            (cause) =>
-              new WorkflowStepError({
-                stepId: write.stepId,
-                capability: workflowArtifactCapability,
-                message: Inspectable.toStringUnknown(cause),
-              }),
-          ),
-        );
-      },
-    });
-  });
-
-export interface WorkflowCapabilitiesConfig {
-  readonly workspaceRoot: WorkspaceRoot;
-}
+export type WorkflowCapabilitiesConfig = BunWorkflowArtifactStoreConfig;
 
 export const layerWorkflowCapabilities = (config: WorkflowCapabilitiesConfig) =>
   Layer.merge(
@@ -184,5 +148,5 @@ export const layerWorkflowCapabilities = (config: WorkflowCapabilitiesConfig) =>
         });
       }),
     ),
-    Layer.effect(WorkflowArtifactStore, makeArtifactStore(config.workspaceRoot)),
+    layerBunWorkflowArtifactStore(config),
   );

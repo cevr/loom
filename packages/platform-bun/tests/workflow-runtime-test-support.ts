@@ -54,6 +54,7 @@ export const workflowSupport = (filename: string, executions: Ref.Ref<number>) =
             artifactId: ArtifactId.make(`artifact-${stepId}`),
           }),
         ),
+      read: () => Effect.succeed({}),
     }),
   );
   return Layer.mergeAll(
