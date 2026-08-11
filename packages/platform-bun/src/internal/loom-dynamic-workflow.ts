@@ -33,11 +33,11 @@ export const layerLoomDynamicWorkflow = Actor.toLayer(LoomDynamicWorkflow, (exec
 
 export const layerLoomWorkflowRuntimeWith = (options?: WorkflowRunStatePublisherOptions) => {
   const engine = ClusterWorkflowEngine.layer;
-  const acceptance = layerWorkflowRunAcceptance.pipe(
-    Layer.provide(layerSqliteWorkflowRunAcceptanceStore),
-  );
+  const acceptanceStore = layerSqliteWorkflowRunAcceptanceStore;
+  const acceptance = layerWorkflowRunAcceptance.pipe(Layer.provide(acceptanceStore));
   const retention = layerSqliteWorkflowRunRetention.pipe(
     Layer.provideMerge(ClientLayer.fromSharding),
+    Layer.provide(acceptanceStore),
   );
   const workflow = Layer.merge(
     layerLoomDynamicWorkflow,

@@ -3,6 +3,9 @@ import { Context, type Duration, type Effect } from "effect";
 import type { WorkflowRunRetentionError } from "./workflow-run-retention-error.js";
 
 export interface WorkflowRunRetentionShape {
+  readonly resumeRetirement: (
+    address: WorkflowRunAddress,
+  ) => Effect.Effect<void, WorkflowRunRetentionError>;
   readonly retireExpired: (
     address: WorkflowRunAddress,
     stateLease: Duration.Input,

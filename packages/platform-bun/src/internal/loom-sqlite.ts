@@ -36,6 +36,7 @@ const createKernelSchema = Effect.gen(function* () {
       status TEXT NOT NULL DEFAULT 'Active',
       retire_after INTEGER,
       CHECK (status IN ('Active', 'Retiring')),
+      CHECK (status = 'Active' OR retire_after IS NOT NULL),
       PRIMARY KEY (session_id, workflow_name, workflow_version, workflow_key)
     )
   `;
@@ -104,7 +105,6 @@ const createCapabilitySchema = Effect.gen(function* () {
   yield* sql`
     CREATE TABLE IF NOT EXISTS workflow_child_agents (
       activity_key TEXT PRIMARY KEY,
-      agent_id TEXT NOT NULL UNIQUE,
       session_id TEXT NOT NULL,
       workflow_run_id TEXT NOT NULL,
       prompt TEXT NOT NULL,
@@ -114,6 +114,10 @@ const createCapabilitySchema = Effect.gen(function* () {
   yield* sql`
     CREATE INDEX IF NOT EXISTS workflow_child_agents_session
     ON workflow_child_agents (session_id, status)
+  `;
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS workflow_child_agents_run
+    ON workflow_child_agents (session_id, workflow_run_id, status)
   `;
 });
 

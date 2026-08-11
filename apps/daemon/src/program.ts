@@ -145,11 +145,14 @@ const launchDaemon = <E, R, E2>(
     });
     const actors = layerActorStateHub;
     const jobs = makeJobLayer(config, actors);
-    const workflows = layerLoomWorkflowRuntime.pipe(Layer.provide([capabilities, actors]));
+    const childAgents = layerSqliteWorkflowChildAgentStore;
+    const workflows = layerLoomWorkflowRuntime.pipe(
+      Layer.provide([capabilities, actors, childAgents]),
+    );
     const application = Layer.mergeAll(
       actors,
       makeAgentLayer(config, policy),
-      layerSqliteWorkflowChildAgentStore,
+      childAgents,
       workflows,
     ).pipe(
       Layer.provideMerge(jobs),

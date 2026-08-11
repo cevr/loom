@@ -1,7 +1,6 @@
 import {
   WorkflowIncarnationId,
   WorkflowIdentity,
-  WorkflowRunAcceptanceStatus,
   WorkflowRequestDigest,
   WorkflowRunId,
   type WorkflowRunAddress,
@@ -9,11 +8,13 @@ import {
 import { Context, type Effect, type Option, Schema } from "effect";
 import type { WorkflowRunAcceptanceError } from "@cvr/loom-protocol";
 
-export const WorkflowRunClaim = Schema.Struct({
-  incarnationId: WorkflowIncarnationId,
-  workflowRunId: WorkflowRunId,
-  digest: WorkflowRequestDigest,
-  status: WorkflowRunAcceptanceStatus,
+export const WorkflowRunClaim = Schema.TaggedUnion({
+  Claimed: {
+    incarnationId: WorkflowIncarnationId,
+    workflowRunId: WorkflowRunId,
+    digest: WorkflowRequestDigest,
+  },
+  Retiring: { workflowRunId: WorkflowRunId },
 });
 export type WorkflowRunClaim = typeof WorkflowRunClaim.Type;
 
@@ -27,7 +28,14 @@ export interface WorkflowRunAcceptanceStoreShape {
   readonly lookup: (
     workflowRunId: WorkflowRunId,
   ) => Effect.Effect<Option.Option<WorkflowIdentity>, WorkflowRunAcceptanceError>;
-  readonly list: Effect.Effect<ReadonlyArray<WorkflowRunAddress>, WorkflowRunAcceptanceError>;
+  readonly markRetiring: (
+    address: WorkflowRunAddress,
+  ) => Effect.Effect<void, WorkflowRunAcceptanceError>;
+  readonly listActive: Effect.Effect<ReadonlyArray<WorkflowRunAddress>, WorkflowRunAcceptanceError>;
+  readonly listRetiring: Effect.Effect<
+    ReadonlyArray<WorkflowRunAddress>,
+    WorkflowRunAcceptanceError
+  >;
 }
 
 export class WorkflowRunAcceptanceStore extends Context.Service<

@@ -1,6 +1,8 @@
 import { WorkflowRunAddress } from "@cvr/loom-domain";
 import {
   LoomDynamicWorkflow,
+  WorkflowChildAgentStore,
+  WorkflowRunAcceptanceStore,
   WorkflowRunRetention,
   WorkflowRunRetentionError,
   type WorkflowRunRetentionShape,
@@ -14,6 +16,10 @@ const ScheduledRetirement = Schema.Struct({ retireAfter: Schema.DateTimeUtcFromM
 const ScheduleRetirement = Schema.Struct({
   ...WorkflowRunAddress.fields,
   retireAfter: Schema.DateTimeUtcFromMillis,
+});
+
+const RetiredWorkflowRun = Schema.Struct({
+  workflowRunId: WorkflowRunAddress.fields.workflowRunId,
 });
 
 const makeDeadline = (sql: SqlClient.SqlClient) => {
@@ -39,32 +45,65 @@ const makeDeadline = (sql: SqlClient.SqlClient) => {
   });
 };
 
-const makeRetire = (client: Client["Service"], sql: SqlClient.SqlClient) =>
-  Effect.fn("SqliteWorkflowRunRetention.retire")(function* ({
-    sessionId,
-    workflowRunId,
-  }: WorkflowRunAddress) {
-    yield* LoomDynamicWorkflow.prune(workflowRunId).pipe(Effect.provideService(Client, client));
+const makeFinalizeRetirement = (client: Client["Service"], sql: SqlClient.SqlClient) => {
+  const removeAcceptance = SqlSchema.findOneOption({
+    Request: WorkflowRunAddress,
+    Result: RetiredWorkflowRun,
+    execute: ({ sessionId, workflowRunId }) => sql`
+      DELETE FROM workflow_run_acceptance
+      WHERE session_id = ${sessionId}
+        AND workflow_run_id = ${workflowRunId}
+        AND NOT EXISTS (
+          SELECT 1 FROM workflow_child_agents
+          WHERE session_id = ${sessionId}
+            AND workflow_run_id = ${workflowRunId}
+            AND status = 'Active'
+        )
+      RETURNING workflow_run_id AS workflowRunId
+    `,
+  });
+  return Effect.fn("SqliteWorkflowRunRetention.finalize")(function* (address: WorkflowRunAddress) {
+    const removed = yield* removeAcceptance(address);
+    if (Option.isNone(removed)) return;
+    yield* LoomDynamicWorkflow.prune(address.workflowRunId).pipe(
+      Effect.provideService(Client, client),
+    );
     yield* sql`
         DELETE FROM workflow_signal_declarations
-        WHERE workflow_run_id = ${workflowRunId}
+        WHERE workflow_run_id = ${address.workflowRunId}
       `;
     yield* sql`
-        DELETE FROM workflow_run_acceptance
-        WHERE session_id = ${sessionId} AND workflow_run_id = ${workflowRunId}
+        DELETE FROM workflow_child_agents
+        WHERE session_id = ${address.sessionId}
+          AND workflow_run_id = ${address.workflowRunId}
+          AND status = 'Stopped'
       `;
   }, client.withTransaction);
+};
 
-export const makeSqliteWorkflowRunRetention: Effect.Effect<
-  WorkflowRunRetentionShape,
-  never,
-  Client | SqlClient.SqlClient
-> = Effect.gen(function* () {
-  const client = yield* Client;
-  const sql = yield* SqlClient.SqlClient;
-  const deadline = makeDeadline(sql);
-  const retire = makeRetire(client, sql);
-  const retireIfExpired = Effect.fn("SqliteWorkflowRunRetention.retireIfExpired")(function* (
+const makeResume = (
+  childAgents: WorkflowChildAgentStore["Service"],
+  finalize: ReturnType<typeof makeFinalizeRetirement>,
+) =>
+  Effect.fn("SqliteWorkflowRunRetention.resume")(function* (address: WorkflowRunAddress) {
+    const active = yield* childAgents.listActiveByWorkflowRun(address);
+    yield* Effect.forEach(active, (agent) => childAgents.stop(agent.activityKey), {
+      discard: true,
+    });
+    yield* finalize(address);
+  });
+
+const makeRetire = (
+  acceptance: WorkflowRunAcceptanceStore["Service"],
+  resume: ReturnType<typeof makeResume>,
+) =>
+  Effect.fn("SqliteWorkflowRunRetention.retire")(function* (address: WorkflowRunAddress) {
+    yield* acceptance.markRetiring(address);
+    yield* resume(address);
+  });
+
+const makeRetireIfExpired = (retire: ReturnType<typeof makeRetire>) =>
+  Effect.fn("SqliteWorkflowRunRetention.retireIfExpired")(function* (
     address: WorkflowRunAddress,
     retireAfter: DateTime.Utc,
   ) {
@@ -72,6 +111,21 @@ export const makeSqliteWorkflowRunRetention: Effect.Effect<
     yield* retire(address);
     return true;
   });
+
+export const makeSqliteWorkflowRunRetention: Effect.Effect<
+  WorkflowRunRetentionShape,
+  never,
+  Client | SqlClient.SqlClient | WorkflowChildAgentStore | WorkflowRunAcceptanceStore
+> = Effect.gen(function* () {
+  const client = yield* Client;
+  const sql = yield* SqlClient.SqlClient;
+  const acceptance = yield* WorkflowRunAcceptanceStore;
+  const childAgents = yield* WorkflowChildAgentStore;
+  const deadline = makeDeadline(sql);
+  const finalizeRetirement = makeFinalizeRetirement(client, sql);
+  const resume = makeResume(childAgents, finalizeRetirement);
+  const retire = makeRetire(acceptance, resume);
+  const retireIfExpired = makeRetireIfExpired(retire);
 
   const retireExpired = Effect.fn("SqliteWorkflowRunRetention.retireExpired")(
     function* (address: WorkflowRunAddress, stateLease: Duration.Input) {
@@ -94,7 +148,10 @@ export const makeSqliteWorkflowRunRetention: Effect.Effect<
     Effect.mapError((cause) => new WorkflowRunRetentionError({ cause })),
   );
 
-  return WorkflowRunRetention.of({ retireAfterLease, retireExpired });
+  const resumeRetirement = (address: WorkflowRunAddress) =>
+    resume(address).pipe(Effect.mapError((cause) => new WorkflowRunRetentionError({ cause })));
+
+  return WorkflowRunRetention.of({ resumeRetirement, retireAfterLease, retireExpired });
 });
 
 export const layerSqliteWorkflowRunRetention = Layer.effect(

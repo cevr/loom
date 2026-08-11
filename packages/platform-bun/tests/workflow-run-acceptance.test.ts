@@ -100,7 +100,7 @@ const countAcceptanceRows = (filename: string) =>
 const markRetiring = (filename: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    yield* sql`UPDATE workflow_run_acceptance SET status = 'Retiring'`;
+    yield* sql`UPDATE workflow_run_acceptance SET status = 'Retiring', retire_after = 0`;
   }).pipe(Effect.provide(layerLoomSqlite({ filename })), Effect.scoped);
 
 scopedLive("creates one acceptance row for concurrent matching requests", () =>
@@ -125,7 +125,6 @@ scopedLive("creates one acceptance row for concurrent matching requests", () =>
     expect(yield* countAcceptanceRows(filename)).toBe(1);
   }),
 );
-
 scopedLive("normalizes names and JSON object keys before it attaches", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -163,7 +162,6 @@ scopedLive("normalizes names and JSON object keys before it attaches", () =>
     expect(first.request.definition.signals).toEqual([WorkflowSignalName.make("approval")]);
   }),
 );
-
 scopedLive("keeps the accepted request immutable across daemon storage restarts", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -237,6 +235,12 @@ scopedLive("rejects attachment while the accepted Workflow Run retires", () =>
       });
       expect(failure.workflowRunId).toBe(accepted.workflowRunId);
     }
+    expect(
+      yield* withAcceptance(
+        filename,
+        WorkflowRunAcceptance.pipe(Effect.flatMap((acceptance) => acceptance.listRetiring)),
+      ),
+    ).toEqual([{ sessionId: request.sessionId, workflowRunId: accepted.workflowRunId }]);
   }),
 );
 
@@ -285,7 +289,7 @@ scopedLive("resolves only the accepted Session after storage restarts", () =>
       Effect.gen(function* () {
         const acceptance = yield* WorkflowRunAcceptance;
         yield* acceptance.authorize(address);
-        expect(yield* acceptance.list).toEqual([address]);
+        expect(yield* acceptance.listActive).toEqual([address]);
         const denied = yield* acceptance
           .authorize({ ...address, sessionId: SessionId.make("session-2") })
           .pipe(Effect.flip);

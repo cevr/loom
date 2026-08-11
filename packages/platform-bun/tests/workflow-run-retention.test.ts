@@ -1,18 +1,22 @@
-import { WorkflowDefinition, WorkflowKey, WorkflowSignalName } from "@cvr/loom-domain";
+import {
+  WorkflowActivityKey,
+  WorkflowDefinition,
+  WorkflowKey,
+  WorkflowSignalName,
+} from "@cvr/loom-domain";
 import { WorkflowRunRecovery, WorkflowRuntime } from "@cvr/loom-runtime";
 import { expect } from "effect-bun-test";
 import { DateTime, Effect, FileSystem, Option, Ref, Schedule } from "effect";
-import { layerLoomWorkflowRuntimeWith } from "../src/index.js";
 import { request } from "./workflow-runtime-fixtures.js";
 import {
+  claimWorkflowChildAgent,
+  emptyWorkflowStorage,
   expireRetirement,
+  leasedRuntime,
   retirementDeadline,
-  runtimeLayer,
   scopedLive,
   storageCounts,
 } from "./workflow-runtime-test-support.js";
-
-const emptyStorage = { acceptance: 0, signals: 0, messages: 0, replies: 0 };
 
 const completeWithDeadline = (filename: string, executions: Ref.Ref<number>) =>
   Effect.scoped(
@@ -31,15 +35,7 @@ const completeWithDeadline = (filename: string, executions: Ref.Ref<number>) =>
         onSome: Effect.succeed,
       });
       return { workflowRunId, retireAfter };
-    }).pipe(
-      Effect.provide(
-        runtimeLayer(
-          filename,
-          executions,
-          layerLoomWorkflowRuntimeWith({ stateLease: "500 millis" }),
-        ),
-      ),
-    ),
+    }).pipe(Effect.provide(leasedRuntime(filename, executions, "500 millis"))),
   );
 
 const recoverBeforeExpiry = (
@@ -54,11 +50,7 @@ const recoverBeforeExpiry = (
       yield* recovery.retire;
       const retirement = yield* retirementDeadline(workflowRunId);
       return { counts: yield* storageCounts, retireAfter: retirement.retireAfter };
-    }).pipe(
-      Effect.provide(
-        runtimeLayer(filename, executions, layerLoomWorkflowRuntimeWith({ stateLease: "1 milli" })),
-      ),
-    ),
+    }).pipe(Effect.provide(leasedRuntime(filename, executions, "1 milli"))),
   );
 
 const recoverAfterExpiry = (filename: string, executions: Ref.Ref<number>) =>
@@ -69,11 +61,7 @@ const recoverAfterExpiry = (filename: string, executions: Ref.Ref<number>) =>
       yield* recovery.retire;
       yield* recovery.retire;
       return yield* storageCounts;
-    }).pipe(
-      Effect.provide(
-        runtimeLayer(filename, executions, layerLoomWorkflowRuntimeWith({ stateLease: "1 hour" })),
-      ),
-    ),
+    }).pipe(Effect.provide(leasedRuntime(filename, executions, "1 hour"))),
   );
 
 scopedLive("retires terminal Workflow storage after its state lease", () =>
@@ -95,8 +83,13 @@ scopedLive("retires terminal Workflow storage after its state lease", () =>
       Effect.gen(function* () {
         const runtime = yield* WorkflowRuntime;
         const workflowRunId = yield* runtime.send(acceptedRequest);
+        yield* claimWorkflowChildAgent(
+          { sessionId: acceptedRequest.sessionId, workflowRunId },
+          WorkflowActivityKey.make("retention/child"),
+          "Review the release.",
+        );
         yield* runtime.wait({ sessionId: acceptedRequest.sessionId, workflowRunId });
-        expect((yield* storageCounts).acceptance).toBe(1);
+        expect(yield* storageCounts).toHaveProperty("activeAgents", 1);
         const retired = yield* storageCounts.pipe(
           Effect.repeat({
             while: ({ acceptance }) => acceptance > 0,
@@ -108,18 +101,10 @@ scopedLive("retires terminal Workflow storage after its state lease", () =>
           .pipe(Effect.flip);
         expect(unavailable).toHaveProperty("_tag", "WorkflowRunNotFoundError");
         return retired;
-      }).pipe(
-        Effect.provide(
-          runtimeLayer(
-            filename,
-            executions,
-            layerLoomWorkflowRuntimeWith({ stateLease: "500 millis" }),
-          ),
-        ),
-      ),
+      }).pipe(Effect.provide(leasedRuntime(filename, executions, "500 millis"))),
     );
 
-    expect(counts).toEqual(emptyStorage);
+    expect(counts).toEqual(emptyWorkflowStorage);
   }),
 );
 
@@ -144,15 +129,7 @@ scopedLive("mints a new Workflow Run ID after terminal retirement", () =>
         const secondId = yield* runtime.send(request);
         yield* runtime.wait({ sessionId: request.sessionId, workflowRunId: secondId });
         return [firstId, secondId];
-      }).pipe(
-        Effect.provide(
-          runtimeLayer(
-            filename,
-            executions,
-            layerLoomWorkflowRuntimeWith({ stateLease: "100 millis" }),
-          ),
-        ),
-      ),
+      }).pipe(Effect.provide(leasedRuntime(filename, executions, "100 millis"))),
     );
 
     expect(second).not.toBe(first);
@@ -180,14 +157,12 @@ scopedLive("keeps one terminal retirement deadline across restarts", () =>
     );
 
     yield* expireRetirement(firstDeadline.workflowRunId).pipe(
-      Effect.provide(
-        runtimeLayer(filename, executions, layerLoomWorkflowRuntimeWith({ stateLease: "1 hour" })),
-      ),
+      Effect.provide(leasedRuntime(filename, executions, "1 hour")),
       Effect.scoped,
     );
 
     const afterExpiry = yield* recoverAfterExpiry(filename, executions);
 
-    expect(afterExpiry).toEqual(emptyStorage);
+    expect(afterExpiry).toEqual(emptyWorkflowStorage);
   }),
 );

@@ -15,7 +15,7 @@ import {
 } from "@cvr/loom-protocol";
 import { Context, Crypto, Effect, Inspectable, Layer, Option, Schema } from "effect";
 import { canonicalJsonSha256 } from "effect-encore";
-import { WorkflowRunAcceptanceStore } from "./workflow-run-acceptance-store.js";
+import { WorkflowRunAcceptanceStore, WorkflowRunClaim } from "./workflow-run-acceptance-store.js";
 import { LoomDynamicWorkflow } from "./loom-dynamic-workflow.js";
 
 export interface WorkflowRunAcceptanceShape {
@@ -28,7 +28,8 @@ export interface WorkflowRunAcceptanceShape {
   readonly authorize: (
     address: WorkflowRunAddress,
   ) => Effect.Effect<void, WorkflowRunNotFoundError | WorkflowRunAcceptanceError>;
-  readonly list: WorkflowRunAcceptanceStore["Service"]["list"];
+  readonly listActive: WorkflowRunAcceptanceStore["Service"]["listActive"];
+  readonly listRetiring: WorkflowRunAcceptanceStore["Service"]["listRetiring"];
 }
 
 export class WorkflowRunAcceptance extends Context.Service<
@@ -113,7 +114,7 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
     const digest = yield* digestRequest(request);
     const { incarnationId, workflowRunId } = yield* makeCandidate(request);
     const accepted = yield* store.claim(identity, digest, incarnationId, workflowRunId);
-    if (accepted.status === "Retiring") {
+    if (WorkflowRunClaim.guards.Retiring(accepted)) {
       return yield* new WorkflowRunRetiringError({
         identity,
         workflowRunId: accepted.workflowRunId,
@@ -137,7 +138,8 @@ export const makeWorkflowRunAcceptance: Effect.Effect<
   return WorkflowRunAcceptance.of({
     accept,
     authorize: makeAuthorizeWorkflowRun(store),
-    list: store.list,
+    listActive: store.listActive,
+    listRetiring: store.listRetiring,
   });
 });
 
