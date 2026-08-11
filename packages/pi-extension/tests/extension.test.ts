@@ -44,6 +44,7 @@ const makeRegisterTool = (toolNames: Set<string>): ExtensionAPI["registerTool"] 
 
 it("registers the Loom development command", () => {
   let command = Option.none<Omit<RegisteredCommand, "name" | "sourceInfo">>();
+  const commandNames = new Set<string>();
   const toolNames = new Set<string>();
   const events = new Map<string, number>();
   const on: LoomExtensionApi["on"] = (event) => {
@@ -52,8 +53,8 @@ it("registers the Loom development command", () => {
   const pi = {
     on,
     registerCommand: (name: string, options: Omit<RegisteredCommand, "name" | "sourceInfo">) => {
-      expect(name).toBe("loom");
-      command = Option.some(options);
+      commandNames.add(name);
+      if (name === "loom") command = Option.some(options);
     },
     registerTool: makeRegisterTool(toolNames),
   };
@@ -61,6 +62,7 @@ it("registers the Loom development command", () => {
   loomExtension(pi);
 
   expect(Option.getOrThrow(command).description).toBe("Show the Loom daemon state");
+  expect(commandNames).toEqual(new Set(["loom", "btw", "side"]));
   expect(toolNames).toEqual(
     new Set([
       "loom_cell",

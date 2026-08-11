@@ -24,6 +24,9 @@ Read these files before an architectural change:
 - Use typed tools and protocol messages for control flow.
 - Do not parse assistant prose to control runtime state.
 - Do not add a package until a working boundary needs it.
+- Inspect current upstream source with the `repo` skill before reporting an upstream gap.
+- Do not create Pi issues.
+- Prefer a fork when a significant upstream gap has no realistic workaround.
 - Use Conventional Commits.
 - Do not push unless the user asks.
 
