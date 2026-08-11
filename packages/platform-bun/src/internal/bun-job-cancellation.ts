@@ -42,16 +42,11 @@ export const makeCancel = (
   Effect.fn("BunJobRuntime.cancel")(function* (address: JobAddress) {
     const requestedJob = yield* Effect.gen(function* () {
       const requested = yield* services.jobs.requestStop(address).pipe(mapRuntimeError("cancel"));
-      const current = yield* existingAfterMutation(services, "cancel", address, requested);
-      if (
-        Option.isSome(current) &&
-        Option.isSome(requested) &&
-        current.value.status === "Stopping"
-      ) {
-        yield* publishJob(services.actors, current.value);
-        yield* superviseCancellation(services, grace, fibers, current.value);
+      if (Option.isSome(requested) && requested.value.status === "Stopping") {
+        yield* publishJob(services.actors, requested.value);
+        yield* superviseCancellation(services, grace, fibers, requested.value);
       }
-      return current;
+      return yield* existingAfterMutation(services, "cancel", address, requested);
     }).pipe(Effect.uninterruptible);
     if (Option.isNone(requestedJob)) return requestedJob;
     return yield* makeAwaitTerminal(services)(address);

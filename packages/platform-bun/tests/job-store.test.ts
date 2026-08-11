@@ -164,9 +164,10 @@ it.scopedLive.layer(BunServices.layer)("owns the durable Job lifecycle", () =>
 
       const stopping = yield* jobs.requestStop(address);
       expect(Option.map(stopping, (job) => job.status)).toEqual(Option.some("Stopping"));
-      expect(yield* jobs.complete(jobId, JobOutcome.cases.Cancelled.make({}))).toBe(true);
-      expect(yield* jobs.complete(jobId, JobOutcome.cases.Succeeded.make({ exitCode: 0 }))).toBe(
-        false,
+      const completed = yield* jobs.complete(jobId, JobOutcome.cases.Cancelled.make({}));
+      expect(Option.map(completed, (job) => job.status)).toEqual(Option.some("Cancelled"));
+      expect(yield* jobs.complete(jobId, JobOutcome.cases.Succeeded.make({ exitCode: 0 }))).toEqual(
+        Option.none(),
       );
       expect(yield* jobs.detach(address)).toEqual(Option.none());
       expect(Option.map(yield* jobs.get(address), (job) => job.status)).toEqual(
@@ -228,9 +229,11 @@ it.scopedLive.layer(BunServices.layer)("persists successful and failed Job outco
       yield* jobs.create(submission);
       yield* jobs.begin(jobId);
       yield* jobs.activate(jobId, identity);
-      expect(yield* jobs.complete(jobId, JobOutcome.cases.Succeeded.make({ exitCode: 0 }))).toBe(
-        true,
+      const completed = yield* jobs.complete(
+        jobId,
+        JobOutcome.cases.Succeeded.make({ exitCode: 0 }),
       );
+      expect(Option.map(completed, (job) => job.status)).toEqual(Option.some("Succeeded"));
       const succeeded = yield* jobs.get(address);
       expect(
         succeeded.pipe(
@@ -243,14 +246,13 @@ it.scopedLive.layer(BunServices.layer)("persists successful and failed Job outco
       const failedAddress = JobAddress.make({ sessionId, jobId: failedJobId });
       yield* jobs.create(JobSubmission.make({ ...submission, jobId: failedJobId }));
       yield* jobs.begin(failedJobId);
-      expect(
-        yield* jobs.complete(
-          failedJobId,
-          JobOutcome.cases.Failed.make({
-            failure: JobFailure.cases.Launch.make({ detail: "launch failed" }),
-          }),
-        ),
-      ).toBe(true);
+      const failed = yield* jobs.complete(
+        failedJobId,
+        JobOutcome.cases.Failed.make({
+          failure: JobFailure.cases.Launch.make({ detail: "launch failed" }),
+        }),
+      );
+      expect(Option.map(failed, (job) => job.status)).toEqual(Option.some("Failed"));
       expect(
         (yield* jobs.get(failedAddress)).pipe(
           Option.filter(JobRecord.guards.Failed),

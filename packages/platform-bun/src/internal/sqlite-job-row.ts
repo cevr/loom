@@ -101,21 +101,15 @@ const submissionFromRow = (row: typeof FlatJob.Type) => ({
   resultPath: row.resultPath,
 });
 
-const stoppingIdentity = (row: Extract<typeof FlatJob.Type, { readonly status: "Stopping" }>) => {
-  if (
-    typeof row.pid !== "number" ||
-    typeof row.processGroupId !== "number" ||
-    typeof row.processStartId !== "string"
-  ) {
-    return Option.none();
-  }
-  return Option.some(
-    ProcessIdentity.make({
-      pid: row.pid,
-      processGroupId: row.processGroupId,
-      processStartId: row.processStartId,
-    }),
-  );
+type FlatStoppingJob = Extract<typeof FlatJob.Type, { readonly status: "Stopping" }>;
+
+const hasStoppingIdentity = (
+  row: FlatStoppingJob,
+): row is Extract<FlatStoppingJob, { readonly pid: number }> => !Option.isOption(row.pid);
+
+const stoppingIdentity = (row: FlatStoppingJob) => {
+  if (!hasStoppingIdentity(row)) return Option.none();
+  return Option.some(ProcessIdentity.make(row));
 };
 
 const failureFromRow = (row: Extract<typeof FlatJob.Type, { readonly status: "Failed" }>) => {
@@ -211,6 +205,9 @@ export const JobAcceptedRow = JobRow.pipe(Schema.refine(JobRecord.guards.Accepte
 export const JobStartingRow = JobRow.pipe(Schema.refine(JobRecord.guards.Starting));
 export const JobRecoverableRow = JobRow.pipe(
   Schema.refine(JobRecord.isAnyOf(["Running", "Stopping"])),
+);
+export const JobTerminalRow = JobRow.pipe(
+  Schema.refine(JobRecord.isAnyOf(["Succeeded", "Failed", "Cancelled", "Lost"])),
 );
 export const JobUncommittedRow = JobRow.pipe(
   Schema.refine(JobRecord.isAnyOf(["Accepted", "Starting"])),

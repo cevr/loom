@@ -2,13 +2,13 @@ import {
   JobActiveStatus,
   JobAddress,
   JobFailure,
-  type JobFailureExitCode,
+  JobFailureExitCode,
   JobId,
   JobOutcome,
   JobStartedStatus,
+  JobTerminalStatus,
   ProcessIdentity,
   SessionId,
-  type JobTerminalStatus,
 } from "@cvr/loom-domain";
 import { JobStore, JobStoreError, type JobStoreShape } from "@cvr/loom-runtime";
 import { Effect, Layer, Option, Schema } from "effect";
@@ -20,6 +20,7 @@ import {
   JobRow,
   JobStartingRow,
   JobSubmissionRow,
+  JobTerminalRow,
   JobUncommittedRow,
 } from "./sqlite-job-row.js";
 
@@ -173,23 +174,34 @@ const completionValues = (outcome: JobOutcome): CompletionValues =>
     }),
   });
 
-const makeComplete = (sql: SqlClient.SqlClient): JobStoreShape["complete"] =>
-  Effect.fn("SqliteJobStore.complete")(function* (jobId, outcome) {
-    const values = completionValues(outcome);
-    const rows = yield* sql`
+const CompletionRequest = Schema.Struct({
+  jobId: JobId,
+  status: JobTerminalStatus,
+  failureKind: Schema.OptionFromNullOr(Schema.Literals(["Launch", "Exit", "Runtime"])),
+  exitCode: Schema.OptionFromNullOr(Schema.Union([Schema.Literal(0), JobFailureExitCode])),
+  detail: Schema.OptionFromNullOr(Schema.String),
+});
+
+const makeComplete = (sql: SqlClient.SqlClient): JobStoreShape["complete"] => {
+  const complete = findOne(
+    "complete",
+    CompletionRequest,
+    JobTerminalRow,
+    ({ jobId, status, failureKind, exitCode, detail }) => sql`
       UPDATE jobs SET
-        status = ${values.status},
+        status = ${status},
         pid = NULL,
         process_group_id = NULL,
         process_start_id = NULL,
-        failure_kind = ${Option.getOrNull(values.failureKind)},
-        exit_code = ${Option.getOrNull(values.exitCode)},
-        detail = ${Option.getOrNull(values.detail)}
+        failure_kind = ${failureKind},
+        exit_code = ${exitCode},
+        detail = ${detail}
       WHERE job_id = ${jobId} AND status IN ${sql.in(JobStartedStatus.literals)}
-      RETURNING job_id
-    `.pipe(mapStoreError("complete"));
-    return rows.length === 1;
-  });
+      RETURNING *
+    `,
+  );
+  return (jobId, outcome) => complete({ jobId, ...completionValues(outcome) });
+};
 
 const makeListByStatus = <Result extends Schema.Constraint>(
   sql: SqlClient.SqlClient,

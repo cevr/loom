@@ -126,16 +126,15 @@ export const completeJob = Effect.fn("BunJobRuntime.complete")(function* (
   job: JobRecord,
   outcome: JobOutcome,
 ) {
-  yield* services.jobs.complete(job.jobId, outcome).pipe(mapRuntimeError("complete"));
-  const current = yield* services.jobs.get(jobAddress(job)).pipe(mapRuntimeError("inspect"));
+  const current = yield* services.jobs
+    .complete(job.jobId, outcome)
+    .pipe(mapRuntimeError("complete"));
   yield* Option.match(current, {
     onNone: () => Effect.void,
     onSome: (record) =>
       Effect.gen(function* () {
         yield* publishJob(services.actors, record);
-        if (isJobTerminal(record)) {
-          yield* signalCompletion(services, record);
-        }
+        yield* signalCompletion(services, record);
       }),
   });
   return current;

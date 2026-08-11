@@ -7,6 +7,7 @@ import {
   type JobRecoverableRecord,
   type JobSubmission,
   type JobStartingRecord,
+  type JobTerminalRecord,
   type JobUncommittedRecord,
   type ProcessIdentity,
   type SessionId,
@@ -27,7 +28,10 @@ export interface JobStoreShape {
   readonly requestStop: (
     address: JobAddress,
   ) => Effect.Effect<Option.Option<JobRecord>, JobStoreError>;
-  readonly complete: (jobId: JobId, outcome: JobOutcome) => Effect.Effect<boolean, JobStoreError>;
+  readonly complete: (
+    jobId: JobId,
+    outcome: JobOutcome,
+  ) => Effect.Effect<Option.Option<JobTerminalRecord>, JobStoreError>;
   readonly detach: (address: JobAddress) => Effect.Effect<Option.Option<JobRecord>, JobStoreError>;
   readonly listRecoverable: Effect.Effect<ReadonlyArray<JobRecoverableRecord>, JobStoreError>;
   readonly listUncommitted: Effect.Effect<ReadonlyArray<JobUncommittedRecord>, JobStoreError>;
