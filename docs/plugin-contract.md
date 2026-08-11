@@ -208,10 +208,19 @@ An implementation of `/btw` needs these parts:
 - The `SideConversation` grant.
 - A typed command-action stream.
 
-The Client Adapter supplies an immutable snapshot of the current transcript to the side model call.
+The Client Adapter maps `buildContextEntries` through Pi's exported `sessionEntryToContextMessages` function.
+It deep-copies that compaction-aware context before each side model call.
+It calls `ModelRegistry.complete` with the selected model.
+It does not expose the raw Agent or mutable transcript.
+One invocation runs one tool-free turn and omits the reasoning option.
+A side turn disables provider cache retention and uses a request Session ID that is separate from the main Session.
+A follow-up receives a fresh main-context snapshot and the completed prior side turns.
+The operation reports its token usage.
+Context overflow and missing model state are typed failures.
 The Plugin does not read the transcript directly.
 The side model call does not write its turns to the main transcript.
-Closing the command Scope stops the side model call.
+Closing the command Scope interrupts the provider request.
+The operation does not return a second cancellation handle.
 
 An implementation of `/goal` needs these parts:
 
@@ -223,7 +232,11 @@ An implementation of `/goal` needs these parts:
 
 Goal state is one tagged state machine.
 The Plugin stores each transition before it requests another turn.
-The Client Adapter accounts model usage and supplies it through `AgentTurnControl`.
+The Client Adapter derives completed-turn usage from the assistant message on Pi `message_end` or `turn_end` events.
+It supplies that usage through `AgentTurnControl`.
+
+Issue #54 owns the first `SideConversation` Component.
+Issue #55 owns the first Goal Component.
 
 These features do not need raw transcript storage, raw model objects, or the full Pi extension API.
 

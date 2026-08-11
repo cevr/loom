@@ -8,6 +8,8 @@ It proves one durable coding-agent kernel in one Workspace.
 - One Loom daemon per Workspace.
 - One local Unix socket with a typed handshake and bounded NDJSON frames.
 - One Pi Client Adapter.
+- Transcript-isolated `/btw` Side Conversations.
+- Durable `/goal` control.
 - One Code Kernel per Agent.
 - Persistent TypeScript cells with top-level `await`.
 - Durable Jobs with foreground leases, complete output, cancellation, and restart recovery.
@@ -27,7 +29,6 @@ It proves one durable coding-agent kernel in one Workspace.
 - Audit-history retention in the startup recovery store.
 
 These exclusions keep the first release focused on local durability.
-They do not change the domain model.
 
 ## Package graph
 
@@ -71,12 +72,15 @@ A high-blast-radius slice uses reviewable sub-commits.
 3. Build the persistent Bun Code Kernel and its recovery boundary.
 4. Build durable Jobs, foreground leases, output retention, and process reconciliation.
 5. Build durable Workflow acceptance, replay, capabilities, Signals, compensation, and terminal retention.
-6. Complete the Pi Client Adapter and Shift+Enter input behavior.
+6. Define the narrow `SideConversation` and `AgentTurnControl` grants.
+   Complete the Pi Client Adapter, Shift+Enter input behavior, Side Conversations, and Goal control.
 7. Define the Plugin contract around the working Herdr Plugin.
 8. Run the release gate and publish the `0.1.0` beta.
 
 Slices 1 through 5 have working implementations.
 The Herdr Plugin proves one narrow Plugin lifecycle before slice 7 defines the public contract.
+The first beta has no Plugin-provided Workflow capability.
+The unavailable Workflow Contribution recovery rule has no first-beta effect.
 
 ## Required recovery proof
 
@@ -91,6 +95,8 @@ It must also pass these live checks:
 - Run a Workflow across a daemon restart.
 - Confirm that Herdr shows current Agent, Job, and Workflow Run state.
 - Use Pi `/reload` and run another Loom operation.
+- Ask and follow up on a `/btw` Side Conversation without changing the main transcript.
+- Resume one active Goal after `/reload` and a daemon restart.
 
 ## Release gate
 

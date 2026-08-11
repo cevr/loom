@@ -230,6 +230,7 @@ It releases its Herdr agent when the Plugin Scope closes.
 See [Herdr Plugin](./herdr-plugin.md).
 See [Plugin Contract](./plugin-contract.md).
 See [Capability-based Plugin Components](./adr/0010-use-capability-based-plugin-components.md).
+See [Side Conversations](./adr/0012-keep-side-conversations-off-transcript.md).
 
 ## Package direction
 

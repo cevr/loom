@@ -15,7 +15,6 @@ _Avoid_: Closed flag, teardown mode
 **Session Closure Lease**:
 The fixed period in which Loom keeps a Session closure fact and rejects late Session-owned work.
 The daemon sets this lease.
-The default is five minutes.
 _Avoid_: Tombstone TTL, closed Session cache
 
 **Workspace**:
@@ -37,6 +36,14 @@ _Avoid_: Channel, transport
 **Session Tree**:
 A root session and all agent sessions that descend from it.
 _Avoid_: Conversation tree
+
+**Side Conversation**:
+A temporary model exchange that uses an immutable snapshot of one Session context without adding its turns to that Session transcript.
+_Avoid_: Fork, hidden Session, subagent
+
+**Goal**:
+A Session-owned objective that requests further Agent turns until it reaches one explicit terminal state.
+_Avoid_: Workflow, task, prompt loop
 
 **Agent**:
 An autonomous participant in a session tree.
@@ -153,13 +160,12 @@ _Avoid_: Plugin manager, loader
 
 **Plugin State**:
 Schema-checked state that Loom stores for one Plugin ID and one Workspace or Session scope.
-Each write uses a compare-and-set revision.
-Session close removes Session Plugin State.
-Workspace Plugin State stays until an operator removes it.
+_Avoid_: Plugin memory, raw state document
 
 **Plugin State Revision**:
 The positive integer that orders writes for one Plugin State key.
 A write succeeds only when its expected revision matches the stored revision.
+_Avoid_: Version, timestamp
 
 **Client Adapter**:
 A module that connects a user interface or agent client to Loom.

@@ -20,6 +20,16 @@ Loom can supply `/btw`, `/goal`, and similar features as scoped Client Component
 These Components use narrow Client Adapter grants.
 They do not receive the full Pi extension API.
 
+The `SideConversation` grant maps Pi `buildContextEntries` through `sessionEntryToContextMessages` and deep-copies the result.
+It uses `ModelRegistry.complete` and the selected model for one tool-free off-transcript model turn.
+It omits reasoning, disables cache retention, and uses a request Session ID separate from the main Session.
+The Client Component owns follow-up turns and rendering.
+The command Scope owns cancellation.
+
+The Goal Component stores one tagged Goal state for each Session.
+It stores each transition before `AgentTurnControl` requests another turn.
+The adapter derives turn usage from completed assistant messages.
+
 ## Session lifecycle
 
 Pi starts or connects to the Workspace daemon when its session starts.
