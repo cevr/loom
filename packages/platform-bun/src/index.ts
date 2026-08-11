@@ -77,3 +77,8 @@ export {
   type WorkflowCapabilitiesConfig,
   layerWorkflowCapabilities,
 } from "./internal/workflow-capabilities.js";
+export {
+  type BunWorkflowAgentConfig,
+  type BunWorkflowAgentPolicy,
+  defaultBunWorkflowAgentPolicy,
+} from "./internal/bun-workflow-agent.js";

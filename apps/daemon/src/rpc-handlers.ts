@@ -27,24 +27,19 @@ const makeCloseSession =
     sessions
       .close(
         sessionId,
-        workflows.closeSession(sessionId).pipe(
+        Effect.all(
+          [
+            Effect.result(workflows.closeSession(sessionId)),
+            Effect.result(
+              jobs.closeSession(sessionId).pipe(Effect.andThen(childAgents.stopSession(sessionId))),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        ).pipe(
           // Collect each result so one cleanup failure does not skip the remaining cleanup.
-          Effect.result,
-          Effect.flatMap((workflowResult) =>
-            Effect.all([childAgents.stopSession(sessionId), jobs.closeSession(sessionId)], {
-              concurrency: "unbounded",
-              mode: "result",
-            }).pipe(
-              Effect.flatMap(([childAgentResult, jobResult]) =>
-                Effect.all(
-                  [
-                    Effect.fromResult(workflowResult),
-                    Effect.fromResult(childAgentResult),
-                    Effect.fromResult(jobResult),
-                  ],
-                  { discard: true },
-                ),
-              ),
+          Effect.flatMap(([workflowResult, ownedWorkResult]) =>
+            Effect.fromResult(workflowResult).pipe(
+              Effect.andThen(Effect.fromResult(ownedWorkResult)),
             ),
           ),
         ),

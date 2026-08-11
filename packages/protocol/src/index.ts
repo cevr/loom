@@ -86,7 +86,7 @@ export {
   workflowAgentCapability,
   workflowArtifactCapability,
   workflowJobCapability,
-  WorkflowAgentHandle,
+  WorkflowAgentResult,
   WorkflowAgentInput,
   WorkflowJobHandle,
   WorkflowJobInput,

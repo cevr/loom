@@ -17,7 +17,7 @@ import {
   JobStore,
   SessionLifecycle,
   WorkflowActivityContext,
-  WorkflowAgentHandle,
+  WorkflowAgentResult,
   WorkflowArtifactStore,
   WorkflowArtifactWrite,
   WorkflowCapabilityExecutor,
@@ -39,6 +39,8 @@ import {
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
 } from "../src/index.js";
+
+const workflowAgentFixture = new URL("./fixtures/workflow-agent.ts", import.meta.url).pathname;
 
 const agentContext = WorkflowActivityContext.make({
   activityKey: WorkflowActivityKey.make("workflow/agent"),
@@ -77,14 +79,16 @@ const capabilityLayer = (filename: string, workspaceRoot: WorkspaceRoot) => {
   const jobs = layerBunJobRuntime({ workspaceRoot, terminationGrace: "50 millis" }).pipe(
     Layer.provide([actors, layerBunProcessController, layerBunProcessInspector, store]),
   );
-  const capabilities = layerWorkflowCapabilities({ workspaceRoot }).pipe(
-    Layer.provide([agents, jobs]),
-    Layer.provideMerge(layerSessionLifecycle),
-  );
+  const capabilities = layerWorkflowCapabilities({
+    workspaceRoot,
+    executable: "bun",
+    arguments: ["run", workflowAgentFixture],
+    maximumOutputBytes: 64 * 1_024,
+  }).pipe(Layer.provide([agents, jobs]), Layer.provideMerge(layerSessionLifecycle));
   return Layer.mergeAll(database, agents, store, jobs, capabilities);
 };
 
-it.scopedLive.layer(BunServices.layer)("returns stable capability handles", () =>
+it.scopedLive.layer(BunServices.layer)("returns stable capability results", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-capabilities-" });
@@ -106,10 +110,10 @@ it.scopedLive.layer(BunServices.layer)("returns stable capability handles", () =
       expect(agentResults[0].value).toEqual(agentResults[1].value);
       const nextAgent = yield* executor.execute(agentCall, nextAgentContext);
       expect(nextAgent.value).not.toEqual(agentResults[0].value);
-      expect(
-        yield* Schema.decodeUnknownEffect(WorkflowAgentHandle)(agentResults[0].value),
-      ).toBeDefined();
-      expect(yield* agents.listActiveBySession(agentContext.sessionId)).toHaveLength(2);
+      const agent = yield* Schema.decodeUnknownEffect(WorkflowAgentResult)(agentResults[0].value);
+      expect(agent.outcome).toEqual({ _tag: "Succeeded", exitCode: 0 });
+      expect(agent.stdout).toBe("agent-complete:Check the build.\n");
+      expect(yield* agents.listActiveBySession(agentContext.sessionId)).toEqual([]);
       expect(jobResults[0].value).toEqual(jobResults[1].value);
       expect((yield* executor.execute(jobCall, jobContext)).value).toEqual(jobResults[0].value);
       const nextJob = yield* executor.execute(jobCall, nextJobContext);

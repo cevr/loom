@@ -12,6 +12,7 @@ import {
   layerSqliteCellLedger,
   layerSqliteCodeKernelProcessStore,
   prepareDaemonSocket,
+  defaultBunWorkflowAgentPolicy,
 } from "@cvr/loom-platform-bun";
 import {
   JobRuntime,
@@ -205,6 +206,7 @@ export const program = Effect.gen(function* () {
   const config = yield* loadDaemonConfig;
   const capabilities = layerWorkflowCapabilities({
     workspaceRoot: config.workspaceRoot,
+    ...defaultBunWorkflowAgentPolicy,
   }).pipe(Layer.provide(layerSqliteWorkflowChildAgentStore));
   return yield* runLoomDaemon(config, capabilities);
 });

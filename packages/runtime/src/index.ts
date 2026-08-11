@@ -100,7 +100,7 @@ export {
   workflowArtifactCapability,
   workflowJobCapability,
   WorkflowActivityContext,
-  WorkflowAgentHandle,
+  WorkflowAgentResult,
   WorkflowAgentInput,
   WorkflowJobHandle,
   WorkflowJobInput,

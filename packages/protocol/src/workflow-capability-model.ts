@@ -1,4 +1,4 @@
-import { AgentId, JobId, WorkflowCapability } from "@cvr/loom-domain";
+import { AgentId, JobId, JobOutcome, WorkflowCapability } from "@cvr/loom-domain";
 import { Schema } from "effect";
 
 export const workflowAgentCapability = WorkflowCapability.make("agent");
@@ -15,10 +15,13 @@ export const WorkflowAgentInput = Schema.Struct({
 });
 export type WorkflowAgentInput = typeof WorkflowAgentInput.Type;
 
-export const WorkflowAgentHandle = Schema.TaggedStruct("Agent", {
+export const WorkflowAgentResult = Schema.TaggedStruct("Agent", {
   agentId: AgentId,
+  outcome: JobOutcome,
+  stdout: Schema.String,
+  stderr: Schema.String,
 });
-export type WorkflowAgentHandle = typeof WorkflowAgentHandle.Type;
+export type WorkflowAgentResult = typeof WorkflowAgentResult.Type;
 
 export const WorkflowJobInput = Schema.Struct({
   command: Schema.NonEmptyString,

@@ -15,9 +15,10 @@ import {
   layerActorStateHub,
   layerSessionLifecycle,
   WorkflowStepExecution,
+  JobRuntime,
 } from "@cvr/loom-runtime";
 import { it } from "effect-bun-test";
-import { type Duration, Effect, Layer, Ref, Schema } from "effect";
+import { type Duration, Effect, Layer, Option, Ref, Schema } from "effect";
 import { SingleRunner } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
@@ -73,23 +74,45 @@ export const workflowSupport = (filename: string, executions: Ref.Ref<number>) =
   );
 };
 
+const unusedJob = Effect.die("Unused Workflow test Job operation.");
+
+export const workflowTestJobs = (
+  cancel: JobRuntime["Service"]["cancel"] = () => Effect.succeed(Option.none()),
+) =>
+  Layer.succeed(
+    JobRuntime,
+    JobRuntime.of({
+      start: () => unusedJob,
+      inspect: () => unusedJob,
+      await: () => unusedJob,
+      awaitTerminal: () => unusedJob,
+      readOutput: () => unusedJob,
+      cancel,
+      detach: () => unusedJob,
+      closeSession: () => unusedJob,
+      reconcile: unusedJob,
+    }),
+  );
+
 export const runtimeLayer = (
   filename: string,
   executions: Ref.Ref<number>,
   runtime: ReturnType<typeof layerLoomWorkflowRuntimeWith> = layerLoomWorkflowRuntime,
+  jobs = workflowTestJobs(),
 ) => {
   const actors = layerActorStateHub;
   const support = workflowSupport(filename, executions);
   const childAgents = layerSqliteWorkflowChildAgentStore.pipe(Layer.provide(support));
-  const provided = runtime.pipe(Layer.provide([support, actors, childAgents]));
-  return Layer.mergeAll(provided, actors, support, childAgents);
+  const provided = runtime.pipe(Layer.provide([support, actors, childAgents, jobs]));
+  return Layer.mergeAll(provided, actors, support, childAgents, jobs);
 };
 
 export const leasedRuntime = (
   filename: string,
   executions: Ref.Ref<number>,
   stateLease: Duration.Input,
-) => runtimeLayer(filename, executions, layerLoomWorkflowRuntimeWith({ stateLease }));
+  jobs = workflowTestJobs(),
+) => runtimeLayer(filename, executions, layerLoomWorkflowRuntimeWith({ stateLease }), jobs);
 
 export const scopedLive = it.scopedLive.layer(BunServices.layer);
 

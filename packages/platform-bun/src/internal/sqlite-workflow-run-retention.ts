@@ -1,5 +1,6 @@
-import { WorkflowRunAddress } from "@cvr/loom-domain";
+import { JobAddress, WorkflowRunAddress } from "@cvr/loom-domain";
 import {
+  JobRuntime,
   LoomDynamicWorkflow,
   WorkflowChildAgentStore,
   WorkflowRunAcceptanceStore,
@@ -83,13 +84,19 @@ const makeFinalizeRetirement = (client: Client["Service"], sql: SqlClient.SqlCli
 
 const makeResume = (
   childAgents: WorkflowChildAgentStore["Service"],
+  jobs: JobRuntime["Service"],
   finalize: ReturnType<typeof makeFinalizeRetirement>,
 ) =>
   Effect.fn("SqliteWorkflowRunRetention.resume")(function* (address: WorkflowRunAddress) {
     const active = yield* childAgents.listActiveByWorkflowRun(address);
-    yield* Effect.forEach(active, (agent) => childAgents.stop(agent.activityKey), {
-      discard: true,
-    });
+    yield* Effect.forEach(
+      active,
+      (agent) =>
+        jobs
+          .cancel(JobAddress.make({ sessionId: address.sessionId, jobId: agent.jobId }))
+          .pipe(Effect.andThen(childAgents.stop(agent.activityKey))),
+      { discard: true },
+    );
     yield* finalize(address);
   });
 
@@ -115,15 +122,16 @@ const makeRetireIfExpired = (retire: ReturnType<typeof makeRetire>) =>
 export const makeSqliteWorkflowRunRetention: Effect.Effect<
   WorkflowRunRetentionShape,
   never,
-  Client | SqlClient.SqlClient | WorkflowChildAgentStore | WorkflowRunAcceptanceStore
+  Client | JobRuntime | SqlClient.SqlClient | WorkflowChildAgentStore | WorkflowRunAcceptanceStore
 > = Effect.gen(function* () {
   const client = yield* Client;
   const sql = yield* SqlClient.SqlClient;
   const acceptance = yield* WorkflowRunAcceptanceStore;
   const childAgents = yield* WorkflowChildAgentStore;
+  const jobs = yield* JobRuntime;
   const deadline = makeDeadline(sql);
   const finalizeRetirement = makeFinalizeRetirement(client, sql);
-  const resume = makeResume(childAgents, finalizeRetirement);
+  const resume = makeResume(childAgents, jobs, finalizeRetirement);
   const retire = makeRetire(acceptance, resume);
   const retireIfExpired = makeRetireIfExpired(retire);
 

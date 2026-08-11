@@ -1,13 +1,15 @@
 import {
+  type JobAddress,
   WorkflowActivityKey,
   WorkflowDefinition,
   WorkflowKey,
   type WorkflowRunRequest,
   WorkflowSignalName,
+  workflowAgentJobId,
 } from "@cvr/loom-domain";
 import { WorkflowRunRecovery, WorkflowRuntime } from "@cvr/loom-runtime";
 import { expect } from "effect-bun-test";
-import { Effect, Exit, FileSystem, Ref } from "effect";
+import { Effect, Exit, FileSystem, Option, Ref } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { request } from "./workflow-runtime-fixtures.js";
 import {
@@ -18,10 +20,11 @@ import {
   retirementStatus,
   scopedLive,
   storageCounts,
+  workflowTestJobs,
 } from "./workflow-runtime-test-support.js";
 
-const testLayer = (filename: string, executions: Ref.Ref<number>) =>
-  leasedRuntime(filename, executions, "1 hour");
+const testLayer = (filename: string, executions: Ref.Ref<number>, jobs = workflowTestJobs()) =>
+  leasedRuntime(filename, executions, "1 hour", jobs);
 
 const completeWithChild = (
   filename: string,
@@ -85,6 +88,30 @@ scopedLive("resumes child Agent retirement after a stop failure and restart", ()
 
     yield* failChildStop(filename, executions, workflowRunId);
     expect(yield* resumeTwice(filename, executions)).toEqual(emptyWorkflowStorage);
+  }),
+);
+
+scopedLive("cancels a child Agent Job before retirement", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-agent-retirement-" });
+    const filename = `${directory}/loom.sqlite`;
+    const executions = yield* Ref.make(0);
+    const activityKey = WorkflowActivityKey.make("retirement/agent");
+    const workflowRunId = yield* completeWithChild(filename, executions, request, activityKey);
+    const cancelled = yield* Ref.make<ReadonlyArray<JobAddress>>([]);
+    const jobs = workflowTestJobs((address) =>
+      Ref.update(cancelled, (addresses) => [...addresses, address]).pipe(Effect.as(Option.none())),
+    );
+
+    yield* Effect.gen(function* () {
+      yield* expireRetirement(workflowRunId);
+      yield* WorkflowRunRecovery.use((recovery) => recovery.retire);
+    }).pipe(Effect.scoped, Effect.provide(testLayer(filename, executions, jobs)));
+
+    expect(yield* Ref.get(cancelled)).toEqual([
+      { sessionId: request.sessionId, jobId: workflowAgentJobId(activityKey) },
+    ]);
   }),
 );
 

@@ -16,6 +16,7 @@ import {
 import {
   layerSqliteWorkflowChildAgentStore,
   layerWorkflowCapabilities,
+  defaultBunWorkflowAgentPolicy,
 } from "@cvr/loom-platform-bun";
 import { workflowInterpreterVersion, WorkflowRunState } from "@cvr/loom-protocol";
 import { expect, it } from "effect-bun-test";
@@ -134,9 +135,10 @@ it.scopedLive.layer(BunServices.layer)(
       const workspaceRoot = WorkspaceRoot.make(directory);
       const socketPath = `${directory}/daemon.sock`;
       const workflowStarted = `${directory}/workflow-started`;
-      const capabilities = layerWorkflowCapabilities({ workspaceRoot }).pipe(
-        Layer.provide(layerSqliteWorkflowChildAgentStore),
-      );
+      const capabilities = layerWorkflowCapabilities({
+        workspaceRoot,
+        ...defaultBunWorkflowAgentPolicy,
+      }).pipe(Layer.provide(layerSqliteWorkflowChildAgentStore));
       const daemon = yield* runLoomDaemon(
         { workspaceRoot, socketPath, databasePath: `${directory}/loom.sqlite` },
         capabilities,
