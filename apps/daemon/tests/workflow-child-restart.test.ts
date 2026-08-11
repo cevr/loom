@@ -93,7 +93,6 @@ const readOwnership = (filename: string, sessionId: SessionId) =>
   Effect.gen(function* () {
     const agents = yield* WorkflowChildAgentStore;
     const jobs = yield* JobStore;
-    const agent = yield* requireHead(yield* agents.listActiveBySession(sessionId), "child Agent");
     const running = yield* jobs.listRecoverable.pipe(
       Effect.repeat({
         while: (records) => records.length === 0,
@@ -102,6 +101,7 @@ const readOwnership = (filename: string, sessionId: SessionId) =>
       Effect.timeout("5 seconds"),
     );
     const job = yield* requireHead(running, "Job process");
+    const agent = yield* requireHead(yield* agents.listActiveBySession(sessionId), "child Agent");
     return { agent, job };
   }).pipe(Effect.provide(ownershipStorage(filename)));
 
@@ -172,9 +172,6 @@ scopedLive("reconciles Workflow child ownership through a full daemon restart", 
       client.startWorkflow(request),
     );
     const address = { sessionId: request.sessionId, ...handle };
-    expect(
-      yield* waitForSuspension(config.workspaceRoot, config.socketPath, address),
-    ).toHaveProperty("_tag", "Suspended");
     const before = yield* readOwnership(config.databasePath, request.sessionId);
     yield* Fiber.interrupt(firstDaemon);
 
@@ -187,6 +184,10 @@ scopedLive("reconciles Workflow child ownership through a full daemon restart", 
     expect(after.job.identity).toEqual(before.job.identity);
     expect(after.job.status).toBe("Running");
 
+    yield* fs.writeFileString(releasePath, "release");
+    expect(
+      yield* waitForSuspension(config.workspaceRoot, config.socketPath, address),
+    ).toHaveProperty("_tag", "Suspended");
     const result = yield* completeWorkflow(config, request, address);
     expect(result.agent.agentId).toBe(after.agent.agentId);
     expect(result.job.jobId).toBe(after.job.jobId);
@@ -194,7 +195,6 @@ scopedLive("reconciles Workflow child ownership through a full daemon restart", 
       client.closeSession(request.sessionId),
     );
     expect(yield* readActiveAgents(config.databasePath, request.sessionId)).toEqual([]);
-    yield* fs.writeFileString(releasePath, "release");
     const identity = after.job.identity;
     expect(yield* waitForProcessExit(identity.pid)).toHaveProperty("_tag", "Missing");
     expect(yield* waitForNoActiveJobs(config.databasePath)).toEqual([]);

@@ -7,6 +7,7 @@ import {
   JobFailure,
   JobOutcome,
   JobRecord,
+  type JobId,
 } from "@cvr/loom-domain";
 import {
   JobRuntimeError,
@@ -15,12 +16,13 @@ import {
   type ProcessControllerShape,
   type ProcessInspectorShape,
 } from "@cvr/loom-runtime";
-import { Effect, FileSystem, Option, Path } from "effect";
+import { Deferred, Effect, FileSystem, Option, Path } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import { readJobOutcome } from "./bun-job-command.js";
 
 export interface JobRuntimeServices {
   readonly actors: ActorStateHubShape;
+  readonly completions: Map<JobId, Deferred.Deferred<JobRecord>>;
   readonly controller: ProcessControllerShape;
   readonly fs: FileSystem.FileSystem;
   readonly inspector: ProcessInspectorShape;
@@ -85,6 +87,39 @@ export const publishJob = (actors: ActorStateHubShape, job: JobRecord) =>
     }),
   );
 
+export const isJobTerminal = JobRecord.isAnyOf(["Succeeded", "Failed", "Cancelled", "Lost"]);
+
+export const jobCompletion = (services: JobRuntimeServices, jobId: JobId) =>
+  Effect.sync(() => {
+    const current = Option.fromNullishOr(services.completions.get(jobId));
+    if (Option.isSome(current)) return current.value;
+    const created = Deferred.makeUnsafe<JobRecord>();
+    services.completions.set(jobId, created);
+    return created;
+  });
+
+export const removeJobCompletion = (
+  services: JobRuntimeServices,
+  jobId: JobId,
+  completion: Deferred.Deferred<JobRecord>,
+) =>
+  Effect.sync(() => {
+    if (services.completions.get(jobId) === completion) services.completions.delete(jobId);
+  });
+
+const signalCompletion = (services: JobRuntimeServices, job: JobRecord) =>
+  Effect.sync(() => Option.fromNullishOr(services.completions.get(job.jobId))).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.void,
+        onSome: (completion) =>
+          Deferred.succeed(completion, job).pipe(
+            Effect.andThen(removeJobCompletion(services, job.jobId, completion)),
+          ),
+      }),
+    ),
+  );
+
 export const completeJob = Effect.fn("BunJobRuntime.complete")(function* (
   services: JobRuntimeServices,
   job: JobRecord,
@@ -94,7 +129,13 @@ export const completeJob = Effect.fn("BunJobRuntime.complete")(function* (
   const current = yield* services.jobs.get(jobAddress(job)).pipe(mapRuntimeError("inspect"));
   yield* Option.match(current, {
     onNone: () => Effect.void,
-    onSome: (record) => publishJob(services.actors, record),
+    onSome: (record) =>
+      Effect.gen(function* () {
+        yield* publishJob(services.actors, record);
+        if (isJobTerminal(record)) {
+          yield* signalCompletion(services, record);
+        }
+      }),
   });
   return current;
 });

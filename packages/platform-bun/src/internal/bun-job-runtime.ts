@@ -34,7 +34,7 @@ import {
   publishJob,
   settleMissingJob,
 } from "./bun-job-runtime-state.js";
-import { makeAwait, makeReadOutput } from "./bun-job-io.js";
+import { makeAwait, makeAwaitTerminal, makeReadOutput } from "./bun-job-io.js";
 import { monitorJob, superviseJob } from "./bun-job-supervisor.js";
 
 export interface BunJobRuntimeConfig {
@@ -252,6 +252,7 @@ export const makeBunJobRuntime = (
   Effect.gen(function* () {
     const services: JobRuntimeServices = {
       actors: yield* ActorStateHub,
+      completions: new Map(),
       controller: yield* ProcessController,
       fs: yield* FileSystem.FileSystem,
       inspector: yield* ProcessInspector,
@@ -267,6 +268,7 @@ export const makeBunJobRuntime = (
       start,
       inspect: (address) => services.jobs.get(address).pipe(mapRuntimeError("inspect")),
       await: makeAwait(services),
+      awaitTerminal: makeAwaitTerminal(services),
       readOutput: makeReadOutput(services),
       cancel,
       detach: (address) => detachJob(services, address),

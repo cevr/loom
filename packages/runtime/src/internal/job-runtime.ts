@@ -30,6 +30,9 @@ export interface JobRuntimeShape {
   readonly await: (
     request: JobWaitRequest,
   ) => Effect.Effect<Option.Option<JobRecord>, JobRuntimeError>;
+  readonly awaitTerminal: (
+    address: JobAddress,
+  ) => Effect.Effect<Option.Option<JobRecord>, JobRuntimeError>;
   readonly readOutput: (
     request: JobOutputRequest,
   ) => Effect.Effect<JobOutputChunk, JobRuntimeError>;

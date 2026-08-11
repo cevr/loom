@@ -2,7 +2,7 @@ import { BunServices } from "@effect/platform-bun";
 import { JobAddress, JobId, JobRequest, SessionId, WorkspaceRoot } from "@cvr/loom-domain";
 import { JobRuntime, ProcessObservation, layerActorStateHub } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Option, Schedule } from "effect";
+import { Effect, Fiber, FileSystem, Layer, Option, Schedule } from "effect";
 import {
   layerBunJobRuntime,
   layerBunProcessController,
@@ -216,15 +216,22 @@ it.scopedLive.layer(BunServices.layer)("returns when the foreground lease ends",
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-job-lease-" });
     const workspaceRoot = WorkspaceRoot.make(directory);
     const jobRequest = request("job-lease", "sleep 30");
+    const address = JobAddress.make(jobRequest);
 
     yield* Effect.gen(function* () {
       const runtime = yield* JobRuntime;
       yield* runtime.start(jobRequest);
+      const terminalWaiter = yield* runtime
+        .awaitTerminal(address)
+        .pipe(Effect.forkChild({ startImmediately: true }));
       const leased = yield* runtime
-        .await({ ...JobAddress.make(jobRequest), foregroundLeaseMillis: 20 })
+        .await({ ...address, foregroundLeaseMillis: 20 })
         .pipe(Effect.timeout("1 second"));
       expect(Option.map(leased, (job) => terminal(job.status))).toEqual(Option.some(false));
-      yield* runtime.cancel(JobAddress.make(jobRequest));
+      yield* runtime.cancel(address);
+      expect(Option.map(yield* Fiber.join(terminalWaiter), (job) => job.status)).toEqual(
+        Option.some("Cancelled"),
+      );
     }).pipe(Effect.provide(runtimeLayer(`${directory}/loom.sqlite`, workspaceRoot)));
   }),
 );

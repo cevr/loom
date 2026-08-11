@@ -1,25 +1,34 @@
-import { JobAddress, JobRecord } from "@cvr/loom-domain";
+import { JobAddress } from "@cvr/loom-domain";
 import {
   JobRuntimeError,
   type JobOutputChunk,
   type JobOutputRequest,
   type JobWaitRequest,
 } from "@cvr/loom-runtime";
-import { Duration, Effect, Option, type PlatformError, Schedule, Stream } from "effect";
-import { type JobRuntimeServices, mapRuntimeError } from "./bun-job-runtime-state.js";
-
-const isTerminal = JobRecord.isAnyOf(["Succeeded", "Failed", "Cancelled", "Lost"]);
+import { Deferred, Duration, Effect, Option, type PlatformError, Stream } from "effect";
+import {
+  isJobTerminal,
+  jobCompletion,
+  type JobRuntimeServices,
+  mapRuntimeError,
+  removeJobCompletion,
+} from "./bun-job-runtime-state.js";
 
 export const makeAwaitTerminal = (services: JobRuntimeServices) =>
-  Effect.fn("BunJobRuntime.awaitTerminal")((address: JobAddress) =>
-    services.jobs.get(address).pipe(
-      mapRuntimeError("await"),
-      Effect.repeat({
-        until: Option.match({ onNone: () => true, onSome: isTerminal }),
-        schedule: Schedule.spaced("50 millis"),
-      }),
-    ),
-  );
+  Effect.fn("BunJobRuntime.awaitTerminal")(function* (address: JobAddress) {
+    const completion = yield* jobCompletion(services, address.jobId);
+    const job = yield* services.jobs.get(address).pipe(mapRuntimeError("await"));
+    if (Option.isNone(job)) {
+      yield* removeJobCompletion(services, address.jobId, completion);
+      return job;
+    }
+    if (isJobTerminal(job.value)) {
+      yield* Deferred.succeed(completion, job.value);
+      yield* removeJobCompletion(services, address.jobId, completion);
+      return job;
+    }
+    return Option.some(yield* Deferred.await(completion));
+  });
 
 export const makeAwait = (services: JobRuntimeServices) =>
   Effect.fn("BunJobRuntime.await")(function* (request: JobWaitRequest) {
@@ -64,7 +73,7 @@ export const makeReadOutput = (services: JobRuntimeServices) =>
     const nextSequence = request.sequence + data.length;
     const info = yield* ignoreMissing(services.fs.stat(path)).pipe(mapRuntimeError("readOutput"));
     const complete =
-      isTerminal(job.value) &&
+      isJobTerminal(job.value) &&
       Option.match(info, {
         onNone: () => true,
         onSome: (file) => BigInt(nextSequence) >= file.size,

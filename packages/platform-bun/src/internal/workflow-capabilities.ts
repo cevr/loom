@@ -1,4 +1,5 @@
 import {
+  JobFailure,
   JobAddress,
   JobRequest,
   workflowArtifactId,
@@ -26,7 +27,7 @@ import {
   type WorkflowStepCall,
 } from "@cvr/loom-runtime";
 import { WorkflowStepError } from "@cvr/loom-protocol";
-import { Effect, FileSystem, Inspectable, Layer, Schema } from "effect";
+import { Effect, FileSystem, Inspectable, Layer, Option, Schema } from "effect";
 
 const decodeAgentInput = Schema.decodeUnknownEffect(WorkflowAgentInput);
 const decodeJobInput = Schema.decodeUnknownEffect(WorkflowJobInput);
@@ -67,7 +68,7 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
 ) {
   const input = yield* decodeInput(call, decodeJobInput);
   const jobId = workflowJobId(context.activityKey);
-  const job = yield* jobs
+  yield* jobs
     .start(
       JobRequest.make({
         jobId,
@@ -77,8 +78,30 @@ const launchJob = Effect.fn("WorkflowCapabilities.launchJob")(function* (
       }),
     )
     .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))));
-  if (job.status === "Failed" || job.status === "Lost") {
-    return yield* stepError(call, `The Job is ${job.status}.`);
+  const terminal = yield* jobs
+    .awaitTerminal(JobAddress.make({ jobId, sessionId: context.sessionId }))
+    .pipe(Effect.mapError((error) => stepError(call, Inspectable.toStringUnknown(error.cause))));
+  if (Option.isNone(terminal)) {
+    return yield* stepError(call, "The Job record is missing.");
+  }
+  const job = terminal.value;
+  if (job.status === "Failed") {
+    const message = JobFailure.match(job.failure, {
+      Launch: ({ detail }) => detail,
+      Exit: ({ exitCode, detail }) =>
+        Option.getOrElse(detail, () => `The Job exited with code ${exitCode}.`),
+      Runtime: ({ detail }) => detail,
+    });
+    return yield* stepError(call, message);
+  }
+  if (job.status === "Lost") {
+    return yield* stepError(
+      call,
+      Option.getOrElse(job.detail, () => "The Job was lost."),
+    );
+  }
+  if (job.status === "Cancelled") {
+    return yield* stepError(call, "The Job was cancelled.");
   }
   return WorkflowStepExecution.make({
     value: WorkflowJobHandle.make({ jobId }),

@@ -22,11 +22,12 @@ import {
   WorkflowCapabilityExecutor,
   WorkflowChildAgentStore,
   WorkflowJobHandle,
+  WorkflowStepError,
   WorkflowStepCall,
   layerActorStateHub,
 } from "@cvr/loom-runtime";
 import { expect, it } from "effect-bun-test";
-import { Effect, FileSystem, Layer, Option, Schedule, Schema } from "effect";
+import { Effect, Fiber, FileSystem, Layer, Option, Schedule, Schema } from "effect";
 import {
   layerBunJobRuntime,
   layerBunProcessController,
@@ -65,16 +66,6 @@ const jobCall = WorkflowStepCall.make({
   capability: WorkflowCapability.make("job"),
   input: { command: ": > cwd-marker; printf 'job-finished\\n'" },
 });
-
-const waitForOutput = (fs: FileSystem.FileSystem, path: string, expected: string) =>
-  fs.readFileString(path).pipe(
-    Effect.retry(Schedule.spaced("10 millis")),
-    Effect.repeat({
-      while: (output) => output !== expected,
-      schedule: Schedule.spaced("10 millis"),
-    }),
-    Effect.timeout("5 seconds"),
-  );
 
 const capabilityLayer = (filename: string, workspaceRoot: WorkspaceRoot) => {
   const database = layerLoomSqlite({ filename });
@@ -117,6 +108,7 @@ it.scopedLive.layer(BunServices.layer)("returns stable capability handles", () =
       ).toBeDefined();
       expect(yield* agents.listActiveBySession(agentContext.sessionId)).toHaveLength(2);
       expect(jobResults[0].value).toEqual(jobResults[1].value);
+      expect((yield* executor.execute(jobCall, jobContext)).value).toEqual(jobResults[0].value);
       const nextJob = yield* executor.execute(jobCall, nextJobContext);
       expect(nextJob.value).not.toEqual(jobResults[0].value);
 
@@ -135,7 +127,7 @@ it.scopedLive.layer(BunServices.layer)("returns stable capability handles", () =
 
       const job = yield* Schema.decodeUnknownEffect(WorkflowJobHandle)(jobResults[0].value);
       const stdoutPath = `${directory}/.loom/jobs/${encodeURIComponent(job.jobId)}/stdout.log`;
-      expect(yield* waitForOutput(fs, stdoutPath, "job-finished\n")).toBe("job-finished\n");
+      expect(yield* fs.readFileString(stdoutPath)).toBe("job-finished\n");
       expect(yield* fs.exists(`${directory}/cwd-marker`)).toBe(true);
     }).pipe(Effect.provide(capabilityLayer(`${directory}/loom.sqlite`, workspaceRoot)));
   }),
@@ -151,9 +143,11 @@ it.scopedLive.layer(BunServices.layer)("cancels a Workflow Job during compensati
     yield* Effect.gen(function* () {
       const executor = yield* WorkflowCapabilityExecutor;
       const runtime = yield* JobRuntime;
-      const result = yield* executor.execute(longCall, jobContext);
-      const handle = yield* Schema.decodeUnknownEffect(WorkflowJobHandle)(result.value);
-      const address = JobAddress.make({ sessionId: jobContext.sessionId, jobId: handle.jobId });
+      const execution = yield* executor.execute(longCall, jobContext).pipe(Effect.forkChild);
+      const address = JobAddress.make({
+        sessionId: jobContext.sessionId,
+        jobId: workflowJobId(jobContext.activityKey),
+      });
       yield* runtime.inspect(address).pipe(
         Effect.repeat({
           until: Option.exists((job) => job.status === "Running"),
@@ -165,6 +159,9 @@ it.scopedLive.layer(BunServices.layer)("cancels a Workflow Job during compensati
       expect(Option.map(yield* runtime.inspect(address), (job) => job.status)).toEqual(
         Option.some("Cancelled"),
       );
+      const error = yield* Fiber.join(execution).pipe(Effect.flip);
+      expect(error).toBeInstanceOf(WorkflowStepError);
+      expect(error.message).toBe("The Job was cancelled.");
     }).pipe(Effect.provide(capabilityLayer(`${directory}/loom.sqlite`, workspaceRoot)));
   }),
 );
@@ -199,10 +196,30 @@ it.scopedLive.layer(BunServices.layer)("rejects a terminal failed Job launch", (
       );
     }).pipe(Effect.provide(layerSqliteJobStore.pipe(Layer.provide(layerLoomSqlite({ filename })))));
 
-    const exit = yield* Effect.gen(function* () {
+    const error = yield* Effect.gen(function* () {
       const executor = yield* WorkflowCapabilityExecutor;
-      return yield* Effect.exit(executor.execute(jobCall, jobContext));
+      return yield* executor.execute(jobCall, jobContext).pipe(Effect.flip);
     }).pipe(Effect.provide(capabilityLayer(filename, workspaceRoot)));
-    expect(exit).toHaveProperty("_tag", "Failure");
+    expect(error).toBeInstanceOf(WorkflowStepError);
+    expect(error.message).toBe("The process runtime failed.");
+  }),
+);
+
+it.scopedLive.layer(BunServices.layer)("rejects a Job process that exits with failure", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({
+      prefix: "loom-capability-process-failure-",
+    });
+    const workspaceRoot = WorkspaceRoot.make(directory);
+    const failedCall = WorkflowStepCall.make({ ...jobCall, input: { command: "exit 7" } });
+
+    const error = yield* Effect.gen(function* () {
+      const executor = yield* WorkflowCapabilityExecutor;
+      return yield* executor.execute(failedCall, jobContext).pipe(Effect.flip);
+    }).pipe(Effect.provide(capabilityLayer(`${directory}/loom.sqlite`, workspaceRoot)));
+
+    expect(error).toBeInstanceOf(WorkflowStepError);
+    expect(error.message).toBe("The Job exited with code 7.");
   }),
 );

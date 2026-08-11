@@ -54,6 +54,7 @@ const recoveryServices = (phase: (name: RecoveryPhase) => Effect.Effect<void>) =
         start: () => unused,
         inspect: () => unused,
         await: () => unused,
+        awaitTerminal: () => unused,
         readOutput: () => unused,
         cancel: () => unused,
         detach: () => unused,
