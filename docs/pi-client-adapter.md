@@ -28,7 +28,10 @@ The command Scope owns cancellation.
 
 The Goal Component stores one tagged Goal state for each Session.
 It stores each transition before `AgentTurnControl` requests another turn.
-The adapter derives turn usage from completed assistant messages.
+The adapter derives input and output token usage from completed assistant messages.
+It requests the next Goal turn only after Pi emits `agent_settled`.
+It waits while Pi has a pending user message.
+Pause, clear, and budget exhaustion stop the current Pi run after the state write completes.
 
 ## Session lifecycle
 

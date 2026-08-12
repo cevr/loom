@@ -57,12 +57,13 @@ it("registers the Loom development command", () => {
       if (name === "loom") command = Option.some(options);
     },
     registerTool: makeRegisterTool(toolNames),
+    sendMessage: () => {},
   };
 
   loomExtension(pi);
 
   expect(Option.getOrThrow(command).description).toBe("Show the Loom daemon state");
-  expect(commandNames).toEqual(new Set(["loom", "btw", "side"]));
+  expect(commandNames).toEqual(new Set(["loom", "btw", "side", "goal"]));
   expect(toolNames).toEqual(
     new Set([
       "loom_cell",
@@ -78,12 +79,16 @@ it("registers the Loom development command", () => {
       "loom_workflow_signal",
       "loom_workflow_interrupt",
       "loom_workflow_compensation",
+      "loom_goal_complete",
+      "loom_goal_blocked",
     ]),
   );
   expect(events).toEqual(
     new Map([
-      ["session_start", 3],
+      ["session_start", 4],
       ["session_shutdown", 2],
+      ["message_end", 1],
+      ["agent_settled", 1],
     ]),
   );
 });

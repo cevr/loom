@@ -2,10 +2,10 @@ import { SessionId } from "@cvr/loom-domain";
 import type { ExtensionContext, SessionShutdownEvent } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { registerCellTools } from "./internal/cell-tools.js";
+import { registerClientComponents } from "./internal/client-components.js";
 import type { LoomExtensionApi } from "./internal/extension-api.js";
 import { registerJobTools } from "./internal/job-tools.js";
 import { registerLoomUi } from "./internal/loom-ui.js";
-import { registerSideConversation } from "./internal/side-conversation.js";
 import {
   ensureLoomDaemon,
   type EnsureLoomDaemon,
@@ -61,7 +61,7 @@ export const registerLoomExtension = (
   registerCellTools(pi);
   registerJobTools(pi);
   registerWorkflowTools(pi);
-  registerSideConversation(pi);
+  registerClientComponents(pi);
 };
 
 export default function loomExtension(pi: LoomExtensionApi): void {

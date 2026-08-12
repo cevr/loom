@@ -234,6 +234,9 @@ Goal state is one tagged state machine.
 The Plugin stores each transition before it requests another turn.
 The Client Adapter derives completed-turn usage from the assistant message on Pi `message_end` or `turn_end` events.
 It supplies that usage through `AgentTurnControl`.
+Usage counts assistant input and output tokens.
+The Adapter requests autonomous continuation only after Pi emits `agent_settled`.
+Pause, clear, and budget exhaustion store their state before `AgentTurnControl` stops the current run.
 
 Issue #54 owns the first `SideConversation` Component.
 Issue #55 owns the first Goal Component.
