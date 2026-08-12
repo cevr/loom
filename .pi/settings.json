@@ -1,0 +1,7 @@
+{
+  "theme": "loom-rose-pine",
+  "quietStartup": true,
+  "tuiMode": "fullscreen",
+  "fullscreenExitOutput": "resume-hint",
+  "fullscreenScrollbar": "auto"
+}

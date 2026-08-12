@@ -25,7 +25,7 @@ export interface GoalStateGrant<E> {
   readonly write: (
     state: GoalState,
     expectedRevision: Option.Option<PluginStateRevision>,
-  ) => Effect.Effect<PluginStateRevision, E>;
+  ) => Effect.Effect<PluginStateRevision, E | PluginStateRevisionConflictError>;
 }
 
 export interface AgentTurnControl {
@@ -36,6 +36,7 @@ export interface AgentTurnControl {
 
 export interface GoalClientActions {
   readonly showStatus: (message: string) => Effect.Effect<void>;
+  readonly publish: (state: Option.Option<GoalState>) => Effect.Effect<void>;
 }
 
 export interface GoalComponentGrants<E> {
@@ -119,9 +120,11 @@ const makeUpdate = <StateError>(state: GoalStateGrant<StateError>) =>
 const makeRequestIfActive = <StateError>(
   state: GoalStateGrant<StateError>,
   turns: AgentTurnControl,
+  actions: GoalClientActions,
 ) =>
   Effect.gen(function* () {
     const current = yield* state.read;
+    yield* actions.publish(storedState(current));
     if (Option.isNone(current) || !GoalState.guards.Active(current.value.value)) return;
     if (!(yield* turns.ready)) return;
     yield* turns.request(current.value.value);
@@ -143,6 +146,7 @@ const makeAccountUsage = <StateError>(
         tokens,
       );
       yield* state.write(goal, Option.some(entry.revision));
+      yield* actions.publish(Option.some(goal));
       if (GoalState.guards.BudgetExhausted(goal)) {
         yield* actions.showStatus(goalStatus(Option.some(goal)));
         yield* turns.stop;
@@ -150,11 +154,16 @@ const makeAccountUsage = <StateError>(
     }).pipe(retryRevisionConflict),
   );
 
+const makeShow = (actions: GoalClientActions) => (goal: Option.Option<GoalState>) =>
+  Effect.all([actions.showStatus(goalStatus(goal)), actions.publish(goal)], {
+    discard: true,
+  });
+
 export const makeGoalComponent = <StateError>(grants: GoalComponentGrants<StateError>) => {
   const { state, turns, actions } = grants;
   const update = makeUpdate(state);
-  const show = (goal: Option.Option<GoalState>) => actions.showStatus(goalStatus(goal));
-  const requestIfActive = makeRequestIfActive(state, turns);
+  const show = makeShow(actions);
+  const requestIfActive = makeRequestIfActive(state, turns, actions);
 
   return {
     start: (objective: string, tokenBudget: Option.Option<number>) =>

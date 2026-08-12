@@ -17,6 +17,7 @@ import { GoalState } from "../src/internal/goal-state.js";
 
 const makeHarness = Effect.gen(function* () {
   const stored = yield* Ref.make(Option.none<PluginStateValue<GoalState>>());
+  const published = yield* Ref.make(Option.none<GoalState>());
   const events = yield* Ref.make<ReadonlyArray<string>>([]);
   const state: GoalStateGrant<never> = {
     read: Ref.get(stored),
@@ -38,10 +39,11 @@ const makeHarness = Effect.gen(function* () {
     },
     actions: {
       showStatus: () => Ref.update(events, (items) => [...items, "status"]),
+      publish: (goal: Option.Option<GoalState>) => Ref.set(published, goal),
     },
   };
   const component = makeGoalComponent(grants);
-  return { component, events, grants, state, stored };
+  return { component, events, grants, published, state, stored };
 });
 
 it.effect("stores a Goal before it requests the first turn", () =>
@@ -128,11 +130,12 @@ it.effect("uses completed assistant usage to enforce the token budget", () =>
 
 it.effect("restores an active Goal from durable state", () =>
   Effect.gen(function* () {
-    const { component, events, grants } = yield* makeHarness;
+    const { component, events, grants, published } = yield* makeHarness;
     yield* component.start("Resume after reload", Option.none());
     yield* makeGoalComponent(grants).continueIfActive;
 
     expect((yield* Ref.get(events)).filter((event) => event === "turn")).toHaveLength(2);
+    expect(GoalState.guards.Active(Option.getOrThrow(yield* Ref.get(published)))).toBe(true);
   }),
 );
 
@@ -188,7 +191,7 @@ it.effect("re-reads and reapplies a transition after a compare-and-set conflict"
     const component = makeGoalComponent({
       state,
       turns: { ready: Effect.succeed(true), request: () => Effect.void, stop: Effect.void },
-      actions: { showStatus: () => Effect.void },
+      actions: { showStatus: () => Effect.void, publish: () => Effect.void },
     });
 
     yield* component.start("Conflict", Option.none());

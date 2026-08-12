@@ -5,6 +5,7 @@ const positiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 export const MAX_GOAL_OBJECTIVE_LENGTH = 4_000;
 const objective = Schema.NonEmptyString.check(Schema.isMaxLength(MAX_GOAL_OBJECTIVE_LENGTH));
 const budget = Schema.OptionFromNullOr(positiveInteger);
+export const goalStatusKey = "loom.goal";
 
 const goalFields = {
   objective,
@@ -43,7 +44,9 @@ export class GoalTransitionError extends Schema.TaggedError<GoalTransitionError>
 const fail = (reason: GoalTransitionReason, message: string) =>
   Effect.fail(new GoalTransitionError({ reason, message }));
 
-const goalData = (state: Exclude<GoalState, { readonly _tag: "Cleared" }>) => ({
+type OpenGoal = Exclude<GoalState, { readonly _tag: "Cleared" }>;
+
+const goalData = (state: OpenGoal) => ({
   objective: state.objective,
   tokenBudget: state.tokenBudget,
   consumedTokens: state.consumedTokens,
@@ -139,7 +142,7 @@ export const accountGoalUsage = (
   return GoalState.cases.Active.make(fields);
 };
 
-const statusWithUsage = (label: string, state: Exclude<GoalState, { readonly _tag: "Cleared" }>) =>
+const statusWithUsage = (label: string, state: OpenGoal) =>
   `${label}: ${state.objective}. ${Option.match(state.tokenBudget, {
     onNone: () => `${state.consumedTokens} input and output tokens used`,
     onSome: (value) => `${state.consumedTokens} of ${value} input and output tokens used`,
@@ -156,3 +159,20 @@ export const goalStatus = Option.match({
     Cleared: () => "The Goal is cleared.",
   }),
 });
+
+export const goalTrayStatus = Option.flatMap(
+  GoalState.match({
+    Active: (state) =>
+      Option.some(
+        Option.match(state.tokenBudget, {
+          onNone: () => "Goal active",
+          onSome: (limit) => `Goal active ${state.consumedTokens}/${limit}`,
+        }),
+      ),
+    Paused: () => Option.some("Goal paused"),
+    Completed: () => Option.none<string>(),
+    Blocked: () => Option.none<string>(),
+    BudgetExhausted: () => Option.some("Goal budget used"),
+    Cleared: () => Option.none<string>(),
+  }),
+);

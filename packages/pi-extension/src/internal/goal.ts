@@ -1,7 +1,7 @@
 import { SessionId } from "@cvr/loom-domain";
 import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Effect, Semaphore } from "effect";
+import { Effect, Inspectable, Option, Semaphore } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
 import {
   GoalCommand,
@@ -10,6 +10,7 @@ import {
   makeGoalStateGrant,
   parseGoalCommand,
 } from "./goal-component.js";
+import { goalStatusKey, goalTrayStatus } from "./goal-state.js";
 import { runTool, toolResult } from "./tool-result.js";
 
 const componentFor = (pi: LoomExtensionApi, context: ExtensionContext) =>
@@ -33,11 +34,17 @@ const componentFor = (pi: LoomExtensionApi, context: ExtensionContext) =>
     },
     actions: {
       showStatus: (message) => Effect.sync(() => context.ui.notify(message, "info")),
+      publish: (state) =>
+        Effect.sync(() =>
+          context.ui.setStatus(goalStatusKey, Option.getOrUndefined(goalTrayStatus(state))),
+        ),
     },
   });
 
 const notifyFailure = (context: ExtensionContext, cause: unknown) =>
-  Effect.sync(() => context.ui.notify(`Loom Goal failed: ${String(cause)}`, "error"));
+  Effect.sync(() =>
+    context.ui.notify(`Loom Goal failed: ${Inspectable.toStringUnknown(cause)}`, "error"),
+  );
 
 type RunExclusive = <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
 
@@ -128,12 +135,13 @@ export const registerGoal = (pi: LoomExtensionApi): void => {
   );
   pi.on("message_end", (event, context) => {
     if (event.message.role !== "assistant") return;
-    if (
-      event.message.stopReason !== "stop" &&
-      event.message.stopReason !== "length" &&
-      event.message.stopReason !== "toolUse"
-    ) {
-      return;
+    switch (event.message.stopReason) {
+      case "stop":
+      case "length":
+      case "toolUse":
+        break;
+      default:
+        return;
     }
     if (accountedAssistantMessages.has(event.message)) return;
     accountedAssistantMessages.add(event.message);
