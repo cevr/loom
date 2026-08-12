@@ -1,32 +1,10 @@
 import type { ExtensionAPI, RegisteredCommand } from "@earendil-works/pi-coding-agent";
-import { defaultWorkflowBudget, JobId, SessionId } from "@cvr/loom-domain";
-import {
-  ReadJobOutputRequest,
-  StartJobRequest,
-  WaitForJobRequest,
-  workflowCapabilitiesGuide,
-  workflowSignalsGuide,
-  workflowSourceGuide,
-} from "@cvr/loom-protocol";
 import { expect, it } from "bun:test";
 import { Effect, Option } from "effect";
 import { TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import loomExtension, { type LoomExtensionApi, shouldCloseSession } from "../src/index.js";
-import {
-  readJobOutputRequest,
-  startJobRequest,
-  waitForJobRequest,
-} from "../src/internal/job-tools.js";
 import { runTool } from "../src/internal/tool-result.js";
-import { workflowRequest } from "../src/internal/workflow-tools.js";
-
-const workflowInput = {
-  name: "release",
-  version: "1",
-  key: "release-1",
-  source: "return input",
-  input: "{}",
-};
+import { activateLoomModel, loomModelTools } from "../src/internal/cell-tools.js";
 
 const makeRegisterTool = (toolNames: Set<string>): ExtensionAPI["registerTool"] => {
   const registerTool: ExtensionAPI["registerTool"] = (tool) => {
@@ -34,13 +12,6 @@ const makeRegisterTool = (toolNames: Set<string>): ExtensionAPI["registerTool"] 
     expect(tool.renderShell).toBe("self");
     expect(tool.renderCall).toBeFunction();
     expect(tool.renderResult).toBeFunction();
-    if (tool.name !== "loom_workflow_start") return;
-    expect(tool.parameters).toHaveProperty("properties.source.description", workflowSourceGuide);
-    expect(tool.parameters).toHaveProperty(
-      "properties.capabilities.description",
-      workflowCapabilitiesGuide,
-    );
-    expect(tool.parameters).toHaveProperty("properties.signals.description", workflowSignalsGuide);
   };
   return registerTool;
 };
@@ -50,6 +21,7 @@ it("registers the Loom development command", () => {
   const commandNames = new Set<string>();
   const toolNames = new Set<string>();
   const events = new Map<string, number>();
+  let activeTools: ReadonlyArray<string> = [];
   const on: LoomExtensionApi["on"] = (event) => {
     events.set(event, (events.get(event) ?? 0) + 1);
   };
@@ -61,31 +33,16 @@ it("registers the Loom development command", () => {
     },
     registerTool: makeRegisterTool(toolNames),
     sendMessage: () => {},
+    setActiveTools: (names: string[]) => {
+      activeTools = names;
+    },
   };
 
   loomExtension(pi);
 
   expect(Option.getOrThrow(command).description).toBe("Show the Loom daemon state");
-  expect(commandNames).toEqual(new Set(["loom", "btw", "side", "goal"]));
-  expect(toolNames).toEqual(
-    new Set([
-      "loom_cell",
-      "loom_cell_reset",
-      "loom_job_start",
-      "loom_job_inspect",
-      "loom_job_output",
-      "loom_job_await",
-      "loom_job_cancel",
-      "loom_job_detach",
-      "loom_workflow_start",
-      "loom_workflow_inspect",
-      "loom_workflow_signal",
-      "loom_workflow_interrupt",
-      "loom_workflow_compensation",
-      "loom_goal_complete",
-      "loom_goal_blocked",
-    ]),
-  );
+  expect(commandNames).toEqual(new Set(["loom", "loom-reset", "btw", "side", "goal"]));
+  expect(toolNames).toEqual(new Set(loomModelTools));
   expect(events).toEqual(
     new Map([
       ["session_start", 5],
@@ -94,6 +51,7 @@ it("registers the Loom development command", () => {
       ["agent_settled", 1],
     ]),
   );
+  expect(activeTools).toEqual([]);
 });
 
 it("uses Pi input bindings for multiline prompts", () => {
@@ -101,58 +59,20 @@ it("uses Pi input bindings for multiline prompts", () => {
   expect(TUI_KEYBINDINGS["tui.input.submit"].defaultKeys).toBe("enter");
 });
 
+it("activates only the Loom Cell model tool", () => {
+  let activeTools: ReadonlyArray<string> = [];
+  activateLoomModel({
+    setActiveTools: (names) => {
+      activeTools = names;
+    },
+  });
+  expect(activeTools).toEqual(["loom_cell"]);
+});
+
 it("keeps the Session active during extension reload", () => {
   expect(shouldCloseSession({ type: "session_shutdown", reason: "reload" })).toBe(false);
   expect(shouldCloseSession({ type: "session_shutdown", reason: "quit" })).toBe(true);
 });
-
-it("uses the domain Workflow Budget defaults", () =>
-  expect(
-    Effect.runPromise(workflowRequest(SessionId.make("session-1"), workflowInput)),
-  ).resolves.toHaveProperty("budget", defaultWorkflowBudget));
-
-it("resolves a partial Workflow Budget through the domain schema", () =>
-  expect(
-    Effect.runPromise(
-      workflowRequest(SessionId.make("session-1"), {
-        ...workflowInput,
-        budget: { maxSteps: 12, maxTokens: 1_000 },
-      }),
-    ),
-  ).resolves.toHaveProperty("budget", {
-    ...defaultWorkflowBudget,
-    maxSteps: 12,
-    maxTokens: Option.some(1_000),
-  }));
-
-it("uses the protocol Job request defaults", () =>
-  expect(
-    Effect.runPromise(
-      Effect.all([
-        startJobRequest(SessionId.make("session-1"), "job-1", { command: "true" }),
-        waitForJobRequest(SessionId.make("session-1"), { jobId: "job-1" }),
-        readJobOutputRequest(SessionId.make("session-1"), {
-          jobId: "job-1",
-          stream: "stdout",
-        }),
-      ]),
-    ),
-  ).resolves.toEqual([
-    StartJobRequest.make({
-      sessionId: SessionId.make("session-1"),
-      jobId: JobId.make("job-1"),
-      command: "true",
-    }),
-    WaitForJobRequest.make({
-      sessionId: SessionId.make("session-1"),
-      jobId: JobId.make("job-1"),
-    }),
-    ReadJobOutputRequest.make({
-      sessionId: SessionId.make("session-1"),
-      jobId: JobId.make("job-1"),
-      stream: "stdout",
-    }),
-  ]));
 
 it("reports a typed Loom tool failure to Pi", () =>
   expect(

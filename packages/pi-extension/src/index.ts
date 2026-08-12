@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { registerCellTools } from "./internal/cell-tools.js";
 import { registerClientComponents } from "./internal/client-components.js";
 import type { LoomExtensionApi } from "./internal/extension-api.js";
-import { registerJobTools } from "./internal/job-tools.js";
 import { registerLoomUi } from "./internal/loom-ui.js";
 import {
   ensureLoomDaemon,
@@ -12,7 +11,6 @@ import {
   type LoomDaemonStatus,
   runWithLoomClient,
 } from "./internal/loom-connection.js";
-import { registerWorkflowTools } from "./internal/workflow-tools.js";
 
 export { ensureLoomDaemon };
 export type { EnsureLoomDaemon, LoomDaemonStatus, LoomExtensionApi };
@@ -59,8 +57,6 @@ export const registerLoomExtension = (
       ),
   });
   registerCellTools(pi);
-  registerJobTools(pi);
-  registerWorkflowTools(pi);
   registerClientComponents(pi);
 };
 

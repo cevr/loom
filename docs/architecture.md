@@ -89,6 +89,9 @@ See [Agent actor ownership](./adr/0006-key-agent-actors-by-session-and-agent.md)
 ### Code Kernel
 
 The Code Kernel runs in a separate Bun process.
+The Client Adapter exposes it as one model tool.
+The kernel provides one typed `loom` host object for files, Jobs, Workflows, and Goals.
+Client commands remain outside the model tool set.
 It uses `Bun.Transpiler` with `replMode`.
 It evaluates transformed TypeScript in one persistent VM context.
 It supports top-level `await`.

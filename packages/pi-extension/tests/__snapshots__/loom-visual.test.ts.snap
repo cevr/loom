@@ -9,35 +9,15 @@ exports[`keeps the Loom interface readable at narrow, medium, and wide terminal 
  40 │   ╰─────╯      cwd      …/personal/lo… │
  40 │                Try "build and test @<f │
   0 ││
- 40 │  Start Loom Job · ◈ running            │
- 40 │                                        │
- 40 │  { "command": "bun test",              │
- 40 │  "foregroundLeaseMillis": 1000 }       │
+ 40 │ ◈ · bash · bun test · ↑ 1 lines · Ctrl+│
   0 ││
- 40 │  Read Loom Job Output · done           │
- 40 │                                        │
- 40 │  { "jobId": "job-12345678", "stream":  │
- 40 │  "stdout" }                            │
- 40 │                                        │
- 40 │  output 1                              │
- 40 │  output 2                              │
- 40 │  output 3                              │
- 40 │  output 4                              │
- 40 │  output 5                              │
- 40 │  output 6                              │
- 40 │  output 7                              │
- 40 │  output 8                              │
- 40 │  output 9                              │
- 40 │  output 10                             │
- 40 │  output 11                             │
- 40 │  output 12                             │
- 40 │  ... (4 more lines, Ctrl+O to expand)  │
+ 40 │ ✓ · typescript · await loom.jobs.output│
   0 ││
- 40 │  edit src/release.ts · Ctrl+O to exp…  │
+ 40 │ ✓ · typescript · edit src/release.ts · │
  27 │    ╰─ src/release.ts +1 -1│
   0 ││
- 40 │  write src/generated.ts · Ctrl+O to …  │
- 40 │    ╰─ src/generated.ts 18 lines written│
+ 40 │ ✓ · typescript · write src/generated.ts│
+ 30 │    ╰─ src/generated.ts +18 -0│
   0 ││
  40 │                                        │
  40 │ > Continue the workflow                │
@@ -52,33 +32,15 @@ MEDIUM 72
  72 │   ╰─────╯      cwd      /Users/cvr/Developer/personal/loom             │
  72 │                Try "build and test @<filepath>"                        │
   0 ││
- 72 │  Start Loom Job · ◈ running                                            │
- 72 │                                                                        │
- 72 │  { "command": "bun test", "foregroundLeaseMillis": 1000 }              │
+ 51 │ ◈ · bash · bun test · ↑ 1 lines · Ctrl+O to expand│
   0 ││
- 72 │  Read Loom Job Output · done                                           │
- 72 │                                                                        │
- 72 │  { "jobId": "job-12345678", "stream": "stdout" }                       │
- 72 │                                                                        │
- 72 │  output 1                                                              │
- 72 │  output 2                                                              │
- 72 │  output 3                                                              │
- 72 │  output 4                                                              │
- 72 │  output 5                                                              │
- 72 │  output 6                                                              │
- 72 │  output 7                                                              │
- 72 │  output 8                                                              │
- 72 │  output 9                                                              │
- 72 │  output 10                                                             │
- 72 │  output 11                                                             │
- 72 │  output 12                                                             │
- 72 │  ... (4 more lines, Ctrl+O to expand)                                  │
+ 72 │ ✓ · typescript · await loom.jobs.output("job-12345678") · ↑ 1 ↓ 16 line│
   0 ││
- 72 │  edit src/release.ts · Ctrl+O to expand                                │
+ 72 │ ✓ · typescript · edit src/release.ts · ↑ 1 lines · 8ms · Ctrl+O to expa│
  27 │    ╰─ src/release.ts +1 -1│
   0 ││
- 72 │  write src/generated.ts · Ctrl+O to expand                             │
- 40 │    ╰─ src/generated.ts 18 lines written│
+ 72 │ ✓ · typescript · write src/generated.ts · ↑ 1 lines · 8ms · Ctrl+O to e│
+ 30 │    ╰─ src/generated.ts +18 -0│
   0 ││
  72 │                                                                        │
  72 │ > Continue the workflow                                                │
@@ -93,33 +55,15 @@ WIDE 120
 120 │   ╰─────╯      cwd      /Users/cvr/Developer/personal/loom                                                             │
 120 │                Try "build and test @<filepath>"                                                                        │
   0 ││
-120 │  Start Loom Job · ◈ running                                                                                            │
-120 │                                                                                                                        │
-120 │  { "command": "bun test", "foregroundLeaseMillis": 1000 }                                                              │
+ 51 │ ◈ · bash · bun test · ↑ 1 lines · Ctrl+O to expand│
   0 ││
-120 │  Read Loom Job Output · done                                                                                           │
-120 │                                                                                                                        │
-120 │  { "jobId": "job-12345678", "stream": "stdout" }                                                                       │
-120 │                                                                                                                        │
-120 │  output 1                                                                                                              │
-120 │  output 2                                                                                                              │
-120 │  output 3                                                                                                              │
-120 │  output 4                                                                                                              │
-120 │  output 5                                                                                                              │
-120 │  output 6                                                                                                              │
-120 │  output 7                                                                                                              │
-120 │  output 8                                                                                                              │
-120 │  output 9                                                                                                              │
-120 │  output 10                                                                                                             │
-120 │  output 11                                                                                                             │
-120 │  output 12                                                                                                             │
-120 │  ... (4 more lines, Ctrl+O to expand)                                                                                  │
+ 98 │ ✓ · typescript · await loom.jobs.output("job-12345678") · ↑ 1 ↓ 16 lines · 8ms · Ctrl+O to expand│
   0 ││
-120 │  edit src/release.ts · Ctrl+O to expand                                                                                │
+ 74 │ ✓ · typescript · edit src/release.ts · ↑ 1 lines · 8ms · Ctrl+O to expand│
  27 │    ╰─ src/release.ts +1 -1│
   0 ││
-120 │  write src/generated.ts · Ctrl+O to expand                                                                             │
- 40 │    ╰─ src/generated.ts 18 lines written│
+ 77 │ ✓ · typescript · write src/generated.ts · ↑ 1 lines · 8ms · Ctrl+O to expand│
+ 30 │    ╰─ src/generated.ts +18 -0│
   0 ││
 120 │                                                                                                                        │
 120 │ > Continue the workflow                                                                                                │

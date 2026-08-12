@@ -14,7 +14,7 @@ This minimum is part of the Loom terminal interface.
 Pi settings can increase the padding.
 It does not add a second input parser.
 
-The Pi Client Adapter maps Loom Client Contributions to Pi commands and tools.
+The Pi Client Adapter maps Loom Client Contributions to Pi commands and one model tool.
 Pi keeps input parsing, completion, and standard tool display ownership.
 Loom can supply `/btw`, `/goal`, and similar features as scoped Client Components.
 These Components use narrow Client Adapter grants.
@@ -65,31 +65,48 @@ Each operation performs the typed Workspace handshake.
 The adapter starts the daemon when no daemon answers.
 The client reconnects after a daemon restart within the operation timeout.
 
-## Code Kernel tools
+## Model tool
 
 `loom_cell` evaluates TypeScript in the Agent's persistent Code Kernel.
+It is the only tool that Loom registers with Pi.
+It is the only active model tool after each session start and extension reload.
 The Pi tool call ID becomes the Cell ID.
-The tool returns the Cell display and binding details.
+The tool returns the Cell display, binding details, duration, and file changes.
+Cell display includes captured console output and the final expression value.
 Pi interruption interrupts the client request.
 The daemon can finish an interrupted Cell and change its bindings.
 The first beta does not expose server-side Cell cancellation.
 
-`loom_cell_reset` replaces the Agent's Code Kernel.
+The global `loom` object is the model-facing host interface.
+It supplies these file operations:
+
+- `loom.read(path, options)`
+- `loom.find(glob)`
+- `loom.grep(text, glob)`
+- `loom.write(path, content)`
+- `loom.edit(path, oldText, newText)`
+
+It supplies `loom.run(command, options)` and `loom.jobs` for durable process work.
+It supplies `loom.workflows` for durable Workflow control.
+It supplies `loom.goal.complete()` and `loom.goal.block(reason)` for an active Goal.
+
+The `/loom-reset` user command replaces the Agent's Code Kernel.
 It clears all live bindings.
 It does not delete the Cell Ledger.
 
-## Workflow tools
+## Workflow control
 
-`loom_workflow_start` accepts an immutable Workflow definition and returns its Workflow Run ID.
+`loom.workflows.start` accepts an immutable Workflow definition.
+It returns its Workflow Run ID.
 It does not wait for terminal completion.
 Its admission request has a ten-second timeout.
 
-The adapter supplies these control tools:
+The kernel supplies these control operations:
 
-- `loom_workflow_inspect`
-- `loom_workflow_signal`
-- `loom_workflow_interrupt`
-- `loom_workflow_compensation`
+- `loom.workflows.inspect`
+- `loom.workflows.signal`
+- `loom.workflows.interrupt`
+- `loom.workflows.compensate`
 
 A suspended Workflow continues after a declared Signal.
 Loom does not expose a manual resume action.
@@ -100,23 +117,25 @@ The Loom client preserves typed protocol failures.
 Pi reports a rejected Loom tool call as a tool error.
 The `/loom` command reports daemon connection failures as notifications.
 
-## Job tools
+## Job control
 
-`loom_job_start` creates the durable Job before process launch.
-The Pi tool call ID becomes the Job ID.
+`loom.run` creates the durable Job before process launch.
+The Cell ID and its Job sequence form the Job ID.
 Jobs stay attached by default.
 The Foreground Lease defaults to five minutes.
 A zero lease returns the first Job state without a wait.
 Lease expiry and Pi interruption stop only the wait.
 They do not stop the Job.
 
-The adapter supplies these control tools:
+The kernel supplies these control operations:
 
-- `loom_job_inspect`
-- `loom_job_output`
-- `loom_job_await`
-- `loom_job_cancel`
-- `loom_job_detach`
+- `loom.jobs.inspect`
+- `loom.jobs.output`
+- `loom.jobs.wait`
+- `loom.jobs.cancel`
+- `loom.jobs.detach`
+
+Each Job control accepts a Job ID or a returned Job object.
 
 Output reads use a byte sequence and a byte limit.
 Each result returns the next sequence.

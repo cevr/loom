@@ -24,7 +24,8 @@ Run `/reload` after you change Loom extension source files.
 Use Shift+Enter to insert a new line.
 Pi owns this key behavior.
 
-The Loom extension registers persistent Cell and durable Workflow tools.
+The Loom extension registers one persistent Cell model tool.
+The Cell exposes durable Job and Workflow control through its global `loom` object.
 See [the Pi Client Adapter contract](./pi-client-adapter.md).
 
 The development command loads the source file directly. It does not copy the extension into the global Pi directory.
