@@ -6,6 +6,7 @@ import { renderLoomEditRow } from "../src/internal/loom-edit-tool.js";
 import { LoomDaemonView, renderLoomHeader } from "../src/internal/loom-splash.js";
 import { type LoomToolPanelView, renderLoomToolPanel } from "../src/internal/loom-tool-ui.js";
 import { renderLoomTray } from "../src/internal/loom-tray.js";
+import { renderLoomWriteRow } from "../src/internal/loom-write-tool.js";
 
 const theme = {
   bg: (_color: string, text: string) => text,
@@ -87,6 +88,19 @@ const editedFileAt = (width: number) =>
     theme,
   );
 
+const writtenFileAt = (width: number) =>
+  renderLoomWriteRow(
+    {
+      path: "src/generated.ts",
+      status: "done",
+      lineCount: 18,
+      expandHint: "Ctrl+O to expand",
+      error: Option.none(),
+    },
+    width,
+    theme,
+  );
+
 const surfaceAt = (width: number) => {
   const border = "─".repeat(width);
   const editor = promptEditorFrame(
@@ -104,6 +118,8 @@ const surfaceAt = (width: number) => {
     ...completedToolAt(width),
     "",
     ...editedFileAt(width),
+    "",
+    ...writtenFileAt(width),
     "",
     ...editor,
     ...trayAt(width),
@@ -186,6 +202,30 @@ it("renders the collapse action for an expanded file edit row", () => {
   ).join("\n");
 
   expect(row).toContain("to collapse");
+});
+
+it("renders a collapsed Prime-style file write row", () => {
+  const row = writtenFileAt(72).join("\n");
+
+  expect(row).toContain("write src/generated.ts");
+  expect(row).toContain("18 lines written");
+});
+
+it("renders a file write error row", () => {
+  const row = renderLoomWriteRow(
+    {
+      path: "/dev/null/failure.ts",
+      status: "error",
+      lineCount: 1,
+      expandHint: "",
+      error: Option.some("EEXIST: file already exists, mkdir '/dev/null'"),
+    },
+    72,
+    theme,
+  ).join("\n");
+
+  expect(row).toContain("write /dev/null/failure.ts");
+  expect(row).toContain("EEXIST");
 });
 
 it("renders the queued tool state", () => {

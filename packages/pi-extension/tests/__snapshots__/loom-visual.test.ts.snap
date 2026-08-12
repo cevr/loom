@@ -36,6 +36,9 @@ exports[`keeps the Loom interface readable at narrow, medium, and wide terminal 
  40 │  edit src/release.ts · Ctrl+O to exp…  │
  27 │    ╰─ src/release.ts +1 -1│
   0 ││
+ 40 │  write src/generated.ts · Ctrl+O to …  │
+ 40 │    ╰─ src/generated.ts 18 lines written│
+  0 ││
  40 │                                        │
  40 │ > Continue the workflow                │
  40 │                                        │
@@ -74,6 +77,9 @@ MEDIUM 72
  72 │  edit src/release.ts · Ctrl+O to expand                                │
  27 │    ╰─ src/release.ts +1 -1│
   0 ││
+ 72 │  write src/generated.ts · Ctrl+O to expand                             │
+ 40 │    ╰─ src/generated.ts 18 lines written│
+  0 ││
  72 │                                                                        │
  72 │ > Continue the workflow                                                │
  72 │                                                                        │
@@ -111,6 +117,9 @@ WIDE 120
   0 ││
 120 │  edit src/release.ts · Ctrl+O to expand                                                                                │
  27 │    ╰─ src/release.ts +1 -1│
+  0 ││
+120 │  write src/generated.ts · Ctrl+O to expand                                                                             │
+ 40 │    ╰─ src/generated.ts 18 lines written│
   0 ││
 120 │                                                                                                                        │
 120 │ > Continue the workflow                                                                                                │
