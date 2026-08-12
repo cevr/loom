@@ -1,5 +1,5 @@
 import { makePluginState, type PluginStateValue } from "@cvr/loom-client";
-import { PluginId, PluginStateKey, PluginStateScope, type SessionId } from "@cvr/loom-domain";
+import { goalPluginId, goalStateKey, PluginStateScope, type SessionId } from "@cvr/loom-domain";
 import { PluginStateRevision, PluginStateRevisionConflictError } from "@cvr/loom-protocol";
 import { Effect, Option, Schema } from "effect";
 import {
@@ -16,9 +16,6 @@ import {
   startGoal,
 } from "./goal-state.js";
 import { runWithLoomClient } from "./loom-connection.js";
-
-const pluginId = PluginId.make("loom.goal");
-const stateKey = PluginStateKey.make("goal");
 
 export interface GoalStateGrant<E> {
   readonly read: Effect.Effect<Option.Option<PluginStateValue<GoalState>>, E>;
@@ -65,12 +62,12 @@ export const makeGoalStateGrant = (cwd: string, sessionId: SessionId) => {
   const scope = PluginStateScope.cases.Session.make({ sessionId });
   return {
     read: runWithLoomClient(cwd, "5 seconds", (client) =>
-      makePluginState(client, pluginId, scope, GoalState).read(stateKey),
+      makePluginState(client, goalPluginId, scope, GoalState).read(goalStateKey),
     ),
     write: (state: GoalState, expectedRevision: Option.Option<PluginStateRevision>) =>
       runWithLoomClient(cwd, "5 seconds", (client) =>
-        makePluginState(client, pluginId, scope, GoalState).write(
-          stateKey,
+        makePluginState(client, goalPluginId, scope, GoalState).write(
+          goalStateKey,
           state,
           expectedRevision,
         ),
@@ -216,7 +213,7 @@ export const goalContinuationMessage = (state: GoalState): string => {
     onNone: () => "No token budget is set.",
     onSome: (value) => `${state.consumedTokens} of ${value} input and output tokens are used.`,
   });
-  return `<loom_goal>\nContinue work on this active Goal:\n${state.objective}\n${budget}\nUse loom_goal_complete only after all requirements are complete. Use loom_goal_blocked only after the same blocking condition stops progress three times.\n</loom_goal>`;
+  return `<loom_goal>\nContinue work on this active Goal:\n${state.objective}\n${budget}\nUse await loom.goal.complete() only after all requirements are complete. Use await loom.goal.block(reason) only after the same blocking condition stops progress three times.\n</loom_goal>`;
 };
 
 const parseGoalStart = (input: string): Effect.Effect<GoalCommand, GoalCommandError> => {

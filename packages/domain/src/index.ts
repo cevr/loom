@@ -14,6 +14,7 @@ import {
 } from "./identifiers.js";
 
 export * from "./identifiers.js";
+export * from "./goal.js";
 
 export const WorkflowSignalAddress = Schema.Struct({
   sessionId: SessionId,

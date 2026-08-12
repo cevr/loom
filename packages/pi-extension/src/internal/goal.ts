@@ -1,9 +1,7 @@
 import { SessionId } from "@cvr/loom-domain";
-import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Effect, Inspectable, Option, Semaphore } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
-import { loomTool } from "./loom-tool-ui.js";
 import {
   GoalCommand,
   goalContinuationMessage,
@@ -12,7 +10,6 @@ import {
   parseGoalCommand,
 } from "./goal-component.js";
 import { goalStatusKey, goalTrayStatus } from "./goal-state.js";
-import { runTool, toolResult } from "./tool-result.js";
 
 const componentFor = (pi: LoomExtensionApi, context: ExtensionContext) =>
   makeGoalComponent({
@@ -85,45 +82,6 @@ const executeCommand = (
     Effect.runPromise,
   );
 
-const registerGoalTools = (pi: LoomExtensionApi, runExclusive: RunExclusive) => {
-  pi.registerTool(
-    loomTool({
-      name: "loom_goal_complete",
-      label: "Complete Loom Goal",
-      description: "Mark the active Loom Goal complete after all requirements are verified.",
-      parameters: Type.Object({}),
-      execute: (_toolCallId, _parameters, signal, _onUpdate, context) =>
-        runTool(
-          runExclusive(
-            componentFor(pi, context).complete.pipe(
-              Effect.as(toolResult("The Loom Goal is complete")),
-            ),
-          ),
-          { signal },
-        ),
-    }),
-  );
-
-  pi.registerTool(
-    loomTool({
-      name: "loom_goal_blocked",
-      label: "Block Loom Goal",
-      description:
-        "Mark the active Loom Goal blocked after the same blocker stops progress three times.",
-      parameters: Type.Object({ reason: Type.String({ minLength: 1 }) }),
-      execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-        runTool(
-          runExclusive(
-            componentFor(pi, context)
-              .block(parameters.reason)
-              .pipe(Effect.as(toolResult("The Loom Goal is blocked"))),
-          ),
-          { signal },
-        ),
-    }),
-  );
-};
-
 export const registerGoal = (pi: LoomExtensionApi): void => {
   const semaphore = Semaphore.makeUnsafe(1);
   const accountedAssistantMessages = new WeakSet<object>();
@@ -132,8 +90,6 @@ export const registerGoal = (pi: LoomExtensionApi): void => {
     description: "Start or control a durable Loom Goal",
     handler: (argumentsText, context) => executeCommand(pi, runExclusive, argumentsText, context),
   });
-
-  registerGoalTools(pi, runExclusive);
 
   pi.on("session_start", (_event, context) =>
     runEvent(context, runExclusive, componentFor(pi, context).continueIfActive),
