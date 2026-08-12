@@ -1,6 +1,7 @@
 import { CodeKernelProcessRequest, CodeKernelProcessResponse } from "@cvr/loom-protocol";
-import { Effect, Schema, Stdio, Stream } from "effect";
-import { makeInProcessCodeKernel, type InProcessCodeKernelShape } from "./code-kernel.js";
+import { SessionId } from "@cvr/loom-domain";
+import { Config, Effect, Schema, Stdio, Stream } from "effect";
+import { makeInProcessCodeKernelFor, type InProcessCodeKernelShape } from "./code-kernel.js";
 import { parseBunJsonLine } from "./bun-jsonl.js";
 
 const decodeRequest = Schema.decodeUnknownEffect(CodeKernelProcessRequest);
@@ -31,7 +32,8 @@ const respond = (
 
 export const runCodeKernelWorker = Effect.gen(function* () {
   const stdio = yield* Stdio.Stdio;
-  const kernel = yield* makeInProcessCodeKernel;
+  const sessionId = yield* Config.string("LOOM_SESSION_ID").pipe(Effect.map(SessionId.make));
+  const kernel = yield* makeInProcessCodeKernelFor(sessionId);
   const ready = yield* encodeResponse(CodeKernelProcessResponse.cases.Ready.make({}));
   yield* Stream.succeed(`${ready}\n`).pipe(
     Stream.encodeText,

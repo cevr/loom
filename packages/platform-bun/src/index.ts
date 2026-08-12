@@ -4,6 +4,7 @@ export {
   type EvaluateCellInput,
   layerInProcessCodeKernel,
   makeInProcessCodeKernel,
+  makeInProcessCodeKernelFor,
 } from "./internal/code-kernel.js";
 export { runCodeKernelWorker } from "./internal/code-kernel-worker.js";
 export { CodeKernel, type CodeKernelShape } from "@cvr/loom-runtime";

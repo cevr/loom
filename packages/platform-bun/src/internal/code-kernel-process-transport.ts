@@ -32,9 +32,12 @@ import {
   registerKernelProcess,
   releaseKernelProcess,
 } from "./code-kernel-process-lifecycle.js";
+import { ownerEnvironment, type KernelOwner } from "./code-kernel-owner-environment.js";
 
 export interface CodeKernelProcessTransportConfig extends CodeKernelDiagnosticsConfig {
   readonly entryPath: string;
+  readonly cwd?: string;
+  readonly owner?: KernelOwner;
   readonly executable?: string;
   readonly startupTimeout?: Duration.Input;
   readonly forceKillAfter?: Duration.Input;
@@ -125,8 +128,11 @@ const makeChildHandle = (
   config: CodeKernelProcessTransportConfig,
   scope: Scope.Scope,
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
-) =>
-  ChildProcess.make(config.executable ?? "bun", ["run", config.entryPath], {
+) => {
+  return ChildProcess.make(config.executable ?? "bun", ["run", config.entryPath], {
+    cwd: config.cwd,
+    env: ownerEnvironment(Option.fromNullishOr(config.owner)),
+    extendEnv: true,
     stdin: { stream: "pipe", endOnDone: false },
     stdout: "pipe",
     stderr: "pipe",
@@ -144,6 +150,7 @@ const makeChildHandle = (
         }),
     ),
   );
+};
 
 const waitForReady = Effect.fn("CodeKernelProcess.waitForReady")(function* (
   config: CodeKernelProcessTransportConfig,

@@ -90,6 +90,7 @@ const makeAgentLayer = (config: DaemonConfig, policy: DaemonPolicy) => {
   );
   const kernelFactory = layerCodeKernelFactory({
     entryPath: codeKernelEntry,
+    cwd: config.workspaceRoot,
     diagnosticsDirectory: `${config.workspaceRoot}/.loom/diagnostics/code-kernels`,
   }).pipe(Layer.provideMerge(processServices));
   const dependencies = Layer.merge(kernelFactory, layerSqliteCellLedger);

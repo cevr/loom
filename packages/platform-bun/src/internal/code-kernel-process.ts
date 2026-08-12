@@ -251,7 +251,7 @@ const makeFactory = (
     return CodeKernelFactory.of({
       spawn: (owner) =>
         makeCodeKernelWithDiagnostic(
-          config,
+          { ...config, owner },
           Option.map(store, (diagnosticStore) => (pid) => diagnosticStore.reserve(owner, pid)),
           lifecycleFor(owner),
         ).pipe(

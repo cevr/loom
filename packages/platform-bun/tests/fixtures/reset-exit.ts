@@ -22,6 +22,8 @@ for await (const chunk of Bun.stdin.stream()) {
         cellId: request.cellId,
         display: "42",
         bindings: [],
+        durationMillis: 0,
+        fileChanges: [],
       },
     });
     await Bun.stdout.write(`${encodeResponse(response)}\n`);

@@ -1,7 +1,8 @@
 import { CellId } from "@cvr/loom-domain";
 import { maximumCellDisplayLength } from "@cvr/loom-protocol";
 import { describe, expect, it } from "effect-bun-test";
-import { Effect } from "effect";
+import { BunServices } from "@effect/platform-bun";
+import { Effect, FileSystem } from "effect";
 import { makeInProcessCodeKernel } from "../src/index.js";
 
 describe("persistent Bun Code Kernel", () => {
@@ -33,6 +34,21 @@ describe("persistent Bun Code Kernel", () => {
       expect(result.display).toBe("42");
     }),
   );
+});
+
+describe("Bun Code Kernel display and declarations", () => {
+  it.effect("captures console output with the final Cell value", () =>
+    Effect.gen(function* () {
+      const kernel = yield* makeInProcessCodeKernel;
+      const result = yield* kernel.evaluate({
+        cellId: CellId.make("cell-console"),
+        source: 'console.log("job", { jobId: "job-1" }); 42',
+      });
+
+      expect(result.display).toContain("job { jobId: 'job-1' }");
+      expect(result.display).toEndWith("42");
+    }),
+  );
 
   it.effect("supports declaration changes", () =>
     Effect.gen(function* () {
@@ -50,6 +66,26 @@ describe("persistent Bun Code Kernel", () => {
     }),
   );
 });
+
+it.scopedLive.layer(BunServices.layer)(
+  "writes a large file through the single Cell control surface and records one preview",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "loom-cell-write-" });
+      const path = `${directory}/nested/large.ts`;
+      const kernel = yield* makeInProcessCodeKernel;
+      const result = yield* kernel.evaluate({
+        cellId: CellId.make("cell-large-write"),
+        source: `await loom.write(${Bun.inspect(path)}, Array.from({ length: 5_000 }, (_, index) => \`export const line_\${index} = \${index};\`).join("\\n"))`,
+      });
+
+      expect(result.display).toContain("Wrote");
+      expect(result.fileChanges).toHaveLength(1);
+      expect(result.fileChanges[0]?.newText.split("\n")).toHaveLength(5_000);
+      expect(yield* fs.readFileString(path)).toContain("export const line_4999 = 4999;");
+    }),
+);
 
 it.effect("limits the Cell display before it crosses the process boundary", () =>
   Effect.gen(function* () {
