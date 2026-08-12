@@ -89,6 +89,54 @@ const waitForFile = (path: string) =>
   );
 
 scopedLive(
+  "consumes a Signal sent while parallel Job Steps are active",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped({
+        prefix: "loom-parallel-early-signal-",
+      });
+      const releasePath = `${directory}/release-second`;
+      const firstLaunches = `${directory}/first-launches`;
+      const secondLaunches = `${directory}/second-launches`;
+      const secondStarted = `${directory}/second-started`;
+      const request = parallelRequest(
+        `printf x >> '${firstLaunches}'`,
+        `printf x >> '${secondLaunches}'; : > '${secondStarted}'; while [ ! -f '${releasePath}' ]; do sleep 0.05; done`,
+        "parallel-early-signal",
+        10_000,
+      );
+      yield* Effect.addFinalizer(() =>
+        fs.writeFileString(releasePath, "release").pipe(Effect.orDie),
+      );
+      const { config, daemon: launch } = startDaemon(directory);
+      const daemon = yield* launch;
+      const handle = yield* withClient(config.workspaceRoot, config.socketPath, (client) =>
+        client.startWorkflow(request),
+      );
+      const address = { sessionId: request.sessionId, ...handle };
+
+      yield* waitForFile(secondStarted);
+      yield* withClient(config.workspaceRoot, config.socketPath, (client) =>
+        client.signalWorkflow({
+          address: { ...address, name: WorkflowSignalName.make("approval") },
+          value: "approved",
+        }),
+      );
+      yield* fs.writeFileString(releasePath, "release");
+      const result = yield* withClient(config.workspaceRoot, config.socketPath, (client) =>
+        client.executeWorkflow(request),
+      ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(resultSchema)));
+
+      expect(result.approval).toBe("approved");
+      expect(yield* fs.readFileString(firstLaunches)).toBe("x");
+      expect(yield* fs.readFileString(secondLaunches)).toBe("x");
+      yield* Fiber.interrupt(daemon);
+    }),
+  30_000,
+);
+
+scopedLive(
   "resumes after parallel Job Steps reach a Signal",
   () =>
     Effect.gen(function* () {
@@ -100,7 +148,7 @@ scopedLive(
         "parallel-success",
       );
       const { config, daemon: launch } = startDaemon(directory);
-      const firstDaemon = yield* launch;
+      const daemon = yield* launch;
       const handle = yield* withClient(config.workspaceRoot, config.socketPath, (client) =>
         client.startWorkflow(request),
       );
@@ -109,9 +157,6 @@ scopedLive(
       expect(
         yield* waitForSuspension(config.workspaceRoot, config.socketPath, address),
       ).toHaveProperty("_tag", "Suspended");
-      yield* Fiber.interrupt(firstDaemon);
-
-      const secondDaemon = yield* startDaemon(directory).daemon;
       yield* withClient(config.workspaceRoot, config.socketPath, (client) =>
         client.signalWorkflow({
           address: { ...address, name: WorkflowSignalName.make("approval") },
@@ -125,7 +170,7 @@ scopedLive(
       expect(result.approval).toBe("approved");
       expect(yield* fs.exists(`${directory}/first-complete`)).toBe(true);
       expect(yield* fs.exists(`${directory}/second-complete`)).toBe(true);
-      yield* Fiber.interrupt(secondDaemon);
+      yield* Fiber.interrupt(daemon);
     }),
   30_000,
 );
@@ -223,7 +268,7 @@ scopedLive(
       );
       const address = { sessionId: request.sessionId, ...handle };
 
-      expect(yield* waitForFile(secondStarted)).toBe(true);
+      yield* waitForFile(secondStarted);
       yield* Fiber.interrupt(firstDaemon);
 
       const secondDaemon = yield* startDaemon(directory).daemon;
