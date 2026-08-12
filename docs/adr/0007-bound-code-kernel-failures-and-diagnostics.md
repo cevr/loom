@@ -40,7 +40,6 @@ It does not define the idle lease.
 
 The local Code Kernel is a trusted single-user recovery boundary.
 It is not a security boundary.
-Bun reports process resource use after process exit.
-Effect Child Process does not expose a live Bun resource monitor.
-Loom does not add a custom polling monitor.
 Hard CPU and memory limits belong to a later isolated deployment runner.
+That runner uses one OCI container for each Code Kernel.
+See [deployed Code Kernel isolation](./0013-run-deployed-code-kernels-in-oci-containers.md).

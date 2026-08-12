@@ -99,6 +99,7 @@ The daemon replaces the process after a timeout, exit, or protocol failure.
 Closing an Agent entity Scope closes its Code Kernel process.
 See [Code Kernel recovery](./code-kernel-recovery.md).
 See [Code Kernel limits](./adr/0007-bound-code-kernel-failures-and-diagnostics.md).
+See [deployed Code Kernel isolation](./adr/0013-run-deployed-code-kernels-in-oci-containers.md).
 
 Loom stores the Cell Ledger.
 Loom does not replay cells automatically after a daemon restart.
