@@ -88,7 +88,7 @@ it("registers the Loom development command", () => {
   );
   expect(events).toEqual(
     new Map([
-      ["session_start", 4],
+      ["session_start", 5],
       ["session_shutdown", 2],
       ["message_end", 1],
       ["agent_settled", 1],

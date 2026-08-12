@@ -1,4 +1,9 @@
-import type { AgentToolResult, Theme, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import {
+  type AgentToolResult,
+  keyHint,
+  type Theme,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "@earendil-works/pi-ai";
 import {
   type Component,
@@ -18,6 +23,8 @@ export interface LoomToolPanelView {
   readonly input: string;
   readonly output: Option.Option<string>;
   readonly frame: number;
+  readonly expanded: boolean;
+  readonly expandHint: string;
 }
 
 interface LoomToolState {
@@ -25,7 +32,7 @@ interface LoomToolState {
   startedAt?: number;
 }
 
-type LoomToolTheme = Pick<Theme, "bg" | "fg">;
+export type LoomToolTheme = Pick<Theme, "bg" | "fg">;
 type LoomToolRenderContext = Parameters<
   NonNullable<ToolDefinition<TSchema, unknown, LoomToolState>["renderCall"]>
 >[2];
@@ -35,7 +42,7 @@ const panelPadding = 2;
 const maximumPreviewLines = 12;
 const workingFrameMillis = 250;
 
-const component = (render: Render): Component => ({ invalidate() {}, render });
+export const loomRenderComponent = (render: Render): Component => ({ invalidate() {}, render });
 
 const panelStatus = (view: LoomToolPanelView, theme: LoomToolTheme) => {
   switch (view.status) {
@@ -67,14 +74,28 @@ const withPanelBackground = (status: LoomToolStatus, text: string, theme: LoomTo
 const contentWidth = (width: number) =>
   Math.max(1, width - Math.min(panelPadding, Math.floor((width - 1) / 2)) * 2);
 
-const boundedContent = (text: string, width: number, theme: LoomToolTheme) => {
+const boundedContent = (
+  text: string,
+  width: number,
+  theme: LoomToolTheme,
+  expanded: boolean,
+  expandHint: string,
+) => {
   const lines = wrapTextWithAnsi(text, width);
-  if (lines.length <= maximumPreviewLines) return lines;
-  const hidden = lines.length - maximumPreviewLines + 1;
-  return [...lines.slice(0, maximumPreviewLines - 1), theme.fg("dim", `… ${hidden} more lines`)];
+  if (expanded || lines.length <= maximumPreviewLines) return lines;
+  const hidden = lines.length - maximumPreviewLines;
+  return [
+    ...lines.slice(0, maximumPreviewLines),
+    `${theme.fg("muted", `... (${hidden} more lines, `)}${expandHint}${theme.fg("muted", ")")}`,
+  ];
 };
 
-const panelLine = (line: string, width: number, status: LoomToolStatus, theme: LoomToolTheme) => {
+export const renderLoomToolLine = (
+  line: string,
+  width: number,
+  status: LoomToolStatus,
+  theme: LoomToolTheme,
+) => {
   const safeWidth = Math.max(1, width);
   const innerWidth = contentWidth(safeWidth);
   const shown = truncateToWidth(line, innerWidth, "…");
@@ -90,10 +111,10 @@ const renderCall = (view: LoomToolPanelView, width: number, theme: LoomToolTheme
   const safeWidth = Math.max(1, width);
   const header = `${theme.fg("muted", view.label)}${theme.fg("dim", " · ")}${panelStatus(view, theme)}`;
   return [
-    panelLine(header, safeWidth, view.status, theme),
-    panelLine("", safeWidth, view.status, theme),
-    ...boundedContent(view.input, contentWidth(safeWidth), theme).map((line) =>
-      panelLine(line, safeWidth, view.status, theme),
+    renderLoomToolLine(header, safeWidth, view.status, theme),
+    renderLoomToolLine("", safeWidth, view.status, theme),
+    ...boundedContent(view.input, contentWidth(safeWidth), theme, false, view.expandHint).map(
+      (line) => renderLoomToolLine(line, safeWidth, view.status, theme),
     ),
   ];
 };
@@ -103,12 +124,14 @@ const renderResult = (
   status: LoomToolStatus,
   width: number,
   theme: LoomToolTheme,
+  expanded: boolean,
+  expandHint: string,
 ) => {
   const safeWidth = Math.max(1, width);
   return [
-    panelLine("", safeWidth, status, theme),
-    ...boundedContent(output, contentWidth(safeWidth), theme).map((line) =>
-      panelLine(line, safeWidth, status, theme),
+    renderLoomToolLine("", safeWidth, status, theme),
+    ...boundedContent(output, contentWidth(safeWidth), theme, expanded, expandHint).map((line) =>
+      renderLoomToolLine(line, safeWidth, status, theme),
     ),
   ];
 };
@@ -121,7 +144,8 @@ export const renderLoomToolPanel = (
   ...renderCall(view, width, theme),
   ...Option.match(view.output, {
     onNone: () => [],
-    onSome: (output) => renderResult(output, view.status, width, theme),
+    onSome: (output) =>
+      renderResult(output, view.status, width, theme, view.expanded, view.expandHint),
   }),
 ];
 
@@ -177,12 +201,17 @@ export const loomTool = <TParameters extends TSchema, TDetails>(
       input: Inspectable.toStringUnknown(args),
       output: Option.none(),
       frame,
+      expanded: context.expanded,
+      expandHint: "",
     };
-    return component((width) => renderCall(view, width, theme));
+    return loomRenderComponent((width) => renderCall(view, width, theme));
   },
-  renderResult: (result, _options, theme, context) => {
+  renderResult: (result, options, theme, context) => {
     const output = toolOutput(result);
     const status = toolStatus(context);
-    return component((width) => renderResult(output, status, width, theme));
+    const expandHint = keyHint("app.tools.expand", "to expand");
+    return loomRenderComponent((width) =>
+      renderResult(output, status, width, theme, options.expanded, expandHint),
+    );
   },
 });
