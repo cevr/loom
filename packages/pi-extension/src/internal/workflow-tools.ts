@@ -1,5 +1,5 @@
 import {
-  SessionId,
+  type SessionId,
   WorkflowBudget,
   WorkflowCapability,
   WorkflowDefinition,
@@ -20,8 +20,8 @@ import {
 import { StringEnum, Type, type Static } from "@earendil-works/pi-ai";
 import { Effect, Schema } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
-import { runWithLoomClient } from "./loom-connection.js";
-import { runTool, toolResult } from "./tool-result.js";
+import { runLoomTool } from "./loom-tool.js";
+import { toolResult } from "./tool-result.js";
 
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json));
 
@@ -55,14 +55,14 @@ const workflowParameters = Type.Object({
 const decodeWorkflowBudget = Schema.decodeUnknownEffect(WorkflowBudget);
 
 export const workflowRequest = (
-  sessionId: string,
+  sessionId: SessionId,
   parameters: Static<typeof workflowParameters>,
 ): Effect.Effect<WorkflowRunRequest, Schema.SchemaError> =>
   Effect.gen(function* () {
     const input = yield* decodeJson(parameters.input);
     const budget = yield* decodeWorkflowBudget(parameters.budget ?? {});
     return WorkflowRunRequest.make({
-      sessionId: SessionId.make(sessionId),
+      sessionId,
       key: WorkflowKey.make(parameters.key),
       definition: WorkflowDefinition.make({
         name: WorkflowName.make(parameters.name),
@@ -79,8 +79,8 @@ export const workflowRequest = (
 
 const workflowAddressParameters = Type.Object({ workflowRunId: Type.String({ minLength: 1 }) });
 
-const workflowAddress = (sessionId: string, workflowRunId: string) => ({
-  sessionId: SessionId.make(sessionId),
+const workflowAddress = (sessionId: SessionId, workflowRunId: string) => ({
+  sessionId,
   workflowRunId: WorkflowRunId.make(workflowRunId),
 });
 
@@ -95,14 +95,11 @@ const registerStartWorkflow = (pi: LoomExtensionApi) =>
     ],
     parameters: workflowParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
+      runLoomTool(context, { signal }, "10 seconds", (client, sessionId) =>
         Effect.gen(function* () {
-          const request = yield* workflowRequest(context.sessionManager.getSessionId(), parameters);
-          return yield* runWithLoomClient(context.cwd, "10 seconds", (client) =>
-            client.startWorkflow(request).pipe(Effect.map(toolResult)),
-          );
+          const request = yield* workflowRequest(sessionId, parameters);
+          return yield* client.startWorkflow(request).pipe(Effect.map(toolResult));
         }),
-        { signal },
       ),
   });
 
@@ -113,15 +110,10 @@ const registerInspectWorkflow = (pi: LoomExtensionApi) =>
     description: "Read the current state of a Workflow Run.",
     parameters: workflowAddressParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          client
-            .inspectWorkflow(
-              workflowAddress(context.sessionManager.getSessionId(), parameters.workflowRunId),
-            )
-            .pipe(Effect.map(toolResult)),
-        ),
-        { signal },
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        client
+          .inspectWorkflow(workflowAddress(sessionId, parameters.workflowRunId))
+          .pipe(Effect.map(toolResult)),
       ),
   });
 
@@ -138,25 +130,19 @@ const registerSignalWorkflow = (pi: LoomExtensionApi) =>
     description: "Send a declared durable Signal to a Workflow Run.",
     parameters: workflowSignalParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
         Effect.gen(function* () {
           const value = yield* decodeJson(parameters.value);
-          return yield* runWithLoomClient(context.cwd, "5 seconds", (client) =>
-            client
-              .signalWorkflow({
-                address: {
-                  ...workflowAddress(
-                    context.sessionManager.getSessionId(),
-                    parameters.workflowRunId,
-                  ),
-                  name: WorkflowSignalName.make(parameters.name),
-                },
-                value,
-              })
-              .pipe(Effect.as(toolResult("Workflow signalled"))),
-          );
+          return yield* client
+            .signalWorkflow({
+              address: {
+                ...workflowAddress(sessionId, parameters.workflowRunId),
+                name: WorkflowSignalName.make(parameters.name),
+              },
+              value,
+            })
+            .pipe(Effect.as(toolResult("Workflow signalled")));
         }),
-        { signal },
       ),
   });
 
@@ -167,15 +153,10 @@ const registerInterruptWorkflow = (pi: LoomExtensionApi) =>
     description: "Interrupt a Workflow Run.",
     parameters: workflowAddressParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          client
-            .interruptWorkflow(
-              workflowAddress(context.sessionManager.getSessionId(), parameters.workflowRunId),
-            )
-            .pipe(Effect.as(toolResult("Workflow interrupted"))),
-        ),
-        { signal },
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        client
+          .interruptWorkflow(workflowAddress(sessionId, parameters.workflowRunId))
+          .pipe(Effect.as(toolResult("Workflow interrupted"))),
       ),
   });
 
@@ -191,24 +172,18 @@ const registerCompensationDecision = (pi: LoomExtensionApi) =>
     description: "Retry or stop a failed Workflow compensation.",
     parameters: workflowCompensationParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
         Effect.gen(function* () {
           const decision = yield* Schema.decodeUnknownEffect(WorkflowCompensationDecision)(
             parameters.decision,
           );
-          return yield* runWithLoomClient(context.cwd, "5 seconds", (client) =>
-            client
-              .decideWorkflowCompensation({
-                address: workflowAddress(
-                  context.sessionManager.getSessionId(),
-                  parameters.workflowRunId,
-                ),
-                decision,
-              })
-              .pipe(Effect.as(toolResult("Workflow compensation decision recorded"))),
-          );
+          return yield* client
+            .decideWorkflowCompensation({
+              address: workflowAddress(sessionId, parameters.workflowRunId),
+              decision,
+            })
+            .pipe(Effect.as(toolResult("Workflow compensation decision recorded")));
         }),
-        { signal },
       ),
   });
 

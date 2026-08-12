@@ -1,12 +1,11 @@
 import {
-  CloseSessionError,
   LoomRpcs,
   PluginStateStoreError,
   type WritePluginStateRequest,
   WorkflowRunAcceptanceError,
   WorkflowRunHandle,
 } from "@cvr/loom-protocol";
-import { PluginStateScope, type SessionId } from "@cvr/loom-domain";
+import { PluginStateScope } from "@cvr/loom-domain";
 import {
   AgentActor,
   ActorStateHub,
@@ -14,61 +13,13 @@ import {
   JobRuntime,
   PluginStateStore,
   SessionLifecycle,
-  WorkflowChildAgentStore,
   WorkflowRuntime,
-  type JobRuntimeShape,
   type PluginStateStoreShape,
   type SessionLifecycleShape,
-  type WorkflowChildAgentStoreShape,
-  type WorkflowRuntimeShape,
 } from "@cvr/loom-runtime";
 import { Effect, Inspectable, Stream } from "effect";
+import { makeCloseSession } from "./close-session.js";
 import { makeJobRpcHandlers } from "./job-rpc-handlers.js";
-
-export const makeCloseSession =
-  (
-    workflows: WorkflowRuntimeShape,
-    childAgents: WorkflowChildAgentStoreShape,
-    jobs: JobRuntimeShape,
-    pluginState: PluginStateStoreShape,
-    sessions: SessionLifecycleShape,
-  ) =>
-  (sessionId: SessionId) =>
-    sessions
-      .close(
-        sessionId,
-        Effect.result(workflows.closeSession(sessionId)).pipe(
-          Effect.flatMap((workflowResult) =>
-            Effect.all(
-              [
-                Effect.result(
-                  jobs
-                    .closeSession(sessionId)
-                    .pipe(Effect.andThen(childAgents.stopSession(sessionId))),
-                ),
-                Effect.result(pluginState.deleteSession(sessionId)),
-              ],
-              { concurrency: "unbounded" },
-            ).pipe(
-              Effect.flatMap(([ownedWorkResult, pluginStateResult]) =>
-                Effect.fromResult(workflowResult).pipe(
-                  Effect.andThen(Effect.fromResult(ownedWorkResult)),
-                  Effect.andThen(Effect.fromResult(pluginStateResult)),
-                ),
-              ),
-            ),
-          ),
-        ),
-      )
-      .pipe(
-        Effect.mapError(
-          (error) =>
-            new CloseSessionError({
-              sessionId,
-              message: Inspectable.toStringUnknown(error),
-            }),
-        ),
-      );
 
 const writePluginState = (pluginState: PluginStateStoreShape, sessions: SessionLifecycleShape) =>
   Effect.fn("LoomRpcHandlers.writePluginState")(function* (request: WritePluginStateRequest) {
@@ -91,11 +42,10 @@ export const layerLoomRpcHandlers = LoomRpcs.toLayer(
     const connection = yield* ConnectionHandshake;
     const actors = yield* ActorStateHub;
     const workflows = yield* WorkflowRuntime;
-    const childAgents = yield* WorkflowChildAgentStore;
     const jobs = yield* JobRuntime;
     const pluginState = yield* PluginStateStore;
     const sessions = yield* SessionLifecycle;
-    const closeSession = makeCloseSession(workflows, childAgents, jobs, pluginState, sessions);
+    const closeSession = yield* makeCloseSession;
     const writeState = writePluginState(pluginState, sessions);
     return LoomRpcs.of({
       ...makeJobRpcHandlers(jobs, sessions),

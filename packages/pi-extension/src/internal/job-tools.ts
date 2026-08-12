@@ -1,4 +1,4 @@
-import { JobId, SessionId } from "@cvr/loom-domain";
+import { JobId, type SessionId } from "@cvr/loom-domain";
 import {
   maximumJobOutputBytes,
   ReadJobOutputRequest,
@@ -8,21 +8,21 @@ import {
 import { Type } from "@earendil-works/pi-ai";
 import { Effect, Encoding, Schema } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
-import { runWithLoomClient } from "./loom-connection.js";
-import { runTool, toolResult } from "./tool-result.js";
+import { runLoomTool } from "./loom-tool.js";
+import { toolResult } from "./tool-result.js";
 
 const addressParameters = Type.Object({ jobId: Type.String({ minLength: 1 }) });
 const decodeStartJobRequest = Schema.decodeUnknownEffect(StartJobRequest);
 const decodeReadJobOutputRequest = Schema.decodeUnknownEffect(ReadJobOutputRequest);
 const decodeWaitForJobRequest = Schema.decodeUnknownEffect(WaitForJobRequest);
 
-const address = (sessionId: string, jobId: string) => ({
-  sessionId: SessionId.make(sessionId),
+const address = (sessionId: SessionId, jobId: string) => ({
+  sessionId,
   jobId: JobId.make(jobId),
 });
 
 export const startJobRequest = (
-  sessionId: string,
+  sessionId: SessionId,
   jobId: string,
   parameters: {
     readonly command: string;
@@ -32,7 +32,7 @@ export const startJobRequest = (
 ) => decodeStartJobRequest({ ...address(sessionId, jobId), ...parameters });
 
 export const readJobOutputRequest = (
-  sessionId: string,
+  sessionId: SessionId,
   parameters: {
     readonly jobId: string;
     readonly stream: "stdout" | "stderr";
@@ -42,7 +42,7 @@ export const readJobOutputRequest = (
 ) => decodeReadJobOutputRequest({ sessionId, ...parameters });
 
 export const waitForJobRequest = (
-  sessionId: string,
+  sessionId: SessionId,
   parameters: { readonly jobId: string; readonly foregroundLeaseMillis?: number },
 ) => decodeWaitForJobRequest({ sessionId, ...parameters });
 
@@ -62,14 +62,11 @@ const registerStartJob = (pi: LoomExtensionApi) =>
       attached: Type.Optional(Type.Boolean()),
     }),
     execute: (toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          startJobRequest(context.sessionManager.getSessionId(), toolCallId, parameters).pipe(
-            Effect.flatMap(client.startJob),
-            Effect.map(toolResult),
-          ),
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        startJobRequest(sessionId, toolCallId, parameters).pipe(
+          Effect.flatMap(client.startJob),
+          Effect.map(toolResult),
         ),
-        { signal },
       ),
   });
 
@@ -80,13 +77,8 @@ const registerInspectJob = (pi: LoomExtensionApi) =>
     description: "Read the current durable Job state.",
     parameters: addressParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          client
-            .inspectJob(address(context.sessionManager.getSessionId(), parameters.jobId))
-            .pipe(Effect.map(toolResult)),
-        ),
-        { signal },
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        client.inspectJob(address(sessionId, parameters.jobId)).pipe(Effect.map(toolResult)),
       ),
   });
 
@@ -102,23 +94,20 @@ const registerReadJobOutput = (pi: LoomExtensionApi) =>
       maximumBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: maximumJobOutputBytes })),
     }),
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          readJobOutputRequest(context.sessionManager.getSessionId(), parameters).pipe(
-            Effect.flatMap(client.readJobOutput),
-            Effect.map((chunk) =>
-              toolResult({
-                stream: chunk.stream,
-                sequence: chunk.sequence,
-                nextSequence: chunk.nextSequence,
-                text: new TextDecoder().decode(chunk.data),
-                base64: Encoding.encodeBase64(chunk.data),
-                complete: chunk.complete,
-              }),
-            ),
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        readJobOutputRequest(sessionId, parameters).pipe(
+          Effect.flatMap(client.readJobOutput),
+          Effect.map((chunk) =>
+            toolResult({
+              stream: chunk.stream,
+              sequence: chunk.sequence,
+              nextSequence: chunk.nextSequence,
+              text: new TextDecoder().decode(chunk.data),
+              base64: Encoding.encodeBase64(chunk.data),
+              complete: chunk.complete,
+            }),
           ),
         ),
-        { signal },
       ),
   });
 
@@ -132,14 +121,11 @@ const registerAwaitJob = (pi: LoomExtensionApi) =>
       foregroundLeaseMillis: Type.Optional(Type.Integer({ minimum: 0 })),
     }),
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          waitForJobRequest(context.sessionManager.getSessionId(), parameters).pipe(
-            Effect.flatMap(client.awaitJob),
-            Effect.map(toolResult),
-          ),
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        waitForJobRequest(sessionId, parameters).pipe(
+          Effect.flatMap(client.awaitJob),
+          Effect.map(toolResult),
         ),
-        { signal },
       ),
   });
 
@@ -150,13 +136,8 @@ const registerCancelJob = (pi: LoomExtensionApi) =>
     description: "Stop a Job process group and record Cancelled.",
     parameters: addressParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "10 seconds", (client) =>
-          client
-            .cancelJob(address(context.sessionManager.getSessionId(), parameters.jobId))
-            .pipe(Effect.map(toolResult)),
-        ),
-        { signal },
+      runLoomTool(context, { signal }, "10 seconds", (client, sessionId) =>
+        client.cancelJob(address(sessionId, parameters.jobId)).pipe(Effect.map(toolResult)),
       ),
   });
 
@@ -167,13 +148,8 @@ const registerDetachJob = (pi: LoomExtensionApi) =>
     description: "Detach a Job so Session close does not cancel it.",
     parameters: addressParameters,
     execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          client
-            .detachJob(address(context.sessionManager.getSessionId(), parameters.jobId))
-            .pipe(Effect.map(toolResult)),
-        ),
-        { signal },
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        client.detachJob(address(sessionId, parameters.jobId)).pipe(Effect.map(toolResult)),
       ),
   });
 

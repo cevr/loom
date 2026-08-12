@@ -104,15 +104,14 @@ it("keeps the Session active during extension reload", () => {
 });
 
 it("uses the domain Workflow Budget defaults", () =>
-  expect(Effect.runPromise(workflowRequest("session-1", workflowInput))).resolves.toHaveProperty(
-    "budget",
-    defaultWorkflowBudget,
-  ));
+  expect(
+    Effect.runPromise(workflowRequest(SessionId.make("session-1"), workflowInput)),
+  ).resolves.toHaveProperty("budget", defaultWorkflowBudget));
 
 it("resolves a partial Workflow Budget through the domain schema", () =>
   expect(
     Effect.runPromise(
-      workflowRequest("session-1", {
+      workflowRequest(SessionId.make("session-1"), {
         ...workflowInput,
         budget: { maxSteps: 12, maxTokens: 1_000 },
       }),
@@ -127,9 +126,12 @@ it("uses the protocol Job request defaults", () =>
   expect(
     Effect.runPromise(
       Effect.all([
-        startJobRequest("session-1", "job-1", { command: "true" }),
-        waitForJobRequest("session-1", { jobId: "job-1" }),
-        readJobOutputRequest("session-1", { jobId: "job-1", stream: "stdout" }),
+        startJobRequest(SessionId.make("session-1"), "job-1", { command: "true" }),
+        waitForJobRequest(SessionId.make("session-1"), { jobId: "job-1" }),
+        readJobOutputRequest(SessionId.make("session-1"), {
+          jobId: "job-1",
+          stream: "stdout",
+        }),
       ]),
     ),
   ).resolves.toEqual([

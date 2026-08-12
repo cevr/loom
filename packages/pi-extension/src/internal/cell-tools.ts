@@ -1,11 +1,10 @@
-import { AgentId, CellId, SessionId } from "@cvr/loom-domain";
+import { AgentId, CellId } from "@cvr/loom-domain";
 import { EvaluateCellRequest } from "@cvr/loom-protocol";
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
-import { runWithLoomClient } from "./loom-connection.js";
-import { runTool, toolResult } from "./tool-result.js";
+import { runLoomTool } from "./loom-tool.js";
+import { toolResult } from "./tool-result.js";
 
 const agentId = AgentId.make("pi");
 
@@ -24,28 +23,22 @@ const registerEvaluateCell = (pi: LoomExtensionApi) =>
     ],
     parameters: cellParameters,
     execute: (toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 minutes", (client) =>
-          client
-            .evaluateCell(
-              EvaluateCellRequest.make({
-                sessionId: SessionId.make(context.sessionManager.getSessionId()),
-                agentId,
-                cellId: CellId.make(toolCallId),
-                source: parameters.source,
-              }),
-            )
-            .pipe(
-              Effect.map(
-                (result) =>
-                  ({
-                    content: [{ type: "text", text: result.display }],
-                    details: { result },
-                  }) satisfies AgentToolResult<{ readonly result: typeof result }>,
-              ),
-            ),
-        ),
-        { signal },
+      runLoomTool(context, { signal }, "5 minutes", (client, sessionId) =>
+        client
+          .evaluateCell(
+            EvaluateCellRequest.make({
+              sessionId,
+              agentId,
+              cellId: CellId.make(toolCallId),
+              source: parameters.source,
+            }),
+          )
+          .pipe(
+            Effect.map((result) => ({
+              content: [{ type: "text", text: result.display }],
+              details: { result },
+            })),
+          ),
       ),
   });
 
@@ -56,16 +49,13 @@ const registerResetCell = (pi: LoomExtensionApi) =>
     description: "Replace this Agent's Loom Code Kernel and clear its bindings.",
     parameters: Type.Object({}),
     execute: (_toolCallId, _parameters, signal, _onUpdate, context) =>
-      runTool(
-        runWithLoomClient(context.cwd, "5 seconds", (client) =>
-          client
-            .resetCodeKernel({
-              sessionId: SessionId.make(context.sessionManager.getSessionId()),
-              agentId,
-            })
-            .pipe(Effect.as(toolResult("Code Kernel reset"))),
-        ),
-        { signal },
+      runLoomTool(context, { signal }, "5 seconds", (client, sessionId) =>
+        client
+          .resetCodeKernel({
+            sessionId,
+            agentId,
+          })
+          .pipe(Effect.as(toolResult("Code Kernel reset"))),
       ),
   });
 

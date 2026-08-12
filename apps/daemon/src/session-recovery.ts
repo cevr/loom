@@ -1,14 +1,6 @@
-import {
-  JobRuntime,
-  PluginStateStore,
-  SessionClosureStore,
-  SessionLifecycle,
-  WorkflowChildAgentStore,
-  WorkflowRuntime,
-  type SessionClosureStoreError,
-} from "@cvr/loom-runtime";
+import { SessionClosureStore, type SessionClosureStoreError } from "@cvr/loom-runtime";
 import { Context, Effect, Layer } from "effect";
-import { makeCloseSession } from "./rpc-handlers.js";
+import { makeCloseSession } from "./close-session.js";
 
 interface SessionRecoveryShape {
   readonly recover: Effect.Effect<void, SessionClosureStoreError>;
@@ -22,13 +14,7 @@ export const layerSessionRecovery = Layer.effect(
   SessionRecovery,
   Effect.gen(function* () {
     const closures = yield* SessionClosureStore;
-    const close = makeCloseSession(
-      yield* WorkflowRuntime,
-      yield* WorkflowChildAgentStore,
-      yield* JobRuntime,
-      yield* PluginStateStore,
-      yield* SessionLifecycle,
-    );
+    const close = yield* makeCloseSession;
     return SessionRecovery.of({
       recover: closures.list.pipe(
         Effect.flatMap((sessionIds) =>

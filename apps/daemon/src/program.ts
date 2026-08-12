@@ -32,7 +32,7 @@ import {
   layerConnectionHandshake,
   reconcileCodeKernelProcesses,
 } from "@cvr/loom-runtime";
-import { Clock, Context, type Duration, Effect, FileSystem, Layer, Path } from "effect";
+import { Clock, type Duration, Effect, FileSystem, Layer, Path } from "effect";
 import { SingleRunner } from "effect/unstable/cluster";
 import { type DaemonConfig, loadDaemonConfig } from "./daemon-config.js";
 import { layerLoomRpcHandlers } from "./rpc-handlers.js";
@@ -54,28 +54,6 @@ export const defaultDaemonPolicy = {
   sessionClosureLease: "5 minutes",
 } satisfies DaemonPolicy;
 
-export interface DaemonRecoveryPhases<E1, E2, E3, E4, E5, E6, E7> {
-  readonly sessionClosures: Effect.Effect<void, E1>;
-  readonly codeKernels: Effect.Effect<void, E2>;
-  readonly cells: Effect.Effect<void, E3>;
-  readonly jobs: Effect.Effect<void, E4>;
-  readonly closedSessions: Effect.Effect<void, E5>;
-  readonly workflowRetirement: Effect.Effect<void, E6>;
-  readonly workflows: Effect.Effect<void, E7>;
-}
-
-export const runRecoveryPhases = <E1, E2, E3, E4, E5, E6, E7>(
-  phases: DaemonRecoveryPhases<E1, E2, E3, E4, E5, E6, E7>,
-) =>
-  phases.sessionClosures.pipe(
-    Effect.andThen(phases.codeKernels),
-    Effect.andThen(phases.cells),
-    Effect.andThen(phases.jobs),
-    Effect.andThen(phases.closedSessions),
-    Effect.andThen(phases.workflowRetirement),
-    Effect.andThen(phases.workflows),
-  );
-
 export const recoverDaemon = Effect.gen(function* () {
   const sessions = yield* SessionClosureStore;
   const store = yield* CodeKernelProcessStore;
@@ -85,39 +63,24 @@ export const recoverDaemon = Effect.gen(function* () {
   const jobs = yield* JobRuntime;
   const workflows = yield* WorkflowRunRecovery;
   const sessionsToRecover = yield* SessionRecovery;
-  return yield* runRecoveryPhases({
-    sessionClosures: sessions.prune.pipe(
-      Effect.tap((count) => Effect.logInfo("Session closure pruning completed.", { count })),
-      Effect.asVoid,
-    ),
-    codeKernels: reconcileCodeKernelProcesses({ store, inspector, controller }),
-    cells: cells.reconcile,
-    jobs: jobs.reconcile.pipe(
-      Effect.tap((results) =>
-        Effect.logInfo("Job reconciliation completed.", { count: results.length }),
+  return yield* sessions.prune.pipe(
+    Effect.tap((count) => Effect.logInfo("Session closure pruning completed.", { count })),
+    Effect.asVoid,
+    Effect.andThen(reconcileCodeKernelProcesses({ store, inspector, controller })),
+    Effect.andThen(cells.reconcile),
+    Effect.andThen(
+      jobs.reconcile.pipe(
+        Effect.tap((results) =>
+          Effect.logInfo("Job reconciliation completed.", { count: results.length }),
+        ),
+        Effect.asVoid,
       ),
-      Effect.asVoid,
     ),
-    closedSessions: sessionsToRecover.recover,
-    workflowRetirement: workflows.retire,
-    workflows: workflows.recover,
-  });
+    Effect.andThen(sessionsToRecover.recover),
+    Effect.andThen(workflows.retire),
+    Effect.andThen(workflows.recover),
+  );
 });
-
-type RecoveryServices =
-  | CellLedger
-  | CodeKernelProcessStore
-  | JobRuntime
-  | ProcessController
-  | ProcessInspector
-  | SessionClosureStore
-  | SessionRecovery
-  | WorkflowRunRecovery;
-
-type DaemonRecovery<E> = (services: Context.Context<RecoveryServices>) => Effect.Effect<void, E>;
-
-const recoverApplication: DaemonRecovery<Effect.Error<typeof recoverDaemon>> = (services) =>
-  recoverDaemon.pipe(Effect.provide(services));
 
 const makeAgentLayer = (config: DaemonConfig, policy: DaemonPolicy) => {
   const processServices = Layer.mergeAll(
@@ -163,10 +126,9 @@ const makeSessionLayer = (policy: DaemonPolicy) =>
     Layer.provideMerge(layerSqliteSessionClosureStore),
   );
 
-const launchDaemon = <E, R, E2>(
+const launchDaemon = <E, R>(
   config: DaemonConfig,
   capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
-  recover: DaemonRecovery<E2>,
   policy: DaemonPolicy,
 ) =>
   Effect.gen(function* () {
@@ -191,7 +153,7 @@ const launchDaemon = <E, R, E2>(
     const application = Layer.merge(
       baseApplication,
       layerSessionRecovery.pipe(Layer.provide(baseApplication)),
-    ).pipe(Layer.tap((services) => recover(services)));
+    ).pipe(Layer.tap((services) => recoverDaemon.pipe(Effect.provide(services))));
     const handlers = layerLoomRpcHandlers.pipe(
       Layer.provide(application),
       Layer.provide(
@@ -209,10 +171,9 @@ const launchDaemon = <E, R, E2>(
     return yield* Layer.launch(server);
   });
 
-export const runLoomDaemonWithRecovery = <E, R, E2>(
+export const runLoomDaemon = <E, R>(
   config: DaemonConfig,
   capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
-  recover: DaemonRecovery<E2>,
   policy: DaemonPolicy = defaultDaemonPolicy,
 ) =>
   Effect.gen(function* () {
@@ -220,16 +181,10 @@ export const runLoomDaemonWithRecovery = <E, R, E2>(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     yield* fs.makeDirectory(path.dirname(config.databasePath), { recursive: true });
-    return yield* launchDaemon(config, capabilities, recover, policy).pipe(
+    return yield* launchDaemon(config, capabilities, policy).pipe(
       Effect.provide(layerLoomSqlite({ filename: config.databasePath })),
     );
   });
-
-export const runLoomDaemon = <E, R>(
-  config: DaemonConfig,
-  capabilities: Layer.Layer<WorkflowCapabilityExecutor | WorkflowArtifactStore, E, R>,
-  policy: DaemonPolicy = defaultDaemonPolicy,
-) => runLoomDaemonWithRecovery(config, capabilities, recoverApplication, policy);
 
 export const program = Effect.gen(function* () {
   const config = yield* loadDaemonConfig;
