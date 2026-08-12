@@ -31,6 +31,9 @@ const workflowInput = {
 const makeRegisterTool = (toolNames: Set<string>): ExtensionAPI["registerTool"] => {
   const registerTool: ExtensionAPI["registerTool"] = (tool) => {
     toolNames.add(tool.name);
+    expect(tool.renderShell).toBe("self");
+    expect(tool.renderCall).toBeFunction();
+    expect(tool.renderResult).toBeFunction();
     if (tool.name !== "loom_workflow_start") return;
     expect(tool.parameters).toHaveProperty("properties.source.description", workflowSourceGuide);
     expect(tool.parameters).toHaveProperty(

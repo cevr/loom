@@ -3,6 +3,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Effect, Inspectable, Option, Semaphore } from "effect";
 import type { LoomExtensionApi } from "./extension-api.js";
+import { loomTool } from "./loom-tool-ui.js";
 import {
   GoalCommand,
   goalContinuationMessage,
@@ -85,38 +86,42 @@ const executeCommand = (
   );
 
 const registerGoalTools = (pi: LoomExtensionApi, runExclusive: RunExclusive) => {
-  pi.registerTool({
-    name: "loom_goal_complete",
-    label: "Complete Loom Goal",
-    description: "Mark the active Loom Goal complete after all requirements are verified.",
-    parameters: Type.Object({}),
-    execute: (_toolCallId, _parameters, signal, _onUpdate, context) =>
-      runTool(
-        runExclusive(
-          componentFor(pi, context).complete.pipe(
-            Effect.as(toolResult("The Loom Goal is complete")),
+  pi.registerTool(
+    loomTool({
+      name: "loom_goal_complete",
+      label: "Complete Loom Goal",
+      description: "Mark the active Loom Goal complete after all requirements are verified.",
+      parameters: Type.Object({}),
+      execute: (_toolCallId, _parameters, signal, _onUpdate, context) =>
+        runTool(
+          runExclusive(
+            componentFor(pi, context).complete.pipe(
+              Effect.as(toolResult("The Loom Goal is complete")),
+            ),
           ),
+          { signal },
         ),
-        { signal },
-      ),
-  });
+    }),
+  );
 
-  pi.registerTool({
-    name: "loom_goal_blocked",
-    label: "Block Loom Goal",
-    description:
-      "Mark the active Loom Goal blocked after the same blocker stops progress three times.",
-    parameters: Type.Object({ reason: Type.String({ minLength: 1 }) }),
-    execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
-      runTool(
-        runExclusive(
-          componentFor(pi, context)
-            .block(parameters.reason)
-            .pipe(Effect.as(toolResult("The Loom Goal is blocked"))),
+  pi.registerTool(
+    loomTool({
+      name: "loom_goal_blocked",
+      label: "Block Loom Goal",
+      description:
+        "Mark the active Loom Goal blocked after the same blocker stops progress three times.",
+      parameters: Type.Object({ reason: Type.String({ minLength: 1 }) }),
+      execute: (_toolCallId, parameters, signal, _onUpdate, context) =>
+        runTool(
+          runExclusive(
+            componentFor(pi, context)
+              .block(parameters.reason)
+              .pipe(Effect.as(toolResult("The Loom Goal is blocked"))),
+          ),
+          { signal },
         ),
-        { signal },
-      ),
-  });
+    }),
+  );
 };
 
 export const registerGoal = (pi: LoomExtensionApi): void => {

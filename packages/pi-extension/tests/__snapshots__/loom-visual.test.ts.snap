@@ -1,0 +1,75 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`keeps the Loom interface readable at narrow, medium, and wide terminal widths 1`] = `
+"NARROW 40
+ 40 │   ╭─╮ ╭─╮      status   ready          │
+ 40 │ ╭─┤ │ │ ├─╮    protocol v13            │
+ 40 │ │ │ │ │ │ │    lease    5m             │
+ 40 │ ╰─┤ ╰─╯ ├─╯    model    GPT-5.6 Luna   │
+ 40 │   ╰─────╯      cwd      …/personal/lo… │
+ 40 │                Try "build and test @<f │
+  0 ││
+ 40 │  Start Loom Job · ◈ running            │
+ 40 │                                        │
+ 40 │  { "command": "bun test",              │
+ 40 │  "foregroundLeaseMillis": 1000 }       │
+  0 ││
+ 40 │  Read Loom Job Output · done           │
+ 40 │                                        │
+ 40 │  { "jobId": "job-12345678", "stream":  │
+ 40 │  "stdout" }                            │
+ 40 │                                        │
+ 40 │  { "text": "5 pass\\n0 fail\\n",         │
+ 40 │  "complete": true }                    │
+  0 ││
+ 40 │                                        │
+ 40 │ > Continue the workflow                │
+ 40 │                                        │
+ 40 │GPT-5.…  Goal active 240/4000 · 14k (5%)│
+
+MEDIUM 72
+ 72 │   ╭─╮ ╭─╮      status   ready                                          │
+ 72 │ ╭─┤ │ │ ├─╮    protocol v13                                            │
+ 72 │ │ │ │ │ │ │    lease    5m                                             │
+ 72 │ ╰─┤ ╰─╯ ├─╯    model    GPT-5.6 Luna                                   │
+ 72 │   ╰─────╯      cwd      /Users/cvr/Developer/personal/loom             │
+ 72 │                Try "build and test @<filepath>"                        │
+  0 ││
+ 72 │  Start Loom Job · ◈ running                                            │
+ 72 │                                                                        │
+ 72 │  { "command": "bun test", "foregroundLeaseMillis": 1000 }              │
+  0 ││
+ 72 │  Read Loom Job Output · done                                           │
+ 72 │                                                                        │
+ 72 │  { "jobId": "job-12345678", "stream": "stdout" }                       │
+ 72 │                                                                        │
+ 72 │  { "text": "5 pass\\n0 fail\\n", "complete": true }                      │
+  0 ││
+ 72 │                                                                        │
+ 72 │ > Continue the workflow                                                │
+ 72 │                                                                        │
+ 72 │GPT-5.6 Luna • medium                    Goal active 240/4000 · 14k (5%)│
+
+WIDE 120
+120 │   ╭─╮ ╭─╮      status   ready                                                                                          │
+120 │ ╭─┤ │ │ ├─╮    protocol v13                                                                                            │
+120 │ │ │ │ │ │ │    lease    5m                                                                                             │
+120 │ ╰─┤ ╰─╯ ├─╯    model    GPT-5.6 Luna                                                                                   │
+120 │   ╰─────╯      cwd      /Users/cvr/Developer/personal/loom                                                             │
+120 │                Try "build and test @<filepath>"                                                                        │
+  0 ││
+120 │  Start Loom Job · ◈ running                                                                                            │
+120 │                                                                                                                        │
+120 │  { "command": "bun test", "foregroundLeaseMillis": 1000 }                                                              │
+  0 ││
+120 │  Read Loom Job Output · done                                                                                           │
+120 │                                                                                                                        │
+120 │  { "jobId": "job-12345678", "stream": "stdout" }                                                                       │
+120 │                                                                                                                        │
+120 │  { "text": "5 pass\\n0 fail\\n", "complete": true }                                                                      │
+  0 ││
+120 │                                                                                                                        │
+120 │ > Continue the workflow                                                                                                │
+120 │                                                                                                                        │
+120 │GPT-5.6 Luna • medium                                                                    Goal active 240/4000 · 14k (5%)│"
+`;
